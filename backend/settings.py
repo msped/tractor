@@ -44,8 +44,11 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework.authtoken',
+    'rest_framework_simplejwt',
     'corsheaders',
     'dj_rest_auth',
+
+    'authentication',
 
     'django_cleanup.apps.CleanupConfig',
 ]
@@ -141,3 +144,17 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
+    )
+}
+
+REST_AUTH = {
+    'JWT_AUTH_COOKIE': 'redactor-auth',
+    'JWT_AUTH_REFRESH_COOKIE': 'redactor-refresh-token',
+    'USE_JWT': True,
+}
+
+APPEND_SLASH = False
