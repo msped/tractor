@@ -3,7 +3,7 @@ services:
   db:
     restart: always
     image: postgres:13
-    container_name: podfinder-postgres 
+    container_name: redactor-postgres 
     env_file:
       - '.env'
     ports:
