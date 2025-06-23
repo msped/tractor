@@ -1,9 +1,8 @@
 import axios from "axios";
-import { auth } from "@/auth"
 
 const apiClient = () => {
     const defaultOptions = {
-        baseURL: `${process.env.NEXT_PUBLIC_API_HOST}/api/`,
+        baseURL: `${process.env.NEXT_PUBLIC_API_HOST}/api`,
         headers: {
             "Content-Type": "application/json",
             accept: "application/json",
@@ -12,13 +11,16 @@ const apiClient = () => {
     
     const instance = axios.create(defaultOptions);
 
-    instance.interceptors.request.use(async (request) => {
-        const session = await auth()
-        if (session) {
-            request.headers.Authorization = `Bearer ${session.access_token}`;
-        }
-        return request;
-    })
+    if (typeof window !== 'undefined') {
+        instance.interceptors.request.use(async (request) => {
+            const { auth } = await import('@/auth');
+            const session = await auth()
+            if (session) {
+                request.headers.Authorization = `Bearer ${session.access_token}`;
+            }
+            return request;
+        })
+    }
 
     instance.interceptors.response.use(
         (response) => {
