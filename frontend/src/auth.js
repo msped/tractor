@@ -24,16 +24,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     providers: [
         Credentials({
             credentials: {
-                username: { label: "Username" },
+                username: { label: "Username", text: "text" },
                 password: { label: "Password", type: "password" },
             },
-            async authorize({ request }) {
-                const response = await apiClient.post("/auth/login", {
-                    username: request.body.username,
-                    password: request.body.password,
-                })
-                if (!response.ok) return null
-                return (await response.json()) ?? null
+            async authorize(credentials, req) {
+                try {
+                    const response = await apiClient.post(
+                        '/auth/login',
+                        credentials,
+                    );
+                    const data = response.data;
+                    if (data) return data;
+                } catch (error) {
+                    console.error(error);
+                }
+                return null;
             },
         }),
     ],
@@ -42,9 +47,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             if (!SIGN_IN_PROVIDERS.includes(account.provider)) return false;
                 return SIGN_IN_HANDLERS[account.provider](
                     user, account, profile, email, credentials
-                );
-            },
-            async jwt({user, token, account}) {
+            );
+        },
+        async jwt({user, token, account}) {
             // If `user` and `account` are set that means it is a login event
             if (user && account) {
                 let backendResponse = account.provider === "credentials" ? user : account.meta;
