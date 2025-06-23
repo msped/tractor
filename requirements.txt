@@ -2,10 +2,13 @@ asgiref==3.8.1
 coverage==7.9.1
 dj-rest-auth==7.0.1
 Django==5.2.3
+django-allauth==65.9.0
 django-cleanup==9.0.0
 django-cors-headers==4.7.0
-django-rest-auth==0.9.5
 djangorestframework==3.16.0
+djangorestframework_simplejwt==5.5.0
+psycopg2==2.9.10
+PyJWT==2.9.0
 python-dotenv==1.1.0
 six==1.17.0
 sqlparse==0.5.3
