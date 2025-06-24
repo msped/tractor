@@ -15,7 +15,7 @@ export default function LoginComponent() {
             username,
             password,
             redirect: true,
-            callbackUrl: "/dashboard"
+            callbackUrl: "/cases"
         });
         if (result && result.error) {
             setError("Login failed. Please check your credentials.");
