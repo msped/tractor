@@ -18,7 +18,6 @@ export default async function page() {
 
     try {
         cases = await apiClient.get('cases').then(response => response.data);
-        console.log("Fetched cases:", cases);
     } catch (error) {
         console.error("Failed to fetch cases:", error);
         fetchError = "There was an issue retrieving your cases. Please try again later.";
