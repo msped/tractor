@@ -1,12 +1,12 @@
 "use client";
-import * as React from "react";
+import React, { useState } from "react";
 import { signIn } from "next-auth/react"
 import { Box, Button, TextField, Typography, Paper } from "@mui/material";
 
 export default function LoginComponent() {
-    const [username, setUsername] = React.useState("");
-    const [password, setPassword] = React.useState("");
-    const [error, setError] = React.useState("");
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
 
     const handleLogin = async (e) => {
         e.preventDefault();
