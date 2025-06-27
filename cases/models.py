@@ -105,7 +105,7 @@ class Document(models.Model):
         upload_to='originals/%Y/%m/%d/',
         help_text="The original, unmodified uploaded file."
     )
-    filename = models.CharField(max_length=255, blank=True)
+    filename = models.CharField(max_length=255, null=True, blank=True)
     file_type = models.CharField(max_length=10, blank=True)
 
     status = models.CharField(
@@ -114,7 +114,7 @@ class Document(models.Model):
         default=Status.PROCESSING
     )
 
-    extracted_text = models.TextField(blank=True, editable=False)
+    extracted_text = models.TextField(blank=True, null=True, editable=False)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
