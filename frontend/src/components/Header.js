@@ -4,6 +4,7 @@ import React from 'react';
 import { signOut, useSession } from "next-auth/react";
 import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
 import Link from 'next/link';
+import AddIcon from '@mui/icons-material/Add';
 
 export default function Header() {
     const { data: session } = useSession();
@@ -25,7 +26,7 @@ export default function Header() {
 
                 {session && (
                     <Button color="inherit" component={Link} href="/cases" sx={{ ml: 2 }}>
-                        My Cases
+                        Cases
                     </Button>
                 )}
 
@@ -33,7 +34,7 @@ export default function Header() {
 
                 {session ? (
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Button color="inherit" component={Link} href="/cases/new">
+                        <Button color="inherit" startIcon={<AddIcon />} component={Link} href="/cases/new">
                             New Case
                         </Button>
                         <Typography variant="body1" component="div" sx={{ mx: 2 }}>

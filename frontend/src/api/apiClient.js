@@ -11,26 +11,15 @@ const apiClient = () => {
     
     const instance = axios.create(defaultOptions);
 
-    if (typeof window !== 'undefined') {
-        instance.interceptors.request.use(async (request) => {
-            const { auth } = await import('@/auth');
-            const session = await auth()
-            if (session) {
-                request.headers.Authorization = `Bearer ${session.access_token}`;
-            }
-            return request;
-        })
-    }
-
     instance.interceptors.response.use(
         (response) => {
             return response;
         },
         (error) => {
-            if (error.response.status === 401) {
+            if (typeof window !== 'undefined' && error.response?.status === 401) {
                 window.location.href = '/';
             }
-            return Promise.reject(error)
+            return Promise.reject(error);
         }
     )
 
