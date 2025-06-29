@@ -17,8 +17,15 @@ export default async function page() {
     let fetchError = null;
 
     try {
-        cases = await apiClient.get('cases').then(response => response.data);
+        cases = await apiClient.get('cases', {
+            headers: {
+                Authorization: `Bearer ${session.access_token}`,
+            },
+        }).then(response => response.data);
     } catch (error) {
+        if (error.response?.status === 401) {
+            redirect('/');
+        }
         console.error("Failed to fetch cases:", error);
         fetchError = "There was an issue retrieving your cases. Please try again later.";
     }
