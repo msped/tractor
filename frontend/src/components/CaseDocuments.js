@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useRef } from 'react';
+import NextLink from 'next/link';
 import {
     Box,
     Button,
@@ -17,12 +18,10 @@ import {
     ListItemText,
     ListItemIcon,
     Typography,
-    TextField,
-    InputAdornment,
-    ListItemButton,
-    Icon,
     IconButton,
-    Stack
+    Stack,
+    TextField,
+    InputAdornment
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -33,13 +32,13 @@ import apiClient from '@/api/apiClient';
 
 const getStatusChipColor = (status) => {
     switch (status) {
-        case 'PROCESSING':
+        case 'Processing':
             return 'primary';
-        case 'READY_FOR_REVIEW':
+        case 'Ready for Review':
             return 'warning';
-        case 'COMPLETED':
+        case 'Completed':
             return 'success';
-        case 'ERROR':
+        case 'Error':
             return 'error';
         default:
             return 'default';
@@ -177,24 +176,38 @@ export default function CaseDocuments({ caseId, documents }) {
                     {docs.length > 0 ? (
                         <List>
                             {docs.map((doc, i) => (
-                                <ListItem key={i} secondaryAction={
-                                    <Stack direction="row" spacing={2} alignItems="center">
-                                        <Chip
-                                            label={doc.status}
-                                            color={getStatusChipColor(doc.status)}
-                                            size="small"
-                                        />
-                                        <IconButton>
-                                            <DeleteIcon
-                                                aria-label="delete"
-                                                onClick={() => handleDeleteDocument(doc.id)}
-                                            />
-                                        </IconButton>
-                                    </Stack>
-                                }>
+                                <ListItem
+                                    key={i}
+                                    secondaryAction={
+                                        <Stack direction="row" spacing={1} alignItems="center">
+                                            {doc.status === 'Ready for Review' && (
+                                                <Button component={NextLink} href={`/documents/${doc.id}/review`} variant="contained" size="small">
+                                                    Review
+                                                </Button>
+                                            )}
+                                            {doc.status === 'Completed' && (
+                                                <Button component={NextLink} href={`/documents/${doc.id}/view`} variant="contained" size="small">
+                                                    Open
+                                                </Button>
+                                            )}
+                                            <IconButton aria-label="delete" onClick={() => handleDeleteDocument(doc.id)}>
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </Stack>
+                                    }
+                                >
                                     <ListItemIcon><ArticleIcon /></ListItemIcon>
                                     <ListItemText
-                                        primary={doc.filename}
+                                        primary={
+                                            <Stack direction="row" spacing={2} alignItems="center">
+                                                <Typography variant="body1">{doc.filename}</Typography>
+                                                <Chip
+                                                    label={doc.status}
+                                                    color={getStatusChipColor(doc.status)}
+                                                    size="small"
+                                                />
+                                            </Stack>
+                                        }
                                         secondary={`Uploaded: ${new Date(doc.uploaded_at).toLocaleDateString('en-GB')}`}
                                     />
                                 </ListItem>
@@ -269,9 +282,9 @@ export default function CaseDocuments({ caseId, documents }) {
                                                 }
                                             }}
                                         />
-                                        <ListItemButton sx={{ minWidth: '40px' }}>
-                                            <DeleteIcon aria-label="delete" onClick={() => handleRemoveFile(selected.id)} />
-                                        </ListItemButton>
+                                        <IconButton aria-label="delete" onClick={() => handleRemoveFile(selected.id)}>
+                                            <DeleteIcon />
+                                        </IconButton>
                                     </ListItem>
                                 ))}
                             </List>

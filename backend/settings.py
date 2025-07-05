@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
 
+    'django_q',
+
     'authentication',
     'cases',
 
@@ -179,3 +181,13 @@ SIMPLE_JWT = {
 }
 
 ACCOUNT_EMAIL_VERIFICATION = "none"
+
+Q_CLUSTER = {
+    'name': 'DjangORM',
+    'workers': 4,
+    'timeout': 90,
+    'retry': 120,
+    'queue_limit': 50,
+    'bulk': 10,
+    'orm': 'default'
+}

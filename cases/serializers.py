@@ -1,6 +1,6 @@
 import os
 from rest_framework import serializers
-from .models import Case, Document
+from .models import Case, Document, Redaction
 
 
 class CaseSerializer(serializers.ModelSerializer):
@@ -68,3 +68,23 @@ class CaseDetailSerializer(CaseSerializer):
 
     class Meta(CaseSerializer.Meta):
         fields = CaseSerializer.Meta.fields + ['documents']
+
+
+class RedactionSerializer(serializers.ModelSerializer):
+    document = serializers.PrimaryKeyRelatedField(
+        queryset=Document.objects.all(), write_only=True)
+
+    class Meta:
+        model = Redaction
+        fields = [
+            'id',
+            'document',
+            'start_char',
+            'end_char',
+            'text',
+            'redaction_type',
+            'is_suggestion',
+            'is_accepted',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
