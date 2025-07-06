@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.generics import (
     ListCreateAPIView,
+    RetrieveAPIView,
     RetrieveUpdateDestroyAPIView
 )
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +10,11 @@ from django.shortcuts import get_object_or_404
 
 from .models import Case, Document
 from .serializers import (
-    CaseSerializer, CaseDetailSerializer, DocumentSerializer)
+    CaseSerializer,
+    CaseDetailSerializer,
+    DocumentSerializer,
+    DocumentReviewSerializer
+)
 
 
 class CaseListCreateView(ListCreateAPIView):
@@ -91,5 +96,16 @@ class DocumentDetailView(RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
+    lookup_field = 'id'
+    lookup_url_kwarg = 'document_id'
+
+
+class DocumentReviewView(RetrieveAPIView):
+    """
+    API view to review a document.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = DocumentReviewSerializer
+    queryset = Document.objects.all()
     lookup_field = 'id'
     lookup_url_kwarg = 'document_id'
