@@ -140,6 +140,7 @@ class Redaction(models.Model):
     class RedactionType(models.TextChoices):
         OPERATIONAL_DATA = 'OP_DATA', 'Operational Data'
         THIRD_PARTY_PII = 'PII', 'Third-Party PII'
+        DS_INFORMATION = 'DS_INFO', 'Data Subject Information'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -153,6 +154,12 @@ class Redaction(models.Model):
     start_char = models.IntegerField()
     end_char = models.IntegerField()
     text = models.TextField(help_text="The actual text that was redacted.")
+    justification = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Reason for a manual redaction or for "
+        "rejecting a suggestion."
+    )
 
     redaction_type = models.CharField(
         max_length=10, choices=RedactionType.choices)
