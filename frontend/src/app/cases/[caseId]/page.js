@@ -32,7 +32,7 @@ export default async function page({ params }) {
         <Container maxWidth="lg" sx={{ py: 4 }}>
             <Stack direction="column" spacing={2}>
                 <CaseInformation caseObject={caseFile} />
-                <CaseDocuments caseId={id} documents={caseFile?.documents}/>
+                <CaseDocuments caseId={caseId} documents={caseFile?.documents}/>
             </Stack>
         </Container>
     )
