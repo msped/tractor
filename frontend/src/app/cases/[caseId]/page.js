@@ -8,14 +8,14 @@ import CaseInformation from '@/components/CaseInformation';
 import CaseDocuments from '@/components/CaseDocuments';
 
 export default async function page({ params }) {
-    const { id } = await params;
+    const { caseId } = await params;
     const session = await auth();
 
     let caseFile = null;
     let fetchError = null;
 
     try {
-        caseFile = await apiClient.get(`cases/${id}`, {
+        caseFile = await apiClient.get(`cases/${caseId}`, {
             headers: {
                 Authorization: `Bearer ${session.access_token}`,
             },
