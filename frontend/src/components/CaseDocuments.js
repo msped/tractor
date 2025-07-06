@@ -183,7 +183,7 @@ export default function CaseDocuments({ caseId, documents }) {
                                             {doc.status === 'Ready for Review' && (
                                                 <Button 
                                                     component={NextLink} 
-                                                    href={`/cases/${caseId}/documents/${doc.id}/review`} 
+                                                    href={`/cases/${caseId}/document/${doc.id}/review`} 
                                                     variant="contained" 
                                                     size="small"
                                                 >
