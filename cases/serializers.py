@@ -83,8 +83,24 @@ class RedactionSerializer(serializers.ModelSerializer):
             'end_char',
             'text',
             'redaction_type',
+            'justification',
             'is_suggestion',
             'is_accepted',
             'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class DocumentReviewSerializer(serializers.ModelSerializer):
+    redactions = RedactionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Document
+        fields = [
+            'id',
+            'filename',
+            'file_type',
+            'extracted_text',
+            'redactions'
+        ]
+        read_only_fields = ['id', 'extracted_text', 'filename', 'file_type']
