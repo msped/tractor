@@ -181,12 +181,22 @@ export default function CaseDocuments({ caseId, documents }) {
                                     secondaryAction={
                                         <Stack direction="row" spacing={1} alignItems="center">
                                             {doc.status === 'Ready for Review' && (
-                                                <Button component={NextLink} href={`/documents/${doc.id}/review`} variant="contained" size="small">
+                                                <Button 
+                                                    component={NextLink} 
+                                                    href={`/cases/${caseId}/documents/${doc.id}/review`} 
+                                                    variant="contained" 
+                                                    size="small"
+                                                >
                                                     Review
                                                 </Button>
                                             )}
                                             {doc.status === 'Completed' && (
-                                                <Button component={NextLink} href={`/documents/${doc.id}/view`} variant="contained" size="small">
+                                                <Button 
+                                                    component={NextLink} 
+                                                    href={`/documents/${doc.id}/view`} 
+                                                    variant="contained" 
+                                                    size="small"
+                                                >
                                                     Open
                                                 </Button>
                                             )}
