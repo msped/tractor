@@ -4,7 +4,8 @@ from .views import (
     CaseDetailView,
     DocumentListCreateView,
     DocumentDetailView,
-    DocumentReviewView
+    DocumentReviewView,
+    RedactionDetailView
 )
 
 urlpatterns = [
@@ -26,4 +27,6 @@ urlpatterns = [
          DocumentReviewView.as_view(),
          name='document-review',
          ),
+    path('cases/document/redaction/<uuid:pk>',
+         RedactionDetailView.as_view(), name='redaction-detail'),
 ]
