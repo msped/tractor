@@ -8,12 +8,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
-from .models import Case, Document
+from .models import Case, Document, Redaction
 from .serializers import (
     CaseSerializer,
     CaseDetailSerializer,
     DocumentSerializer,
-    DocumentReviewSerializer
+    DocumentReviewSerializer,
+    RedactionSerializer,
 )
 
 
@@ -109,3 +110,14 @@ class DocumentReviewView(RetrieveAPIView):
     queryset = Document.objects.all()
     lookup_field = 'id'
     lookup_url_kwarg = 'document_id'
+
+
+class RedactionDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    API view to retrieve, update, or delete a redaction.
+    """
+    permission_classes = [IsAuthenticated]
+    queryset = Redaction.objects.all()
+    serializer_class = RedactionSerializer
+    lookup_field = 'id'
+    lookup_url_kwarg = 'pk'
