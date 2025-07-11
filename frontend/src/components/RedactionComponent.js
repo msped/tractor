@@ -7,6 +7,7 @@ import RedactionSidebar from './redaction/RedactionSidebar';
 import ManualRedactionPopover from './redaction/ManualRedactionPopover';
 import RejectReasonDialog from './redaction/RejectReasonDialog';
 import DocumentViewer from './redaction/DocumentViewer';
+import { updateRedaction } from '@/services/redactionService';
 
 export default function RedactionReviewPage({ document, initialRedactions }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
@@ -25,10 +26,17 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
     // State for hovering suggestions
     const [hoveredSuggestionId, setHoveredSuggestionId] = useState(null);
 
-    const handleAcceptSuggestion = useCallback((redactionId) => {
-        setRedactions(prev => prev.map(r =>
-            r.id === redactionId ? { ...r, is_accepted: true, is_suggestion: false } : r
-        ));
+    const handleAcceptSuggestion = useCallback(async (redactionId) => {
+        try {
+            const response = await updateRedaction(redactionId, { is_accepted: true });
+            const updatedRedaction = response.data;
+            setRedactions(prev => prev.map(r =>
+                r.id === redactionId ? updatedRedaction : r
+            ));
+        } catch (error) {
+            console.error("Failed to accept suggestion:", error);
+            // TODO: react-hot-toast error handling
+        }
     }, []);
 
     const handleOpenRejectDialog = useCallback((redaction) => {
@@ -36,11 +44,19 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
         setRejectionDialogOpen(true);
     }, []);
 
-    const handleRejectSuggestion = useCallback((redactionId, reason) => {
-        console.log(`Redaction ${redactionId} rejected. Reason: ${reason}`); // TODO: Send this to the backend
-        setRedactions(prev => prev.filter(r => r.id !== redactionId));
-        setRejectionDialogOpen(false);
-        setRejectionTarget(null);
+    const handleRejectSuggestion = useCallback(async (redactionId, reason) => {
+        try {
+            const response = await updateRedaction(redactionId, { is_accepted: false, justification: reason });
+            const updatedRedaction = response.data;
+            setRedactions(prev => prev.map(r =>
+                r.id === redactionId ? updatedRedaction : r
+            ));
+            setRejectionDialogOpen(false);
+            setRejectionTarget(null);
+        } catch(error) {
+            console.error("Failed to reject suggestion:", error);
+            // TODO: react-hot-toast error handling
+        };
     }, []);
 
     const handleRemoveRedaction = useCallback((redactionId) => {
@@ -53,9 +69,9 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
                 return prev.filter(r => r.id !== redactionId);
             }
 
-            // If it was an AI suggestion that was accepted, revert it to a suggestion.
+            // If it was an AI suggestion (accepted or rejected), revert it to a pending suggestion.
             return prev.map(r =>
-                r.id === redactionId ? { ...r, is_accepted: false } : r
+                r.id === redactionId ? { ...r, is_accepted: false, justification: null } : r
             );
         });
     }, []);
@@ -94,7 +110,18 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
         setHoveredSuggestionId(null);
     }, []);
 
-    const suggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted);
+    const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
+    const manualRedactions = redactions.filter(r => !r.is_suggestion);
+    const acceptedSuggestions = redactions.filter(r => r.is_suggestion && r.is_accepted);
+    const rejectedSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !!r.justification);
+
+
+    const sortedRedactions = {
+        pending: pendingSuggestions,
+        manual: manualRedactions,
+        accepted: acceptedSuggestions,
+        rejected: rejectedSuggestions,
+    }
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
@@ -104,12 +131,12 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
                         <Typography variant="h5" component="h1">{document?.filename}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 2 }}>
-                        <Tooltip title={suggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                        <Tooltip title={pendingSuggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
                             <span>
                                 <Button
                                     variant="contained"
                                     color="primary"
-                                    disabled={suggestions.length > 0}
+                                    disabled={pendingSuggestions.length > 0}
                                     sx={{
                                         // Explicitly set styles for the disabled state for better visibility
                                         '&.Mui-disabled': {
@@ -134,7 +161,7 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
             </Container>
 
             <RedactionSidebar
-                redactions={redactions}
+                redactions={sortedRedactions}
                 onAccept={handleAcceptSuggestion}
                 onReject={handleOpenRejectDialog}
                 onRemove={handleRemoveRedaction}
