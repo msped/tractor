@@ -3,6 +3,25 @@
 import apiClient from '@/api/apiClient';
 import { auth } from '@/auth';
 
+export const createRedaction = async (documentId, createData) => {
+    const session = await auth();
+
+    try {
+        const response = await apiClient.post(
+            `cases/document/${documentId}/redaction`,
+            createData,
+            {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+            }
+        );
+        return response.data
+    } catch (error) {
+        console.error("Error updating redaction:", error.response?.data || error);
+    }
+};
+
 export const updateRedaction = async (redactionId, updateData) => {
     const session = await auth();
 
@@ -16,21 +35,27 @@ export const updateRedaction = async (redactionId, updateData) => {
                 },
             }
         );
-        console.log("Redaction updated successfully:", response.data);
         return response.data
     } catch (error) {
         console.error("Error updating redaction:", error);
     }
 };
 
-export const deleteManualRedaction = async (redactionId) => {
+export const deleteRedaction = async (redactionId) => {
     const session = await auth();
-    return apiClient.delete(
-        `cases/document/redaction/${redactionId}`,
-        {
-            headers: {
-                'Authorization': `Bearer ${session.access_token}`,
-            },
-        }
-    );
+
+    try {
+        const response = await apiClient.delete(
+            `cases/document/redaction/${redactionId}`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+            }
+        );
+        return response.status === 204;
+
+    } catch (error) {
+        console.error("Error deleting redaction:", error.response?.data || error);
+    }
 };
