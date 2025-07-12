@@ -5,7 +5,8 @@ from .views import (
     DocumentListCreateView,
     DocumentDetailView,
     DocumentReviewView,
-    RedactionDetailView
+    RedactionListCreateView,
+    RedactionDetailView,
 )
 
 urlpatterns = [
@@ -27,6 +28,9 @@ urlpatterns = [
          DocumentReviewView.as_view(),
          name='document-review',
          ),
+    path('cases/document/<uuid:document_id>/redaction',
+         RedactionListCreateView.as_view(),
+         name='redaction-list-create'),
     path('cases/document/redaction/<uuid:pk>',
          RedactionDetailView.as_view(), name='redaction-detail'),
 ]
