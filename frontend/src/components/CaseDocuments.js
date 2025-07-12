@@ -1,14 +1,12 @@
 "use client"
 
 import React, { useState, useRef } from 'react';
-import NextLink from 'next/link';
 import {
     Box,
     Button,
     Card,
     CardContent,
     CardHeader,
-    Chip,
     Dialog,
     DialogActions,
     DialogContent,
@@ -16,34 +14,19 @@ import {
     List,
     ListItem,
     ListItemText,
-    ListItemIcon,
     Typography,
     IconButton,
-    Stack,
     TextField,
     InputAdornment
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ArticleIcon from '@mui/icons-material/Article';
+
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import apiClient from '@/api/apiClient';
+import DocumentListItem from './DocumentListItem';
 
-const getStatusChipColor = (status) => {
-    switch (status) {
-        case 'Processing':
-            return 'primary';
-        case 'Ready for Review':
-            return 'warning';
-        case 'Completed':
-            return 'success';
-        case 'Error':
-            return 'error';
-        default:
-            return 'default';
-    }
-};
 
 export default function CaseDocuments({ caseId, documents }) {
     const [docs, setDocs] = useState(documents || []);
@@ -175,52 +158,16 @@ export default function CaseDocuments({ caseId, documents }) {
                 <CardContent>
                     {docs.length > 0 ? (
                         <List>
-                            {docs.map((doc, i) => (
-                                <ListItem
-                                    key={i}
-                                    secondaryAction={
-                                        <Stack direction="row" spacing={1} alignItems="center">
-                                            {doc.status === 'Ready for Review' && (
-                                                <Button 
-                                                    component={NextLink} 
-                                                    href={`/cases/${caseId}/document/${doc.id}/review`} 
-                                                    variant="contained" 
-                                                    size="small"
-                                                >
-                                                    Review
-                                                </Button>
-                                            )}
-                                            {doc.status === 'Completed' && (
-                                                <Button 
-                                                    component={NextLink} 
-                                                    href={`/documents/${doc.id}/view`} 
-                                                    variant="contained" 
-                                                    size="small"
-                                                >
-                                                    Open
-                                                </Button>
-                                            )}
-                                            <IconButton aria-label="delete" onClick={() => handleDeleteDocument(doc.id)}>
-                                                <DeleteIcon />
-                                            </IconButton>
-                                        </Stack>
-                                    }
-                                >
-                                    <ListItemIcon><ArticleIcon /></ListItemIcon>
-                                    <ListItemText
-                                        primary={
-                                            <Stack direction="row" spacing={2} alignItems="center">
-                                                <Typography variant="body1">{doc.filename}</Typography>
-                                                <Chip
-                                                    label={doc.status}
-                                                    color={getStatusChipColor(doc.status)}
-                                                    size="small"
-                                                />
-                                            </Stack>
-                                        }
-                                        secondary={`Uploaded: ${new Date(doc.uploaded_at).toLocaleDateString('en-GB')}`}
-                                    />
-                                </ListItem>
+                            {docs.map((doc) => (
+                                <DocumentListItem
+                                    key={doc.id}
+                                    doc={doc}
+                                    caseId={caseId}
+                                    onDelete={handleDeleteDocument}
+                                    handleDocumentUpdate={(updatedDoc) => {
+                                        setDocs(prevDocs => prevDocs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
+                                    }}
+                                />
                             ))}
                         </List>
                     ) : (
