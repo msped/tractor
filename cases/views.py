@@ -112,6 +112,17 @@ class DocumentReviewView(RetrieveAPIView):
     lookup_url_kwarg = 'document_id'
 
 
+class RedactionListCreateView(ListCreateAPIView):
+    """
+    API view to list and create redactions for a specific document.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = RedactionSerializer
+    queryset = Redaction.objects.all()
+    lookup_field = 'document'
+    lookup_url_kwarg = 'document_id'
+
+
 class RedactionDetailView(RetrieveUpdateDestroyAPIView):
     """
     API view to retrieve, update, or delete a redaction.
