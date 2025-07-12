@@ -98,9 +98,11 @@ class DocumentReviewSerializer(serializers.ModelSerializer):
         model = Document
         fields = [
             'id',
+            'case',
             'filename',
             'file_type',
             'extracted_text',
             'redactions'
         ]
-        read_only_fields = ['id', 'extracted_text', 'filename', 'file_type']
+        read_only_fields = ['id', 'case',
+                            'extracted_text', 'filename', 'file_type']
