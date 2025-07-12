@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Box, Typography, Button, Container, Tooltip } from '@mui/material';
-
+import NextLink from 'next/link';
 import RedactionSidebar from './redaction/RedactionSidebar';
 import ManualRedactionPopover from './redaction/ManualRedactionPopover';
 import RejectReasonDialog from './redaction/RejectReasonDialog';
@@ -127,6 +127,11 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
         <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
             <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
+                    <Box>
+                        <Button component={NextLink} href={`/cases/${document.case}`} variant="contained" color="primary">
+                            Back to Case
+                        </Button>
+                    </Box>
                     <Box>
                         <Typography variant="h5" component="h1">{document?.filename}</Typography>
                     </Box>
