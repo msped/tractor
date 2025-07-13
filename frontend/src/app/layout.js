@@ -1,6 +1,7 @@
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { Roboto } from 'next/font/google';
 import { ThemeProvider } from '@mui/material/styles';
+import { Toaster } from 'react-hot-toast';
 import theme from '../theme';
 import "./globals.css";
 
@@ -23,6 +24,7 @@ export default function RootLayout({ children }) {
         <AppRouterCacheProvider>
           <ThemeProvider theme={theme}>
           {children}
+          <Toaster/>
           </ThemeProvider>
         </AppRouterCacheProvider>
       </body>

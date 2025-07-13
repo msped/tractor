@@ -7,7 +7,9 @@ import RedactionSidebar from './redaction/RedactionSidebar';
 import ManualRedactionPopover from './redaction/ManualRedactionPopover';
 import RejectReasonDialog from './redaction/RejectReasonDialog';
 import DocumentViewer from './redaction/DocumentViewer';
-import { updateRedaction } from '@/services/redactionService';
+import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
+
+import toast from 'react-hot-toast';
 
 export default function RedactionReviewPage({ document, initialRedactions }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
@@ -28,14 +30,12 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         try {
-            const response = await updateRedaction(redactionId, { is_accepted: true });
-            const updatedRedaction = response.data;
+            const updatedRedaction = await updateRedaction(redactionId, { is_accepted: true });
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
         } catch (error) {
-            console.error("Failed to accept suggestion:", error);
-            // TODO: react-hot-toast error handling
+            toast.error("Failed to accept suggestion. Please try again.");
         }
     }, []);
 
@@ -46,35 +46,44 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
 
     const handleRejectSuggestion = useCallback(async (redactionId, reason) => {
         try {
-            const response = await updateRedaction(redactionId, { is_accepted: false, justification: reason });
-            const updatedRedaction = response.data;
+            const updatedRedaction = await updateRedaction(redactionId, { is_accepted: false, justification: reason });
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
             setRejectionDialogOpen(false);
             setRejectionTarget(null);
         } catch(error) {
-            console.error("Failed to reject suggestion:", error);
-            // TODO: react-hot-toast error handling
+            toast.error("Failed to reject suggestion. Please try again.");
         };
     }, []);
 
-    const handleRemoveRedaction = useCallback((redactionId) => {
-        setRedactions(prev => {
-            const redactionToRemove = prev.find(r => r.id === redactionId);
-            if (!redactionToRemove) return prev;
+    const handleRemoveRedaction = useCallback(async (redactionId) => {
+        const redactionToRemove = redactions.find(r => r.id === redactionId);
+        if (!redactionToRemove) return;
 
-            // If it was a user-created redaction, filter it out completely.
-            if (!redactionToRemove.is_suggestion) {
-                return prev.filter(r => r.id !== redactionId);
+        // If it was a user-created redaction, delete it from the server.
+        if (!redactionToRemove.is_suggestion) {
+            try {
+                await deleteRedaction(redactionId);
+                setRedactions(prev => prev.filter(r => r.id !== redactionId));
+                toast.success("Redaction deleted.");
+            } catch (error) {
+                toast.error("Failed to delete redaction. Please try again.");
             }
+            return;
+        }
 
-            // If it was an AI suggestion (accepted or rejected), revert it to a pending suggestion.
-            return prev.map(r =>
-                r.id === redactionId ? { ...r, is_accepted: false, justification: null } : r
-            );
-        });
-    }, []);
+        // If it was an AI suggestion (accepted or rejected), revert it to a pending suggestion.
+        try {
+            const updatedRedaction = await updateRedaction(redactionId, { is_accepted: false, justification: null });
+            setRedactions(prev => prev.map(r =>
+                r.id === redactionId ? updatedRedaction : r
+            ));
+            toast.success("Suggestion reverted to pending.");
+        } catch (error) {
+            toast.error("Failed to revert suggestion. Please try again.");
+        }
+    }, [redactions]);
 
     const handleTextSelect = useCallback((selection, range) => {
         setNewSelection(selection);
@@ -89,18 +98,25 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
         setPendingRedaction(null);
     }, []);
 
-    const handleCreateManualRedaction = useCallback((redactionType) => {
+    const handleCreateManualRedaction = useCallback(async (redactionType) => {
         if (!newSelection) return;
         const newRedaction = {
-            id: `manual-${Date.now()}`,
             ...newSelection,
+            document: document.id,
             redaction_type: redactionType,
             is_suggestion: false,
             is_accepted: true,
         };
-        setRedactions(prev => [...prev, newRedaction]);
-        handleCloseManualRedactionPopover();
-    }, [newSelection, handleCloseManualRedactionPopover]);
+        try {
+            const createdRedaction = await createRedaction(document.id, newRedaction);
+            setRedactions(prev => [...prev, createdRedaction]);
+            handleCloseManualRedactionPopover();
+        } catch (error) {
+            handleCloseManualRedactionPopover();
+            toast.error("Failed to create redaction. Please try again.");
+        }
+        
+    }, [newSelection, document.id, handleCloseManualRedactionPopover]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);

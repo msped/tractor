@@ -18,7 +18,11 @@ export const createRedaction = async (documentId, createData) => {
         );
         return response.data
     } catch (error) {
-        console.error("Error updating redaction:", error.response?.data || error);
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to create redaction. Please try again.');
+        }
     }
 };
 
@@ -37,7 +41,11 @@ export const updateRedaction = async (redactionId, updateData) => {
         );
         return response.data
     } catch (error) {
-        console.error("Error updating redaction:", error);
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to create redaction. Please try again.');
+        }
     }
 };
 
@@ -56,6 +64,10 @@ export const deleteRedaction = async (redactionId) => {
         return response.status === 204;
 
     } catch (error) {
-        console.error("Error deleting redaction:", error.response?.data || error);
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to create redaction. Please try again.');
+        }
     }
 };

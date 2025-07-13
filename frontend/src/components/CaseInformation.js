@@ -96,10 +96,10 @@ export default function CaseInformation({ caseObject }) {
                 },
             });
             handleCloseEditDialog();
+            toast.success('Case updated.');
             router.refresh();
         } catch (error) {
-            console.error('Failed to update case:', error);
-            // TODO: Add user-facing error notification
+            toast.error('Failed to update case. Please try again.');
         }
     };
 
@@ -113,9 +113,9 @@ export default function CaseInformation({ caseObject }) {
                 },
             });
             router.push('/cases');
+            toast.success('Case deleted.');
         } catch (error) {
-            console.error('Failed to delete case:', error);
-            // TODO: Add user-facing error notification
+            toast.error('Failed to delete case. Please try again.');
         }
     };
 

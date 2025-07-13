@@ -46,7 +46,11 @@ export default function DocumentListItem({ doc, caseId, onDelete, handleDocument
                     handleDocumentUpdate(updatedDoc);
                 }
             } catch (error) {
-                console.error(`Polling failed for document ${doc.id}:`, error);
+                if (error.response && error.response.data) {
+                    throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
+                } else {
+                    throw new Error('Failed to create redaction. Please try again.');
+                }
             }
         };
 

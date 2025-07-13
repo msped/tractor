@@ -13,7 +13,6 @@ export const getDocument = async (docId) => {
         });
         return response.data;
     } catch (error) {
-        console.error(`Failed to fetch document ${docId}:`, error);
         throw error;
     }
 };

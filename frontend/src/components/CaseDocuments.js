@@ -26,6 +26,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import apiClient from '@/api/apiClient';
 import DocumentListItem from './DocumentListItem';
+import toast from 'react-hot-toast';
 
 
 export default function CaseDocuments({ caseId, documents }) {
@@ -105,9 +106,9 @@ export default function CaseDocuments({ caseId, documents }) {
                 },
             });
             setDocs(prevDocs => prevDocs.filter(doc => doc.id !== docId));
+            toast.success('Document deleted.');
         } catch (error) {
-            console.error('Delete failed:', error);
-            // TODO: Add user-facing error notification
+            toast.error('Failed to delete document. Please try again.');
         }
     };
 
@@ -131,9 +132,13 @@ export default function CaseDocuments({ caseId, documents }) {
             });
             // The backend returns an array of all created documents in a single response
             setDocs((prevDocs) => [...prevDocs, ...response.data]);
+            toast.success('Documents uploaded successfully.');
         } catch (error) {
-            console.error('Upload failed:', error);
-            // TODO: Add user-facing error notification
+            if (error.response && error.response.data) {
+                toast.error(`Upload failed: ${error.response.data.detail || 'Unknown error'}`);
+            } else {
+                toast.error('Failed to upload documents. Please try again.');
+            }
         } finally {
             handleCloseDialog();
         }
