@@ -2,22 +2,29 @@ import React, { useRef } from 'react';
 import { Paper, Box } from '@mui/material';
 
 const HIGHLIGHT_COLORS = {
-    PII: {
+    // For pending suggestions, which are always yellow
+    PENDING: {
         suggestion: 'rgba(255, 214, 10, 0.4)',
-        accepted: 'rgba(255, 214, 10, 0.7)',
+        accepted: 'rgba(255, 214, 10, 0.7)', // More opaque for hover
         border: 'rgb(255, 165, 0)',
     },
-    OP_DATA: {
+    // For accepted redactions, colored by type
+    PII: { // Third-Party PII -> Green
+        suggestion: 'rgba(46, 204, 113, 0.4)',
+        accepted: 'rgba(46, 204, 113, 0.7)',
+        border: 'rgb(39, 174, 96)',
+    },
+    OP_DATA: { // Operational Data -> Blue
         suggestion: 'rgba(0, 221, 255, 0.4)',
         accepted: 'rgba(0, 221, 255, 0.7)',
         border: 'rgb(0, 191, 255)',
     },
-    DS_INFO: {
+    DS_INFO: { // Data Subject Info -> Purple
         suggestion: 'rgba(177, 156, 217, 0.5)',
         accepted: 'rgba(177, 156, 217, 0.8)',
         border: 'rgb(128, 0, 128)',
     },
-    DEFAULT: {
+    DEFAULT: { // Fallback
         suggestion: 'rgba(200, 200, 200, 0.5)',
         accepted: 'rgba(200, 200, 200, 0.7)',
         border: 'grey',
@@ -25,7 +32,15 @@ const HIGHLIGHT_COLORS = {
 };
 
 const getHighlightStyle = (mark, isHovered) => {
-    const colors = HIGHLIGHT_COLORS[mark.redaction_type] || HIGHLIGHT_COLORS.DEFAULT;
+    let colors;
+
+    if (mark.mark_type === 'suggestion') {
+        // All pending suggestions are yellow, regardless of their type.
+        colors = HIGHLIGHT_COLORS.PENDING;
+    } else { // 'accepted'
+        // Accepted redactions are colored by their specific type.
+        colors = HIGHLIGHT_COLORS[mark.redaction_type] || HIGHLIGHT_COLORS.DEFAULT;
+    }
 
     const baseBackgroundColor = mark.mark_type === 'accepted' ? colors.accepted : colors.suggestion;
 
