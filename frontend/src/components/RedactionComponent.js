@@ -111,6 +111,8 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
             const createdRedaction = await createRedaction(document.id, newRedaction);
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
+            toast.success("Redaction created successfully.");
+            
         } catch (error) {
             handleCloseManualRedactionPopover();
             toast.error("Failed to create redaction. Please try again.");
