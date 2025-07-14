@@ -60,7 +60,7 @@ const getHighlightStyle = (mark, isHovered) => {
     return style;
 };
 
-const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect }) => {
+const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick }) => {
     const viewerRef = useRef(null);
 
     const handleMouseUp = () => {
@@ -122,7 +122,16 @@ const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionI
                 style = { backgroundColor: 'rgba(255, 214, 10, 0.6)', borderRadius: '3px' };
             }
 
-            parts.push(<Box component="span" sx={style} key={mark.id}>{mark.text}</Box>);
+            parts.push(
+                <Box
+                    component="span"
+                    sx={{ ...style, cursor: 'pointer' }}
+                    key={mark.id}
+                    onClick={() => onHighlightClick && onHighlightClick(mark.id)}
+                >
+                    {mark.text}
+                </Box>
+            );
             lastIndex = Math.max(lastIndex, mark.end_char);
         });
 

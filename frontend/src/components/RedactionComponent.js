@@ -28,6 +28,9 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
     // State for hovering suggestions
     const [hoveredSuggestionId, setHoveredSuggestionId] = useState(null);
 
+    // State to trigger scroll-to-view in the sidebar
+    const [scrollToId, setScrollToId] = useState(null);
+
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         try {
             const updatedRedaction = await updateRedaction(redactionId, { is_accepted: true });
@@ -128,6 +131,15 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
         setHoveredSuggestionId(null);
     }, []);
 
+    const handleHighlightClick = useCallback((redactionId) => {
+        setScrollToId(redactionId);
+    }, []);
+
+    const handleRemoveScrollId = useCallback(() => {
+        setScrollToId(null);
+    }, []);
+
+
     const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
     const manualRedactions = redactions.filter(r => !r.is_suggestion);
     const acceptedSuggestions = redactions.filter(r => r.is_suggestion && r.is_accepted);
@@ -180,6 +192,7 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
                     pendingRedaction={pendingRedaction}
                     hoveredSuggestionId={hoveredSuggestionId}
                     onTextSelect={handleTextSelect}
+                    onHighlightClick={handleHighlightClick}
                 />
             </Container>
 
@@ -190,6 +203,8 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
                 onRemove={handleRemoveRedaction}
                 onSuggestionMouseEnter={handleSuggestionMouseEnter}
                 onSuggestionMouseLeave={handleSuggestionMouseLeave}
+                scrollToId={scrollToId}
+                removeScrollId={handleRemoveScrollId}
             />
 
             <ManualRedactionPopover

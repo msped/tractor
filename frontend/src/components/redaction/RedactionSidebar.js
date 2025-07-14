@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, Card, CardContent, CardActions, Button, Chip } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
@@ -11,9 +11,51 @@ const getRedactionTypeLabel = (type) => {
     }
 };
 
-export default function RedactionSidebar({ redactions, onAccept, onReject, onRemove, onSuggestionMouseEnter, onSuggestionMouseLeave }) {
+export default function RedactionSidebar({ redactions, onAccept, onReject, onRemove, onSuggestionMouseEnter, onSuggestionMouseLeave, scrollToId, removeScrollId }) {
     const { rejected, accepted, pending, manual } = redactions;
     const redactionSections = Object.keys(redactions);
+    const [expanded, setExpanded] = useState(new Set(['pending']));
+    const itemRefs = useRef({});
+
+    const handleAccordionChange = (panel) => (event, isExpanded) => {
+        setExpanded(prev => {
+            const newSet = new Set(prev);
+            if (isExpanded) {
+                newSet.add(panel);
+            } else {
+                newSet.delete(panel);
+            }
+            return newSet;
+        });
+    };
+
+    useEffect(() => {
+        if (!scrollToId) return;
+
+        const targetSection = redactionSections.find(key =>
+            redactions[key].some(item => item.id === scrollToId)
+        );
+
+        if (targetSection) {
+            if (!expanded.has(targetSection)) {
+                setExpanded(prev => new Set(prev).add(targetSection));
+            }
+
+            const timer = setTimeout(() => {
+                const element = itemRefs.current[scrollToId];
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.style.backgroundColor = 'rgba(255, 214, 10, 0.4)';
+                    setTimeout(() => {
+                        element.style.backgroundColor = '';
+                        removeScrollId();
+                    }, 2000);
+                }
+            }, 150);
+
+            return () => clearTimeout(timer);
+        }
+    }, [scrollToId, redactions, redactionSections, expanded, removeScrollId]);
 
     return (
         <Box sx={{ width: '40%', borderLeft: 1, borderColor: 'divider', height: 'calc(100vh - 64px)', overflowY: 'auto', bgcolor: 'background.default' }}>
@@ -27,14 +69,20 @@ export default function RedactionSidebar({ redactions, onAccept, onReject, onRem
                         if (items.length === 0) return null;
 
                         return (
-                            <Accordion key={sectionKey} defaultExpanded={sectionKey === 'pending'} disableGutters sx={{ '&:not(:last-child)': { mb: 1 } }}>
+                            <Accordion
+                                key={sectionKey}
+                                expanded={expanded.has(sectionKey)}
+                                onChange={handleAccordionChange(sectionKey)}
+                                disableGutters
+                                sx={{ '&:not(:last-child)': { mb: 1 } }}
+                            >
                                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                                     <Typography sx={{ textTransform: 'capitalize' }}>{`${sectionKey} (${items.length})`}</Typography>
                                 </AccordionSummary>
                                 <AccordionDetails>
                                     <List dense sx={{ p: 0 }}>
                                         {items.map(item => (
-                                            <ListItem key={item.id} sx={{ px: 0, '&:not(:last-child)': { mb: 1 } }} onMouseEnter={() => onSuggestionMouseEnter(item.id)} onMouseLeave={onSuggestionMouseLeave}>
+                                            <ListItem key={item.id} ref={el => (itemRefs.current[item.id] = el)} sx={{ px: 0, '&:not(:last-child)': { mb: 1 } }} onMouseEnter={() => onSuggestionMouseEnter(item.id)} onMouseLeave={onSuggestionMouseLeave}>
                                                 <Card variant="outlined" sx={{ width: '100%' }}>
                                                     <CardContent>
                                                         <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>{`"${item.text}"`}</Typography>
