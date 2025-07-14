@@ -6,7 +6,7 @@ import RedactionReviewPage from '@/components/RedactionComponent';
 
 export default async function page({ params }) {
     const { caseId, documentId } = await params;
-        const session = await auth();
+    const session = await auth();
 
     let documentFile = null;
     let fetchError = null;

@@ -77,7 +77,7 @@ export default function DocumentListItem({ doc, caseId, onDelete, handleDocument
                     {doc.status === 'Completed' && (
                         <Button 
                             component={NextLink} 
-                            href={`/documents/${doc.id}/view`} 
+                            href={`/cases/${caseId}/document/${doc.id}/view`} 
                             variant="contained" 
                             size="small"
                         >
