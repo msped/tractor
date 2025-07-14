@@ -30,6 +30,13 @@ class DocumentSerializer(serializers.ModelSerializer):
     case = serializers.PrimaryKeyRelatedField(
         queryset=Case.objects.all(), write_only=True)
     status = serializers.CharField(source='get_status_display', read_only=True)
+    # Add a write-only field for updating the status
+    new_status = serializers.ChoiceField(
+        choices=Document.Status,
+        write_only=True,
+        required=False,
+        source='status'
+    )
 
     class Meta:
         model = Document
@@ -40,10 +47,11 @@ class DocumentSerializer(serializers.ModelSerializer):
             'filename',
             'file_type',
             'status',
+            'new_status',
             'extracted_text',
             'uploaded_at'
         ]
-        read_only_fields = ['id', 'status', 'extracted_text',
+        read_only_fields = ['id', 'extracted_text',
                             'uploaded_at', 'filename', 'file_type']
 
     def create(self, validated_data):
@@ -83,8 +91,26 @@ class RedactionSerializer(serializers.ModelSerializer):
             'end_char',
             'text',
             'redaction_type',
+            'justification',
             'is_suggestion',
             'is_accepted',
             'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class DocumentReviewSerializer(serializers.ModelSerializer):
+    redactions = RedactionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Document
+        fields = [
+            'id',
+            'case',
+            'filename',
+            'file_type',
+            'extracted_text',
+            'redactions'
+        ]
+        read_only_fields = ['id', 'case',
+                            'extracted_text', 'filename', 'file_type']

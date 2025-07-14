@@ -1,15 +1,21 @@
 from rest_framework import status
 from rest_framework.generics import (
     ListCreateAPIView,
+    RetrieveAPIView,
     RetrieveUpdateDestroyAPIView
 )
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
-from .models import Case, Document
+from .models import Case, Document, Redaction
 from .serializers import (
-    CaseSerializer, CaseDetailSerializer, DocumentSerializer)
+    CaseSerializer,
+    CaseDetailSerializer,
+    DocumentSerializer,
+    DocumentReviewSerializer,
+    RedactionSerializer,
+)
 
 
 class CaseListCreateView(ListCreateAPIView):
@@ -93,3 +99,36 @@ class DocumentDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = DocumentSerializer
     lookup_field = 'id'
     lookup_url_kwarg = 'document_id'
+
+
+class DocumentReviewView(RetrieveAPIView):
+    """
+    API view to review a document.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = DocumentReviewSerializer
+    queryset = Document.objects.all()
+    lookup_field = 'id'
+    lookup_url_kwarg = 'document_id'
+
+
+class RedactionListCreateView(ListCreateAPIView):
+    """
+    API view to list and create redactions for a specific document.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = RedactionSerializer
+    queryset = Redaction.objects.all()
+    lookup_field = 'document'
+    lookup_url_kwarg = 'document_id'
+
+
+class RedactionDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    API view to retrieve, update, or delete a redaction.
+    """
+    permission_classes = [IsAuthenticated]
+    queryset = Redaction.objects.all()
+    serializer_class = RedactionSerializer
+    lookup_field = 'id'
+    lookup_url_kwarg = 'pk'

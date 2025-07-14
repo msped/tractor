@@ -8,14 +8,14 @@ import CaseInformation from '@/components/CaseInformation';
 import CaseDocuments from '@/components/CaseDocuments';
 
 export default async function page({ params }) {
-    const { id } = await params;
+    const { caseId } = await params;
     const session = await auth();
 
     let caseFile = null;
     let fetchError = null;
 
     try {
-        caseFile = await apiClient.get(`cases/${id}`, {
+        caseFile = await apiClient.get(`cases/${caseId}`, {
             headers: {
                 Authorization: `Bearer ${session.access_token}`,
             },
@@ -32,7 +32,7 @@ export default async function page({ params }) {
         <Container maxWidth="lg" sx={{ py: 4 }}>
             <Stack direction="column" spacing={2}>
                 <CaseInformation caseObject={caseFile} />
-                <CaseDocuments caseId={id} documents={caseFile?.documents}/>
+                <CaseDocuments caseId={caseId} documents={caseFile?.documents}/>
             </Stack>
         </Container>
     )
