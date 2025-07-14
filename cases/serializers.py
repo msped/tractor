@@ -37,6 +37,16 @@ class DocumentSerializer(serializers.ModelSerializer):
         required=False,
         source='status'
     )
+    redactions = serializers.SerializerMethodField(
+        read_only=True,
+        source='redaction_set'
+    )
+
+    def get_redactions(self, obj):
+        """
+        Returns a list of redactions for the document.
+        """
+        return RedactionSerializer(obj.redactions.all(), many=True).data
 
     class Meta:
         model = Document
@@ -49,7 +59,8 @@ class DocumentSerializer(serializers.ModelSerializer):
             'status',
             'new_status',
             'extracted_text',
-            'uploaded_at'
+            'uploaded_at',
+            'redactions',
         ]
         read_only_fields = ['id', 'extracted_text',
                             'uploaded_at', 'filename', 'file_type']
