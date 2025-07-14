@@ -36,7 +36,28 @@ const HIGHLIGHT_COLORS = {
     }
 };
 
-const getHighlightStyle = (mark, isHovered) => {
+const getHighlightStyle = (mark, isHovered, viewMode) => {
+    if (viewMode === 'final') {
+        return {
+            backgroundColor: 'black',
+            color: 'black',
+            borderRadius: '3px',
+            padding: '1px 2px',
+            margin: '-1px -2px',
+            userSelect: 'none',
+        };
+    }
+
+    if (viewMode === 'color-coded') {
+        const colors = HIGHLIGHT_COLORS[mark.redaction_type] || HIGHLIGHT_COLORS.DEFAULT;
+        return {
+            backgroundColor: colors.accepted, // Use the more opaque color
+            borderRadius: '3px',
+            padding: '1px 2px',
+            margin: '-1px -2px',
+        };
+    }
+
     let colors;
 
     if (mark.mark_type === 'suggestion') {
@@ -67,11 +88,14 @@ const getHighlightStyle = (mark, isHovered) => {
     return style;
 };
 
-const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick, reviewComplete }) => {
+const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick, reviewComplete, viewMode = 'review' }) => {
     const viewerRef = useRef(null);
 
     const handleMouseUp = () => {
+        // onTextSelect is only passed in review mode.
+        if (!onTextSelect) return;
         const selection = window.getSelection();
+
         if (!selection.isCollapsed && viewerRef.current && viewerRef.current.contains(selection.anchorNode)) {
             const selectedText = selection.toString();
             if (selectedText.trim() === '') return;
@@ -91,60 +115,66 @@ const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionI
     const renderDocument = () => {
         if (!text) return null;
 
-        const marksToRender = [];
+        let marksToRender = [];
 
-        redactions.forEach(r => {
-            // Accepted redactions (manual or AI) are always shown.
-            if (r.is_accepted) {
-                marksToRender.push({ ...r, mark_type: 'accepted' });
-                return;
-            }
-
-            if (!r.is_suggestion) return;
-
-            const isPending = !r.is_accepted && !r.justification;
-            const isRejected = !r.is_accepted && !!r.justification;
-
-            if (isPending) {
-                marksToRender.push({ ...r, mark_type: 'suggestion' });
-            } else if (isRejected && (!reviewComplete || r.id === hoveredSuggestionId)) {
-                marksToRender.push({ ...r, mark_type: 'rejected' });
-            }
-        });
-
-        // Add pending redaction for manual selection
-        if (pendingRedaction) {
-            marksToRender.push({
-                ...pendingRedaction,
-                id: 'pending-redaction',
-                mark_type: 'pending',
+        if (viewMode === 'review') {
+            // Existing logic for the review page
+            redactions.forEach(r => {
+                if (r.is_accepted) {
+                    marksToRender.push({ ...r, mark_type: 'accepted' });
+                    return;
+                }
+                if (!r.is_suggestion) return;
+                const isPending = !r.is_accepted && !r.justification;
+                const isRejected = !r.is_accepted && !!r.justification;
+                if (isPending) {
+                    marksToRender.push({ ...r, mark_type: 'suggestion' });
+                } else if (isRejected && (!reviewComplete || r.id === hoveredSuggestionId)) {
+                    marksToRender.push({ ...r, mark_type: 'rejected' });
+                }
             });
+            if (pendingRedaction) {
+                marksToRender.push({
+                    ...pendingRedaction,
+                    id: 'pending-redaction',
+                    mark_type: 'pending',
+                });
+            }
+        } else {
+            // Simplified logic for 'final' or 'color-coded' view.
+            // The page component already filters for accepted redactions.
+            marksToRender = redactions.map(r => ({ ...r, mark_type: 'accepted' }));
         }
 
         const sortedMarks = marksToRender.sort((a, b) => a.start_char - b.start_char);
         let lastIndex = 0;
         const parts = [];
 
-        sortedMarks.forEach((mark) => {
+        sortedMarks.forEach((mark, index) => {
             if (mark.start_char > lastIndex) {
                 parts.push(text.substring(lastIndex, mark.start_char));
             }
 
             let style = {};
             const isHovered = mark.id === hoveredSuggestionId;
+            const key = `${mark.id}-${index}`;
 
-            if (['accepted', 'suggestion', 'rejected'].includes(mark.mark_type)) {
-                style = getHighlightStyle(mark, isHovered);
-            } else if (mark.mark_type === 'pending') {
+            if (viewMode === 'review' && mark.mark_type === 'pending') {
                 style = { backgroundColor: 'rgba(255, 214, 10, 0.6)', borderRadius: '3px' };
+            } else {
+                style = getHighlightStyle(mark, isHovered, viewMode);
             }
 
             parts.push(
                 <Box
                     component="span"
-                    sx={{ ...style, cursor: 'pointer' }}
-                    key={mark.id}
-                    onClick={() => onHighlightClick && onHighlightClick(mark.id)}
+                    sx={{
+                        ...style,
+                        cursor: viewMode === 'review' ? 'pointer' : 'default',
+                    }}
+                    key={key}
+                    // Click handler should only be active in review mode
+                    onClick={viewMode === 'review' && onHighlightClick ? () => onHighlightClick(mark.id) : undefined}
                 >
                     {mark.text}
                 </Box>
@@ -159,7 +189,16 @@ const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionI
     };
 
     return (
-        <Paper elevation={0} sx={{ p: 4, lineHeight: 2, fontSize: '1.1rem', whiteSpace: 'pre-wrap', flexGrow: 1, overflowY: 'auto', height: '100%' }} ref={viewerRef} onMouseUp={handleMouseUp}>
+        <Paper
+            elevation={0}
+            sx={{
+                p: 4, lineHeight: 2, fontSize: '1.1rem', whiteSpace: 'pre-wrap',
+                flexGrow: 1, overflowY: 'auto', height: '100%'
+            }}
+            ref={viewerRef}
+            // Only attach mouseup listener if onTextSelect is provided (i.e., in review mode)
+            onMouseUp={onTextSelect ? handleMouseUp : undefined}
+        >
             {renderDocument()}
         </Paper>
     );
