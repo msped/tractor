@@ -16,3 +16,19 @@ export const getDocument = async (docId) => {
         throw error;
     }
 };
+
+export const markAsComplete = async (docId) => {
+    const session = await auth();
+    try {
+        const response = await apiClient.patch(`cases/documents/${docId}`, {
+            new_status: 'COMPLETED'
+        }, {
+            headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+}

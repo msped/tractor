@@ -30,6 +30,13 @@ class DocumentSerializer(serializers.ModelSerializer):
     case = serializers.PrimaryKeyRelatedField(
         queryset=Case.objects.all(), write_only=True)
     status = serializers.CharField(source='get_status_display', read_only=True)
+    # Add a write-only field for updating the status
+    new_status = serializers.ChoiceField(
+        choices=Document.Status,
+        write_only=True,
+        required=False,
+        source='status'
+    )
 
     class Meta:
         model = Document
@@ -40,10 +47,11 @@ class DocumentSerializer(serializers.ModelSerializer):
             'filename',
             'file_type',
             'status',
+            'new_status',
             'extracted_text',
             'uploaded_at'
         ]
-        read_only_fields = ['id', 'status', 'extracted_text',
+        read_only_fields = ['id', 'extracted_text',
                             'uploaded_at', 'filename', 'file_type']
 
     def create(self, validated_data):

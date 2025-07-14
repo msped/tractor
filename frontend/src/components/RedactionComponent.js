@@ -1,18 +1,21 @@
 "use client"
 
 import React, { useState, useCallback } from 'react';
-import { Box, Typography, Button, Container, Tooltip } from '@mui/material';
+import { Box, Typography, Button, Container, Tooltip, CircularProgress } from '@mui/material';
 import NextLink from 'next/link';
 import RedactionSidebar from './redaction/RedactionSidebar';
 import ManualRedactionPopover from './redaction/ManualRedactionPopover';
 import RejectReasonDialog from './redaction/RejectReasonDialog';
 import DocumentViewer from './redaction/DocumentViewer';
+import { markAsComplete } from '@/services/documentService'
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
 
 import toast from 'react-hot-toast';
 
 export default function RedactionReviewPage({ document, initialRedactions }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
+    const [currentDocument, setCurrentDocument] = useState(document);
+    const [isLoading, setIsLoading] = useState(false);
 
     // State for manual redaction popover
     const [manualRedactionAnchor, setManualRedactionAnchor] = useState(null);
@@ -139,6 +142,19 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
         setScrollToId(null);
     }, []);
 
+    const handleMarkAsComplete = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const updatedDocument = await markAsComplete(currentDocument.id);
+            setCurrentDocument(updatedDocument);
+            toast.success("Document is ready for disclosure.");
+        } catch (error) {
+            toast.error("Failed to mark document as complete. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [currentDocument.id]);
+
 
     const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
     const manualRedactions = redactions.filter(r => !r.is_suggestion);
@@ -158,41 +174,53 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
             <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
                     <Box>
-                        <Button component={NextLink} href={`/cases/${document.case}`} variant="contained" color="primary">
+                        <Button component={NextLink} href={`/cases/${currentDocument.case}`} variant="contained" color="primary">
                             Back to Case
                         </Button>
                     </Box>
                     <Box>
-                        <Typography variant="h5" component="h1">{document?.filename}</Typography>
+                        <Typography variant="h5" component="h1">{currentDocument?.filename}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 2 }}>
-                        <Tooltip title={pendingSuggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
-                            <span>
-                                <Button
-                                    variant="contained"
-                                    color="primary"
-                                    disabled={pendingSuggestions.length > 0}
-                                    sx={{
-                                        // Explicitly set styles for the disabled state for better visibility
-                                        '&.Mui-disabled': {
-                                            backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                                            color: 'rgba(255, 255, 255, 0.5)',
-                                        },
-                                    }}
-                                >
-                                    Mark as Complete
-                                </Button>
-                            </span>
-                        </Tooltip>
+                        {currentDocument.status !== 'Completed' ? (
+                            <Tooltip title={pendingSuggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                                <span>
+                                    <Button
+                                        variant="contained"
+                                        color="primary"
+                                        disabled={pendingSuggestions.length > 0 || isLoading}
+                                        onClick={handleMarkAsComplete}
+                                        sx={{
+                                            minWidth: 180,
+                                            '&.Mui-disabled': {
+                                                backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                                                color: 'rgba(255, 255, 255, 0.5)',
+                                            },
+                                        }}
+                                    >
+                                        {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
+                                    </Button>
+                                </span>
+                            </Tooltip>
+                        ) : (
+                            <Button
+                                variant="contained"
+                                color="success"
+                                sx={{ minWidth: 180 }}
+                            >
+                                Ready for Disclosure
+                            </Button>
+                        )}
                     </Box>
                 </Box>
                 <DocumentViewer
-                    text={document?.extracted_text}
+                    text={currentDocument?.extracted_text}
                     redactions={redactions}
                     pendingRedaction={pendingRedaction}
                     hoveredSuggestionId={hoveredSuggestionId}
                     onTextSelect={handleTextSelect}
                     onHighlightClick={handleHighlightClick}
+                    reviewComplete={pendingSuggestions.length === 0}
                 />
             </Container>
 
