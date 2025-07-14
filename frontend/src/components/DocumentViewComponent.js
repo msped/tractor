@@ -5,8 +5,10 @@ import { Box, Typography, Container, Switch, FormControlLabel, Button } from '@m
 import NextLink from 'next/link';
 import DocumentViewer from './redaction/DocumentViewer';
 
-export default function DocumentViewComponent({ document, redactions }) {
+export default function DocumentViewComponent({ caseId, document, redactions }) {
     const [showColorCoded, setShowColorCoded] = useState(false);
+
+    console.log("DocumentViewComponent rendered with document:", document);
 
     const handleToggleChange = (event) => {
         setShowColorCoded(event.target.checked);
@@ -17,7 +19,7 @@ export default function DocumentViewComponent({ document, redactions }) {
             <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
                     <Box>
-                        <Button component={NextLink} href={`/cases/${document.case}`} variant="contained" color="primary">
+                        <Button component={NextLink} href={`/cases/${caseId}`} variant="contained" color="primary">
                             Back to Case
                         </Button>
                     </Box>

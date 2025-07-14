@@ -6,7 +6,7 @@ import DocumentViewComponent from '@/components/DocumentViewComponent';
 import { Box, Alert } from '@mui/material';
 
 export default async function page({ params }) {
-    const { documentId } = await params;
+    const { caseId, documentId } = await params;
     const session = await auth();
 
     if (!session) {
@@ -47,5 +47,5 @@ export default async function page({ params }) {
         );
     }
 
-    return <DocumentViewComponent document={documentData} redactions={redactions} />;
+    return <DocumentViewComponent caseId={caseId} document={documentData} redactions={redactions} />;
 }
