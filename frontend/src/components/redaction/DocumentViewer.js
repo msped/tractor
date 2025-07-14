@@ -24,6 +24,11 @@ const HIGHLIGHT_COLORS = {
         accepted: 'rgba(177, 156, 217, 0.8)',
         border: 'rgb(128, 0, 128)',
     },
+    REJECTED: { // For rejected suggestions
+        suggestion: 'rgba(189, 195, 199, 0.5)', // A neutral grey
+        accepted: 'rgba(127, 140, 141, 0.7)', // More opaque for hover
+        border: 'rgb(149, 165, 166)',
+    },
     DEFAULT: { // Fallback
         suggestion: 'rgba(200, 200, 200, 0.5)',
         accepted: 'rgba(200, 200, 200, 0.7)',
@@ -37,6 +42,8 @@ const getHighlightStyle = (mark, isHovered) => {
     if (mark.mark_type === 'suggestion') {
         // All pending suggestions are yellow, regardless of their type.
         colors = HIGHLIGHT_COLORS.PENDING;
+    } else if (mark.mark_type === 'rejected') {
+        colors = HIGHLIGHT_COLORS.REJECTED;
     } else { // 'accepted'
         // Accepted redactions are colored by their specific type.
         colors = HIGHLIGHT_COLORS[mark.redaction_type] || HIGHLIGHT_COLORS.DEFAULT;
@@ -60,7 +67,7 @@ const getHighlightStyle = (mark, isHovered) => {
     return style;
 };
 
-const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick }) => {
+const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick, reviewComplete }) => {
     const viewerRef = useRef(null);
 
     const handleMouseUp = () => {
@@ -86,12 +93,22 @@ const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionI
 
         const marksToRender = [];
 
-        // Process all redactions to determine how they should be marked
         redactions.forEach(r => {
+            // Accepted redactions (manual or AI) are always shown.
             if (r.is_accepted) {
                 marksToRender.push({ ...r, mark_type: 'accepted' });
-            } else if (r.is_suggestion) {
+                return;
+            }
+
+            if (!r.is_suggestion) return;
+
+            const isPending = !r.is_accepted && !r.justification;
+            const isRejected = !r.is_accepted && !!r.justification;
+
+            if (isPending) {
                 marksToRender.push({ ...r, mark_type: 'suggestion' });
+            } else if (isRejected && (!reviewComplete || r.id === hoveredSuggestionId)) {
+                marksToRender.push({ ...r, mark_type: 'rejected' });
             }
         });
 
@@ -116,7 +133,7 @@ const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSuggestionI
             let style = {};
             const isHovered = mark.id === hoveredSuggestionId;
 
-            if (mark.mark_type === 'accepted' || mark.mark_type === 'suggestion') {
+            if (['accepted', 'suggestion', 'rejected'].includes(mark.mark_type)) {
                 style = getHighlightStyle(mark, isHovered);
             } else if (mark.mark_type === 'pending') {
                 style = { backgroundColor: 'rgba(255, 214, 10, 0.6)', borderRadius: '3px' };
