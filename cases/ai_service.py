@@ -15,7 +15,6 @@ def extract_entities_from_text(path):
     if not extracted_text:
         raise ValueError("No text found in the document.")
     results = []
-    print("doc entities: ", doc.ents)
     for ent in doc.ents:
         results.append({
             'text': ent.text,

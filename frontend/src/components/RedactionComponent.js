@@ -12,7 +12,7 @@ import { createRedaction, updateRedaction, deleteRedaction } from '@/services/re
 
 import toast from 'react-hot-toast';
 
-export default function RedactionReviewPage({ document, initialRedactions }) {
+export default function RedactionComponent({ document, initialRedactions }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
     const [currentDocument, setCurrentDocument] = useState(document);
     const [isLoading, setIsLoading] = useState(false);
@@ -42,6 +42,24 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
             ));
         } catch (error) {
             toast.error("Failed to accept suggestion. Please try again.");
+        }
+    }, []);
+
+    const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
+        try {
+            const updatedRedaction = await updateRedaction(
+                redactionId, 
+                {
+                    redaction_type: newType,
+                    is_accepted: true,
+                    is_suggestion: false   
+                });
+            setRedactions(prev => prev.map(r =>
+                r.id === redactionId ? updatedRedaction : r
+            ));
+            toast.success("Suggestion type changed and accepted.");
+        } catch (error) {
+            toast.error("Failed to change suggestion type. Please try again.");
         }
     }, []);
 
@@ -229,6 +247,7 @@ export default function RedactionReviewPage({ document, initialRedactions }) {
                 onAccept={handleAcceptSuggestion}
                 onReject={handleOpenRejectDialog}
                 onRemove={handleRemoveRedaction}
+                onChangeTypeAndAccept={handleChangeTypeAndAccept}
                 onSuggestionMouseEnter={handleSuggestionMouseEnter}
                 onSuggestionMouseLeave={handleSuggestionMouseLeave}
                 scrollToId={scrollToId}

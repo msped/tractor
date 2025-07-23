@@ -1,17 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, Card, CardContent, CardActions, Button, Chip } from '@mui/material';
+import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, Card, CardContent, CardActions, Button, Chip, ButtonGroup, Menu, MenuItem } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 
-const getRedactionTypeLabel = (type) => {
-    switch (type) {
-        case 'PII': return 'Third-Party PII';
-        case 'OP_DATA': return 'Operational Data';
-        case 'DS_INFO': return 'Data Subject Information';
-        default: return 'Suggestion';
-    }
+const REDACTION_TYPE_LABELS = {
+    'PII': 'Third-Party PII',
+    'OP_DATA': 'Operational Data',
+    'DS_INFO': 'Data Subject Information',
 };
 
-export default function RedactionSidebar({ redactions, onAccept, onReject, onRemove, onSuggestionMouseEnter, onSuggestionMouseLeave, scrollToId, removeScrollId }) {
+const getRedactionTypeLabel = (type) => REDACTION_TYPE_LABELS[type] || 'Suggestion';
+
+export default function RedactionSidebar({
+    redactions,
+    onAccept,
+    onReject,
+    onRemove,
+    onChangeTypeAndAccept,
+    onSuggestionMouseEnter,
+    onSuggestionMouseLeave,
+    scrollToId,
+    removeScrollId
+}) {
     const { rejected, accepted, pending, manual } = redactions;
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
@@ -27,6 +37,24 @@ export default function RedactionSidebar({ redactions, onAccept, onReject, onRem
             }
             return newSet;
         });
+    };
+
+    const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+    const [currentItemForMenu, setCurrentItemForMenu] = useState(null);
+
+    const handleMenuClick = (event, item) => {
+        setMenuAnchorEl(event.currentTarget);
+        setCurrentItemForMenu(item);
+    };
+
+    const handleMenuClose = () => {
+        setMenuAnchorEl(null);
+        setCurrentItemForMenu(null);
+    };
+
+    const handleTypeChange = (newType) => {
+        onChangeTypeAndAccept(currentItemForMenu.id, newType);
+        handleMenuClose();
     };
 
     useEffect(() => {
@@ -97,12 +125,23 @@ export default function RedactionSidebar({ redactions, onAccept, onReject, onRem
                                                     <CardActions sx={{ justifyContent: 'flex-end' }}>
                                                         {sectionKey === 'rejected' && (<Button size="small" color="primary" variant='outlined' onClick={() => onRemove(item.id)}>Re-evaluate</Button>)}
                                                         {(sectionKey === 'manual' || sectionKey === 'accepted') && (<Button size="small" color="error" variant='contained' onClick={() => onRemove(item.id)}>Remove</Button>)}
-                                                        {sectionKey === 'pending' && (
-                                                            <>
+                                                        {sectionKey === 'pending' &&
+                                                            <Box sx={{ display: 'flex', gap: 1 }}>
                                                                 <Button size="small" variant='contained' color="error" onClick={() => onReject(item)}>Reject</Button>
-                                                                <Button size="small" variant='contained' color="success" onClick={() => onAccept(item.id)}>Accept</Button>
-                                                            </>
-                                                        )}
+                                                                <ButtonGroup variant="contained" color="success" size="small">
+                                                                    <Button onClick={() => onAccept(item.id)}>Accept</Button>
+                                                                    <Button
+                                                                        aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
+                                                                        aria-expanded={menuAnchorEl ? 'true' : undefined}
+                                                                        aria-label="change redaction type and accept"
+                                                                        aria-haspopup="menu"
+                                                                        onClick={(e) => handleMenuClick(e, item)}
+                                                                    >
+                                                                        <ArrowDropDownIcon />
+                                                                    </Button>
+                                                                </ButtonGroup>
+                                                            </Box>
+                                                        }
                                                     </CardActions>
                                                 </Card>
                                             </ListItem>
@@ -112,6 +151,20 @@ export default function RedactionSidebar({ redactions, onAccept, onReject, onRem
                             </Accordion>
                         );
                     })}
+                    <Menu
+                        id="split-button-menu"
+                        anchorEl={menuAnchorEl}
+                        open={Boolean(menuAnchorEl)}
+                        onClose={handleMenuClose}
+                    >
+                        {Object.keys(REDACTION_TYPE_LABELS)
+                            .filter(typeKey => typeKey !== currentItemForMenu?.redaction_type)
+                            .map(typeKey => (
+                                <MenuItem key={typeKey} onClick={() => handleTypeChange(typeKey)}>
+                                    Accept as {REDACTION_TYPE_LABELS[typeKey]}
+                                </MenuItem>
+                            ))}
+                    </Menu>
                 </Box>
             ) : (
                 <Typography sx={{ p: 2, color: 'text.secondary' }}>No redactions or suggestions yet.</Typography>

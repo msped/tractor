@@ -8,8 +8,6 @@ import DocumentViewer from './redaction/DocumentViewer';
 export default function DocumentViewComponent({ caseId, document, redactions }) {
     const [showColorCoded, setShowColorCoded] = useState(false);
 
-    console.log("DocumentViewComponent rendered with document:", document);
-
     const handleToggleChange = (event) => {
         setShowColorCoded(event.target.checked);
     };
