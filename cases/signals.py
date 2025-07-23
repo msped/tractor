@@ -23,6 +23,7 @@ def redaction_post_save(sender, instance, created, **kwargs):
     task to find that same text in all other documents in the case.
     """
     if instance.redaction_type == Redaction.RedactionType.DS_INFORMATION:
+        print("redaction: ", created, instance.redaction_type)
         if created:
             async_task(
                 'cases.services.find_and_flag_matching_text_in_case',
