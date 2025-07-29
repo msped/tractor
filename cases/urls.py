@@ -6,17 +6,15 @@ from .views import (
     DocumentDetailView,
     DocumentReviewView,
     RedactionListCreateView,
+    CaseExportView,
     RedactionDetailView,
 )
 
 urlpatterns = [
     path('cases', CaseListCreateView.as_view(), name='case-list-create'),
     path('cases/<uuid:case_id>', CaseDetailView.as_view(), name='case-detail'),
-    path(
-        'cases/<uuid:case_id>/detail',
-        CaseDetailView.as_view(),
-        name='case-detail'
-    ),
+    path('cases/<uuid:case_id>/export',
+         CaseExportView.as_view(), name='case-export'),
     path('cases/<uuid:case_id>/documents',
          DocumentListCreateView.as_view(), name='document-list-create'),
     path(
