@@ -26,6 +26,12 @@ class Case(models.Model):
         UNDER_REVIEW = 'UNDER_REVIEW', 'Under Review'
         ERROR = 'ERROR', 'Error'
 
+    class ExportStatus(models.TextChoices):
+        NONE = 'NONE', 'Not Generated'
+        PROCESSING = 'PROCESSING', 'Processing'
+        COMPLETED = 'COMPLETED', 'Completed'
+        ERROR = 'ERROR', 'Error'
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -76,6 +82,20 @@ class Case(models.Model):
         default=retention_review_date_default,
         help_text="Date when this case should be reviewed for retention."
     )
+
+    # Export-related fields
+    export_status = models.CharField(
+        max_length=20,
+        choices=ExportStatus.choices,
+        default=ExportStatus.NONE
+    )
+    export_file = models.FileField(
+        upload_to=f'exports/{id}/',
+        null=True, blank=True,
+        help_text="The path to the generated ZIP export file."
+    )
+    export_task_id = models.CharField(
+        max_length=255, null=True, blank=True)
 
     def __str__(self):
         return f"Case {self.case_reference} - {self.data_subject_name}"
