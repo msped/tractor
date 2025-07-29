@@ -1,6 +1,6 @@
 env/
 .env
 postgres_data/
-originals/
+media/
 # Ignore Python cache files
 __pycache__/
