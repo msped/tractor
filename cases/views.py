@@ -6,6 +6,8 @@ from rest_framework.generics import (
 )
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from django_q.tasks import async_task
 from django.shortcuts import get_object_or_404
 
 from .models import Case, Document, Redaction
@@ -16,6 +18,27 @@ from .serializers import (
     DocumentReviewSerializer,
     RedactionSerializer,
 )
+
+
+class CaseExportView(APIView):
+    """
+    Triggers the background task to generate the case export package.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id, *args, **kwargs):
+        case = get_object_or_404(Case, id=case_id)
+
+        # Set status to processing and queue the task
+        case.export_status = Case.ExportStatus.PROCESSING
+        task_id = async_task('cases.services.export_case_documents', case.id)
+        case.export_task_id = task_id
+        case.save(update_fields=['export_status', 'export_task_id'])
+
+        return Response(
+            {'message': 'Export process started.', 'task_id': task_id},
+            status=status.HTTP_202_ACCEPTED
+        )
 
 
 class CaseListCreateView(ListCreateAPIView):
