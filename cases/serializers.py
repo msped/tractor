@@ -4,7 +4,8 @@ from .models import Case, Document, Redaction
 
 
 class CaseSerializer(serializers.ModelSerializer):
-    status = serializers.CharField(source='get_status_display')
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
     created_by = serializers.CharField(
         source='created_by.username', read_only=True)
     updated_by = serializers.CharField(
@@ -15,6 +16,7 @@ class CaseSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'status',
+            'status_display',
             'case_reference',
             'data_subject_name',
             'data_subject_dob',

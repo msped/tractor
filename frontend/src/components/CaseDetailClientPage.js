@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Container, Stack, Box, Typography, CircularProgress, Button } from '@mui/material';
+import { Container, Stack, Box, CircularProgress, Button } from '@mui/material';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import NextLink from 'next/link';
@@ -33,6 +33,9 @@ export default function CaseDetailClientPage({ initialCaseData }) {
         return <Container sx={{ textAlign: 'center', mt: 5 }}><CircularProgress /></Container>;
     }
 
+    const finalStatuses = ['COMPLETED', 'CLOSED', 'WITHDRAWN'];
+    const isCaseFinalised = finalStatuses.includes(caseData.status);
+
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
             <Stack direction="column" spacing={2}>
@@ -48,7 +51,12 @@ export default function CaseDetailClientPage({ initialCaseData }) {
                     <CaseExportManager caseData={caseData} onUpdate={mutate} />
                 </Box>
                 <CaseInformation caseObject={caseData} onUpdate={mutate} />
-                <CaseDocuments caseId={caseData.id} documents={caseData.documents} onUpdate={mutate} />
+                <CaseDocuments
+                    caseId={caseData.id}
+                    documents={caseData.documents}
+                    onUpdate={mutate}
+                    isCaseFinalised={isCaseFinalised}
+                />
             </Stack>
         </Container>
     );

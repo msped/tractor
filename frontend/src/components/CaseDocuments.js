@@ -17,7 +17,8 @@ import {
     Typography,
     IconButton,
     TextField,
-    InputAdornment
+    InputAdornment,
+    Tooltip
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
@@ -29,7 +30,7 @@ import DocumentListItem from './DocumentListItem';
 import toast from 'react-hot-toast';
 
 
-export default function CaseDocuments({ caseId, documents, onUpdate }) {
+export default function CaseDocuments({ caseId, documents, onUpdate, isCaseFinalised }) {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
@@ -149,13 +150,18 @@ export default function CaseDocuments({ caseId, documents, onUpdate }) {
                     title="Documents"
                     slotProps={{ title: { fontWeight: 600 }}}
                     action={
-                        <Button
-                            variant="contained"
-                            startIcon={<UploadFileIcon />}
-                            onClick={handleOpenDialog}
-                        >
-                            Upload Document
-                        </Button>
+                        <Tooltip title={isCaseFinalised ? "This case is finalised and no longer accepts new documents." : ""}>
+                            <span>
+                                <Button
+                                    variant="contained"
+                                    startIcon={<UploadFileIcon />}
+                                    onClick={handleOpenDialog}
+                                    disabled={isCaseFinalised}
+                                >
+                                    Upload Document
+                                </Button>
+                            </span>
+                        </Tooltip>
                     }
                 />
                 <CardContent>
@@ -168,6 +174,7 @@ export default function CaseDocuments({ caseId, documents, onUpdate }) {
                                     caseId={caseId}
                                     onDelete={handleDeleteDocument}
                                     handleDocumentUpdate={onUpdate}
+                                    isCaseFinalised={isCaseFinalised}
                                 />
                             ))}
                         </List>

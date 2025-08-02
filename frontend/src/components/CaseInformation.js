@@ -15,9 +15,11 @@ import {
     DialogContent,
     DialogContentText,
     DialogTitle,
-    Grid, IconButton, TextField, Typography
+    Grid, IconButton, TextField, Typography,
+    Menu, MenuItem, Tooltip
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import apiClient from '@/api/apiClient';
 import toast from 'react-hot-toast';
 
@@ -66,6 +68,7 @@ export default function CaseInformation({ caseObject, onUpdate }) {
     const { data: session } = useSession();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [confirmDeleteDialogOpen, setConfirmDeleteDialogOpen] = useState(false);
+    const [statusMenuAnchorEl, setStatusMenuAnchorEl] = useState(null);
     const [editableCase, setEditableCase] = useState(null);
 
     const handleOpenEditDialog = () => {
@@ -82,6 +85,14 @@ export default function CaseInformation({ caseObject, onUpdate }) {
         setEditableCase(null);
     };
 
+    const handleStatusMenuOpen = (event) => {
+        setStatusMenuAnchorEl(event.currentTarget);
+    };
+
+    const handleStatusMenuClose = () => {
+        setStatusMenuAnchorEl(null);
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setEditableCase(prev => ({ ...prev, [name]: value }));
@@ -91,7 +102,7 @@ export default function CaseInformation({ caseObject, onUpdate }) {
         if (!editableCase || !session) return;
 
         try {
-            await apiClient.put(`/cases/${caseObject.id}`, editableCase, {
+            await apiClient.patch(`/cases/${caseObject.id}`, editableCase, {
                 headers: {
                     'Authorization': `Bearer ${session.access_token}`,
                 },
@@ -101,6 +112,24 @@ export default function CaseInformation({ caseObject, onUpdate }) {
             if (onUpdate) onUpdate(); else router.refresh();
         } catch (error) {
             toast.error('Failed to update case. Please try again.');
+        }
+    };
+
+    const handleStatusChange = async (newStatus) => {
+        handleStatusMenuClose();
+        if (!caseObject || !session) return;
+
+        const toastId = toast.loading(`Updating status...`);
+        try {
+            await apiClient.patch(`/cases/${caseObject.id}`, { status: newStatus }, {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+            });
+            toast.success('Case status updated.', { id: toastId });
+            if (onUpdate) onUpdate();
+        } catch (error) {
+            toast.error('Failed to update case status.', { id: toastId });
         }
     };
 
@@ -125,15 +154,45 @@ export default function CaseInformation({ caseObject, onUpdate }) {
         return <Typography>Loading case information...</Typography>;
     }
 
+    const finalStatuses = ['COMPLETED', 'CLOSED', 'WITHDRAWN'];
+    const isFinalStatus = finalStatuses.includes(caseObject.status);
+
+    const availableStatuses = {
+        'COMPLETED': 'Completed',
+        'CLOSED': 'Closed',
+        'WITHDRAWN': 'Withdrawn',
+    };
+
     return (
         <>
             <Card variant="outlined">
                 <CardHeader
                     title="Case Details"
                     action={
-                        <IconButton aria-label="settings" onClick={handleOpenEditDialog}>
-                            <SettingsIcon />
-                        </IconButton>
+                        <>
+                            <Tooltip title="Case Actions">
+                                <span>
+                                    <IconButton
+                                        aria-label="case actions"
+                                        onClick={handleStatusMenuOpen}
+                                        disabled={isFinalStatus}
+                                    >
+                                        <MoreVertIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                            <Tooltip title={isFinalStatus ? "This case is finalised and cannot be edited." : "Edit Details"}>
+                                <span>
+                                    <IconButton
+                                        aria-label="settings"
+                                        onClick={handleOpenEditDialog}
+                                        disabled={isFinalStatus}
+                                    >
+                                        <SettingsIcon />
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </>
                     }
                     slotProps={{ title: { variant: 'h5', fontWeight: 600 }}}
                 />
@@ -141,7 +200,7 @@ export default function CaseInformation({ caseObject, onUpdate }) {
                     <Grid container spacing={3}>
                         <InfoItem label="Case Reference" value={caseObject.case_reference} />
                         <InfoItem label="Status">
-                            <Chip label={caseObject.status} color={getStatusChipColor(caseObject.status)} size="small" />
+                            <Chip label={caseObject.status_display} color={getStatusChipColor(caseObject.status)} size="small" />
                         </InfoItem>
                         <InfoItem label="Data Subject" value={caseObject.data_subject_name} />
                         <InfoItem label="Date of Birth" value={formatDate(caseObject.data_subject_dob)} />
@@ -150,6 +209,22 @@ export default function CaseInformation({ caseObject, onUpdate }) {
                     </Grid>
                 </CardContent>
             </Card>
+
+            <Menu
+                anchorEl={statusMenuAnchorEl}
+                open={Boolean(statusMenuAnchorEl)}
+                onClose={handleStatusMenuClose}
+            >
+                {Object.entries(availableStatuses).map(([statusKey, statusLabel]) => (
+                    <MenuItem
+                        key={statusKey}
+                        onClick={() => handleStatusChange(statusKey)}
+                        disabled={caseObject.status === statusKey}
+                    >
+                        Mark as {statusLabel}
+                    </MenuItem>
+                ))}
+            </Menu>
 
             {/* Edit Case Dialog */}
             <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} fullWidth maxWidth="sm">

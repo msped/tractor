@@ -7,7 +7,8 @@ import {
     Button, 
     Stack, 
     Typography, 
-    Chip, 
+    Chip,
+    Tooltip,
     CircularProgress 
 } from '@mui/material';
 import ArticleIcon from '@mui/icons-material/Article';
@@ -32,7 +33,7 @@ const getStatusChipColor = (status) => {
 };
 
 
-export default function DocumentListItem({ doc, caseId, onDelete, handleDocumentUpdate }) {
+export default function DocumentListItem({ doc, caseId, onDelete, handleDocumentUpdate, isCaseFinalised }) {
 
     // This useEffect handles polling for a newly uploaded document.
     // Once the status is no longer 'Processing', it calls the parent's update function
@@ -80,9 +81,13 @@ export default function DocumentListItem({ doc, caseId, onDelete, handleDocument
                             Open
                         </Button>
                     )}
-                    <IconButton aria-label="delete" onClick={() => onDelete(doc.id)}>
-                        <DeleteIcon />
-                    </IconButton>
+                    <Tooltip title={isCaseFinalised ? "Cannot delete documents from a finalised case." : "Delete document"}>
+                        <span>
+                            <IconButton aria-label="delete" onClick={() => onDelete(doc.id)} disabled={isCaseFinalised}>
+                                <DeleteIcon />
+                            </IconButton>
+                        </span>
+                    </Tooltip>
                 </Stack>
             }
         >
