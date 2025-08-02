@@ -34,23 +34,19 @@ const getStatusChipColor = (status) => {
 
 export default function DocumentListItem({ doc, caseId, onDelete, handleDocumentUpdate }) {
 
+    // This useEffect handles polling for a newly uploaded document.
+    // Once the status is no longer 'Processing', it calls the parent's update function
+    // and stops its own polling.
     useEffect(() => {
         if (doc.status !== 'Processing') {
             return;
         }
 
         const pollStatus = async () => {
-            try {
-                const updatedDoc = await getDocument(doc.id);
-                if (updatedDoc.status !== 'Processing') {
-                    handleDocumentUpdate(updatedDoc);
-                }
-            } catch (error) {
-                if (error.response && error.response.data) {
-                    throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
-                } else {
-                    throw new Error('Failed to create redaction. Please try again.');
-                }
+            const updatedDoc = await getDocument(doc.id);
+            if (updatedDoc.status !== 'Processing') {
+                handleDocumentUpdate();
+                clearInterval(intervalId);
             }
         };
 
