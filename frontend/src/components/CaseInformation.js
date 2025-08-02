@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import apiClient from '@/api/apiClient';
+import toast from 'react-hot-toast';
 
 const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -60,7 +61,7 @@ const InfoItem = ({ label, children, value }) => (
     </Grid>
 );
 
-export default function CaseInformation({ caseObject }) {
+export default function CaseInformation({ caseObject, onUpdate }) {
     const router = useRouter();
     const { data: session } = useSession();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -97,7 +98,7 @@ export default function CaseInformation({ caseObject }) {
             });
             handleCloseEditDialog();
             toast.success('Case updated.');
-            router.refresh();
+            if (onUpdate) onUpdate(); else router.refresh();
         } catch (error) {
             toast.error('Failed to update case. Please try again.');
         }
