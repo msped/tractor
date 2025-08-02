@@ -86,7 +86,15 @@ class CaseDetailSerializer(CaseSerializer):
     documents = DocumentSerializer(many=True, read_only=True)
 
     class Meta(CaseSerializer.Meta):
-        fields = CaseSerializer.Meta.fields + ['documents']
+        fields = CaseSerializer.Meta.fields + [
+            'documents',
+            'export_status',
+            'export_file',
+            'export_task_id'
+        ]
+        read_only_fields = [
+            'export_status', 'export_file', 'export_task_id'
+        ]
 
 
 class RedactionSerializer(serializers.ModelSerializer):

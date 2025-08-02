@@ -29,8 +29,7 @@ import DocumentListItem from './DocumentListItem';
 import toast from 'react-hot-toast';
 
 
-export default function CaseDocuments({ caseId, documents }) {
-    const [docs, setDocs] = useState(documents || []);
+export default function CaseDocuments({ caseId, documents, onUpdate }) {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
@@ -105,7 +104,7 @@ export default function CaseDocuments({ caseId, documents }) {
                     'Authorization': `Bearer ${session.access_token}`,
                 },
             });
-            setDocs(prevDocs => prevDocs.filter(doc => doc.id !== docId));
+            if (onUpdate) onUpdate();
             toast.success('Document deleted.');
         } catch (error) {
             toast.error('Failed to delete document. Please try again.');
@@ -130,8 +129,7 @@ export default function CaseDocuments({ caseId, documents }) {
                     'Authorization': `Bearer ${session.access_token}`,
                 },
             });
-            // The backend returns an array of all created documents in a single response
-            setDocs((prevDocs) => [...prevDocs, ...response.data]);
+            if (onUpdate) onUpdate();
             toast.success('Documents uploaded successfully.');
         } catch (error) {
             if (error.response && error.response.data) {
@@ -161,17 +159,15 @@ export default function CaseDocuments({ caseId, documents }) {
                     }
                 />
                 <CardContent>
-                    {docs.length > 0 ? (
+                    {documents && documents.length > 0 ? (
                         <List>
-                            {docs.map((doc) => (
+                            {documents.map((doc) => (
                                 <DocumentListItem
                                     key={doc.id}
                                     doc={doc}
                                     caseId={caseId}
                                     onDelete={handleDeleteDocument}
-                                    handleDocumentUpdate={(updatedDoc) => {
-                                        setDocs(prevDocs => prevDocs.map(d => d.id === updatedDoc.id ? updatedDoc : d));
-                                    }}
+                                    handleDocumentUpdate={onUpdate}
                                 />
                             ))}
                         </List>
