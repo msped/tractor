@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React from 'react'
 import NextLink from 'next/link';
 import Link from '@mui/material/Link';
 import Button from '@mui/material/Button';
@@ -24,6 +24,11 @@ import {
     gridFilterModelSelector,
 } from '@mui/x-data-grid';
 import { Box } from '@mui/system';
+import AddIcon from '@mui/icons-material/Add';
+
+const openInProgressValues = ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW'];
+const completedClosedValues = ['COMPLETED', 'CLOSED'];
+const withdrawnValues = ['WITHDRAWN'];
 
 const getStatusChipColor = (status) => {
     switch (status) {
@@ -70,7 +75,7 @@ const columns = [
         field: 'created_at',
         headerName: 'Created At',
         width: 180,
-        valueGetter: (params) => new Date(params.value).toLocaleDateString('en-GB'),
+        valueGetter: (params) => new Date(params).toLocaleDateString('en-GB'),
     },
 ];
 
@@ -105,6 +110,8 @@ function CustomToolbar() {
     const statusFilter = filterModel.items.find((item) => item.field === 'status');
     const activeFilterValues = statusFilter?.value || [];
 
+    const isFilterActive = (values) => JSON.stringify(activeFilterValues.sort()) === JSON.stringify(values.sort());
+
     const handleFilterChange = (values) => {
         const otherFilters = filterModel.items.filter(
             (item) => item.field !== 'status',
@@ -119,28 +126,32 @@ function CustomToolbar() {
         apiRef.current.setFilterModel({ items: newFilterItems });
     }
 
-    const openInProgressValues = ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW'];
-    const completedClosedValues = ['COMPLETED', 'CLOSED'];
-    const withdrawnValues = ['WITHDRAWN'];
-
-    // A helper to compare filter arrays regardless of order
-    const isFilterActive = (values) => JSON.stringify(activeFilterValues.sort()) === JSON.stringify(values.sort());
-
     return (
         <Toolbar>
-            <Button onClick={() => handleFilterChange([])} variant={activeFilterValues.length === 0 ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => handleFilterChange([])} variant={activeFilterValues.length === 0 ? 'contained' : 'text'}>
                 All
             </Button>
-            <Button onClick={() => handleFilterChange(openInProgressValues)} variant={isFilterActive(openInProgressValues) ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => handleFilterChange(openInProgressValues)} variant={isFilterActive(openInProgressValues) ? 'contained' : 'text'}>
                 Open / In Progress
             </Button>
-            <Button onClick={() => handleFilterChange(completedClosedValues)} variant={isFilterActive(completedClosedValues) ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => handleFilterChange(completedClosedValues)} variant={isFilterActive(completedClosedValues) ? 'contained' : 'text'}>
                 Completed / Closed
             </Button>
-            <Button onClick={() => handleFilterChange(withdrawnValues)} variant={isFilterActive(withdrawnValues) ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => handleFilterChange(withdrawnValues)} variant={isFilterActive(withdrawnValues) ? 'contained' : 'text'}>
                 Withdrawn
             </Button>
             <Box sx={{ flexGrow: 1 }} />
+            <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddIcon />}
+                component={NextLink}
+                href="/cases/new"
+                passHref
+                sx={{ marginRight: 1 }}
+            >
+                New Case
+            </Button>
             <StyledQuickFilter defaultExpanded>
                 <QuickFilterTrigger
                     render={(triggerProps, state) => (
@@ -206,5 +217,18 @@ export default function DataTable({ rows }) {
         getRowId={(row) => row.id}
         slots={{ toolbar: CustomToolbar }}
         showToolbar
+        initialState={{
+            filter: {
+                filterModel: {
+                    items: [
+                        {
+                            field: 'status',
+                            operator: 'isAnyOf',
+                            value: openInProgressValues,
+                        },
+                    ],
+                },
+            },
+        }}
     />;
 }
