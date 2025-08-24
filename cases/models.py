@@ -9,7 +9,7 @@ def retention_review_date_default():
     Calculates a date five years from the current time.
     Used as the default for the Case retention_review_date field.
     """
-    return timezone.now() + timezone.timedelta(days=365 * 5)
+    return (timezone.now() + timezone.timedelta(days=365 * 5)).date()
 
 
 class Case(models.Model):
