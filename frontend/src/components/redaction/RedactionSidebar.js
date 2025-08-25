@@ -88,7 +88,7 @@ export default function RedactionSidebar({
     return (
         <Box sx={{ width: '40%', borderLeft: 1, borderColor: 'divider', height: 'calc(100vh - 64px)', overflowY: 'auto', bgcolor: 'background.default' }}>
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
-                <Typography variant="h6" color='text.primary'>Redactions</Typography>
+                <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
             </Box>
             {(pending?.length > 0 || manual?.length > 0 || accepted?.length > 0 || rejected?.length > 0) ? (
                 <Box sx={{ py: 2 }}>

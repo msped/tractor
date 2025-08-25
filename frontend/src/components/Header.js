@@ -20,7 +20,7 @@ export default function Header() {
                     href="/"
                     sx={{ color: 'inherit', textDecoration: 'none' }}
                 >
-                    Redactor
+                    SAM
                 </Typography>
 
                 {session && (

@@ -3,7 +3,7 @@ services:
   db:
     restart: always
     image: postgres:15
-    container_name: redactor-postgres 
+    container_name: sam-postgres 
     env_file:
       - '.env'
     ports:
