@@ -189,15 +189,32 @@ export default function CaseDocuments({ caseId, documents, onUpdate, isCaseFinal
             <Dialog open={dialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="md">
                 <DialogTitle>Upload New Document</DialogTitle>
                 <DialogContent>
-                    <Box
+                    <input
+                        ref={fileInputRef}
+                        id="file-upload-input"
+                        type="file"
+                        hidden
+                        multiple
+                        onChange={(e) => handleFilesSelected(e.target.files)}
+                    />
+                    <Button
+                        fullWidth
                         sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            p: 4,
+                            textTransform: 'none',
+                            color: 'text.primary',
+                            fontWeight: 'normal',
                             border: `2px dashed ${isDragging ? 'primary.main' : 'grey.400'}`,
                             borderRadius: 2,
-                            p: 4,
-                            textAlign: 'center',
-                            cursor: 'pointer',
                             backgroundColor: isDragging ? 'action.hover' : 'transparent',
                             transition: 'background-color 0.2s, border-color 0.2s',
+                            '&:hover': {
+                                backgroundColor: 'action.hover',
+                            },
                         }}
                         onDragEnter={handleDragEnter}
                         onDragOver={handleDragEvents}
@@ -205,21 +222,16 @@ export default function CaseDocuments({ caseId, documents, onUpdate, isCaseFinal
                         onDrop={handleDrop}
                         onClick={() => fileInputRef.current?.click()}
                     >
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            hidden
-                            multiple
-                            onChange={(e) => handleFilesSelected(e.target.files)}
-                        />
-                        <CloudUploadIcon sx={{ fontSize: 48, color: 'grey.500', mb: 2 }} />
-                        <Typography variant="h6">
-                            Drag & drop files here
-                        </Typography>
-                        <Typography color="text.secondary">
-                            or click to select files
-                        </Typography>
-                    </Box>
+                        <Box sx={{ pointerEvents: 'none', textAlign: 'center' }}>
+                            <CloudUploadIcon sx={{ fontSize: 48, color: 'grey.500', mb: 2 }} />
+                            <Typography variant="h6">
+                                Drag & drop files here
+                            </Typography>
+                            <Typography color="text.secondary">
+                                or click to select files
+                            </Typography>
+                        </Box>
+                    </Button>
                     {selectedFiles.length > 0 && (
                         <Box sx={{ mt: 3 }}>
                             <Typography variant="subtitle1" gutterBottom>Files to upload:</Typography>
