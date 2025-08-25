@@ -35,7 +35,7 @@ export default function LoginComponent() {
             <Paper elevation={3} sx={{ p: 4, minWidth: 320 }}>
                 <Box sx={{ textAlign: "center", mb: 3 }}>
                     <Typography variant="h4" component="h1" gutterBottom>
-                        Welcome to Redactor
+                        Welcome to Subject Access Manager (SAM)
                     </Typography>
                     <Typography variant="body1" gutterBottom>
                         Please log in to continue.

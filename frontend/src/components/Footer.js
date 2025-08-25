@@ -14,7 +14,7 @@ export default function Footer() {
             }}
         >
             <Typography variant="body2" color="text.secondary">
-                &copy; {new Date().getFullYear()} Redactor. All rights reserved.
+                &copy; {new Date().getFullYear()} Subject Access Manager (SAM). All rights reserved.
             </Typography>
         </Box>
     )
