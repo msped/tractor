@@ -9,7 +9,6 @@ Allow the uploading of documents for Natural Language Processing (NLP).
 * Provide redaction based on operational, Third Party Personally Identifiable Information (PII) from trained model.
 * Export case with all documents redacted in folder structure showcasing original, editied, and redacted versions.
 
-
 ## Compliance & Accessibility
 
 This service has been built to align with the standards set by the UK's Government Digital Service (GDS).
@@ -115,3 +114,43 @@ As part of the package, during setup departments can train the model on informat
     ```
 
 The application should now be running locally at `http://localhost:3000`.
+
+---
+
+## Model Training
+
+The application supports training custom redaction models based on the redactions that users accept in completed cases.
+
+### How it Works
+
+1. **Data Collection**: The system gathers all documents marked as "Completed". For each document, it collects the text and the set of accepted redactions.
+2. **Training Format**: This data is converted into the format required by spaCy for training Named Entity Recognition (NER) models.
+3. **Training Process**: A new, blank spaCy model is trained from scratch using this data. The training process runs for a set number of iterations to improve the model's accuracy.
+4. **Model Versioning**: After training, the new model is saved to the `spacy_models/` directory with a timestamped version name (e.g., `model_20240521_143000`). A record of this new model is created in the database.
+
+### Running the Training
+
+To initiate the training process, run the following Django management command from the `backend` directory (with your virtual environment activated):
+
+```bash
+python manage.py train_spacy_model
+```
+
+This process can be resource-intensive and may take some time depending on the amount of training data.
+
+### Scheduled training
+
+You can run scheduled training through the Django Admin. Under Django Q, you can add a new entry with the following:
+
+* Name: Monthly Model Training (or whatever you prefer)
+* Func: `training.tasks.train_new_model
+* Schedule Type: Select from the drop down menu
+* Repeats: -1 (This means it will repeat forver)
+* Next Run: Set the date and time for the first time you want the training to run.
+
+### Managing Models
+
+After training, new models are available but not active. An administrator must activate a model for it to be used for new document processing.
+
+* **Default Model**: If no custom model is active, the system falls back to the default `en_core_web_lg` spaCy model.
+* **Activating a Model**: Model activation can be handled via the API. Activating a new model will automatically deactivate any other active model.
