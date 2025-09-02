@@ -23,6 +23,15 @@ class Model(models.Model):
         "processing."
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    precision = models.FloatField(
+        null=True, blank=True, help_text="Precision score from evaluation."
+    )
+    recall = models.FloatField(
+        null=True, blank=True, help_text="Recall score from evaluation."
+    )
+    f1_score = models.FloatField(
+        null=True, blank=True, help_text="F1 score from evaluation."
+    )
 
     def __str__(self):
         return f"{self.name} ({'Active' if self.is_active else 'Inactive'})"
