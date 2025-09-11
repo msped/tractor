@@ -6,7 +6,7 @@ from rest_framework.generics import (
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAdminUser
-from django.shortcuts import get_object_or_404
+from .loader import SpacyModelManager
 from .models import Model
 from .serializers import ModelSerializer
 
@@ -35,10 +35,9 @@ class ModelSetActiveView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request, pk, *args, **kwargs):
-        model = get_object_or_404(Model, pk=pk)
-        model.is_active = True
-        model.save()
-        return Response(
-            {'status': 'model set to active'},
-            status=status.HTTP_200_OK
-        )
+        try:
+            model = Model.objects.get(id=pk)
+            SpacyModelManager.get_instance().switch_model(model.name)
+            return Response(status=status.HTTP_200_OK)
+        except Model.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
