@@ -4,37 +4,50 @@ import shutil
 import zipfile
 from .models import Case, Document, Redaction
 import inflect
-from .ai_service import extract_entities_from_text
+from training.loader import SpacyModelManager
 from django.db import transaction
 from django.core.files.base import ContentFile
 from weasyprint import HTML, CSS
+from training.services import extract_entities_from_text
 
 
 def process_document_and_create_redactions(document_id):
     """
-    Extracts text, runs AI, and creates redactions.
+    The main background task. Fetches the active model from the database.
     """
-    # --- Part 1: Fetch Document ---
     try:
         document = Document.objects.get(id=document_id)
     except Document.DoesNotExist:
         print(f"Document with id {document_id} not found.")
         return
 
-    # --- Part 2: AI Integration ---
-    print(f"Starting AI analysis for {document.filename}...")
+    # Get the active model instance from the manager
+    manager = SpacyModelManager.get_instance()
+    active_model_instance = manager.get_model_entry()
+
+    # Update the document with the model that is being used for processing
+    document.spacy_model = active_model_instance
+    document.save(update_fields=['spacy_model'])
+
+    print(
+        f"Starting text extraction and AI analysis for {document.filename} \
+        using model '{manager.model_name}'...")
+
     extracted_text, ai_suggestions = extract_entities_from_text(
         document.original_file.path)
-    print(f"Found {len(ai_suggestions)} potential redactions.")
 
-    # --- Part 3: Create Redaction Objects in the Database ---
-    # Transaction ensures all redactions are created or none are.
+    if not extracted_text:
+        document.status = Document.Status.ERROR
+        document.save(update_fields=['status'])
+        return
+
+    document.extracted_text = extracted_text
+    document.save(update_fields=['extracted_text'])
+
     with transaction.atomic():
         for suggestion in ai_suggestions:
-            # For the prototype, we'll map all entities to PII
-            # In production, the AI would return the correct type.
+            # In production, map entity labels to redaction types
             redaction_type = Redaction.RedactionType.THIRD_PARTY_PII
-
             Redaction.objects.create(
                 document=document,
                 start_char=suggestion['start_char'],
@@ -45,14 +58,11 @@ def process_document_and_create_redactions(document_id):
                 is_accepted=False
             )
 
-    # --- Final Step: Update Status and Extracted Text ---
-    document.extracted_text = extracted_text
     document.status = Document.Status.READY_FOR_REVIEW
-    document.save(update_fields=['status', 'extracted_text'])
+    document.save(update_fields=['status'])
     print(
         f"Successfully processed {document.filename}. \
-        Status: READY_FOR_REVIEW"
-    )
+            Status: READY_FOR_REVIEW")
 
 
 def find_and_flag_matching_text_in_case(redaction_id):
@@ -118,8 +128,7 @@ def find_and_flag_matching_text_in_case(redaction_id):
         document_modified = False
 
         with transaction.atomic():
-            # Find all non-overlapping, case-insensitive
-            # matches for the pattern
+            # Find all matches for the pattern
             for match in re.finditer(
                 pattern,
                 document.extracted_text,
@@ -190,7 +199,9 @@ def _generate_pdf_from_document(document, mode='disclosure'):
 
     for r in sorted_redactions:
         if mode == 'disclosure':
-            replacement = f'<span class="redaction">{r.text}</span>'
+            # Securely replace each character of the text with a block.
+            block_text = '█' * len(r.text)
+            replacement = f'<span class="redaction">{block_text}</span>'
         else:  # 'redacted' mode
             replacement = f'<span class="redaction type-{r.redaction_type}">\
             {r.text}</span>'
