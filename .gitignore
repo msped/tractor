@@ -4,3 +4,4 @@ postgres_data/
 media/
 # Ignore Python cache files
 __pycache__/
+discussion.md

@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 
     'authentication',
     'cases',
+    'training',
 
     'django_cleanup.apps.CleanupConfig',
 ]

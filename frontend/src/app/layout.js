@@ -4,6 +4,11 @@ import { ThemeProvider } from '@mui/material/styles';
 import { Toaster } from 'react-hot-toast';
 import theme from '../theme';
 import "./globals.css";
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import { SessionProvider } from "next-auth/react";
+
+import { auth } from '@/auth';
 
 export const metadata = {
   title: "Create Next App",
@@ -17,16 +22,22 @@ const roboto = Roboto({
   variable: '--font-roboto',
 });
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const session = await auth();
+
   return (
     <html lang="en" className={roboto.variable}>
       <body>
+        <SessionProvider>
         <AppRouterCacheProvider>
           <ThemeProvider theme={theme}>
+          {session && <Header />}
           {children}
+          <Footer />
           <Toaster/>
           </ThemeProvider>
         </AppRouterCacheProvider>
+        </SessionProvider>
       </body>
     </html>
   );

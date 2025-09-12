@@ -3,6 +3,8 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
+from training.models import Model
+
 
 def retention_review_date_default():
     """
@@ -137,6 +139,13 @@ class Document(models.Model):
     extracted_text = models.TextField(blank=True, null=True, editable=False)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    spacy_model = models.ForeignKey(
+        Model,
+        on_delete=models.SET_NULL,  # Important for data retention
+        null=True,
+        blank=True,
+        help_text="A link to the spaCy model used for processing."
+    )
 
     def save(self, *args, **kwargs):
         if not self.pk:
