@@ -1,18 +1,9 @@
 import React from 'react'
-import { Button, Box, Container } from '@mui/material'
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { Container, Box } from '@mui/material'
 
-export default function layout({ children }) {
+export default function Layout({ children }) {
     return (
-        <Container sx={{ mt: 4 }}>
-            <Button
-                href="/admin/training" 
-                variant="contained"
-                startIcon={<ArrowBackIcon />}
-                sx={{ mt: 2 }}
-            >
-                Back to Training Overview
-            </Button>
+        <Container maxWidth="lg" sx={{ mt: 4 }}>
             <Box>
                 {children}
             </Box>

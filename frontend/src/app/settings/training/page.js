@@ -33,12 +33,10 @@ export default function TrainingPage() {
         fetchDocs();
     }, [fetchDocs]);
 
-    const unprocessedDocsCount = docs.filter(d => !d.processed).length;
-
     return (
-        <Container sx={{ mt: 4 }}>
-            <Typography variant="h4" gutterBottom>
-                 Model Training
+        <>
+            <Typography variant="h4" align='center' sx={{ mb: 4 }} fontWeight={600} gutterBottom>
+                Model Training
             </Typography>
             <Grid container spacing={4}>
                 <Grid component={Card} size={{xs: 12, md: 6}}>
@@ -51,7 +49,7 @@ export default function TrainingPage() {
                                 Upload pre-highlighted .docx files to provide new examples for the model. The system will process these documents the next time a manual training run is started.
                             </Typography>
                             <Button 
-                                href="/admin/training/manual"
+                                href="/settings/training/manual"
                                 variant="text" 
                                 color="primary" 
                                 component={Link} 
@@ -66,6 +64,6 @@ export default function TrainingPage() {
             </Grid>
 
             <TrainingRunList runs={runs} />
-        </Container>
+        </>
     );
 }
