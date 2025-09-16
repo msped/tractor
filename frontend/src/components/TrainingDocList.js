@@ -23,13 +23,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { deleteTrainingDoc } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
-export default function TrainingDocList({ docs, refreshDocs }) {
+export default function TrainingDocList({ docs }) {
     const handleDelete = async (docId, docName) => {
         const toastId = toast.loading(`Deleting ${docName}...`);
         try {
             await deleteTrainingDoc(docId);
             toast.success("Document deleted successfully.", { id: toastId });
-            if (refreshDocs) refreshDocs();
         } catch (error) {
             toast.error(error.message, { id: toastId });
         } finally {

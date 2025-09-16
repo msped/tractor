@@ -6,7 +6,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { uploadTrainingDoc, runManualTraining } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
-export default function TrainingUpload({ onUpload, unprocessedDocsCount }) {
+export default function TrainingUpload({ unprocessedDocsCount }) {
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef(null);
 
@@ -30,7 +30,6 @@ export default function TrainingUpload({ onUpload, unprocessedDocsCount }) {
         try {
             await Promise.all(uploadPromises);
             toast.success(`${docxFiles.length} document(s) uploaded successfully.`, { id: toastId });
-            if (onUpload) onUpload();
         } catch (error) {
             toast.error(`An error occurred during upload: ${error.message}`, { id: toastId });
         }
