@@ -135,13 +135,13 @@ The application supports training custom redaction models based on the redaction
 
 ### Running the Training
 
-Training will run automatically on redactions where applicable and at the time specified below. In the admin page, you can upload your own Documents, with highlighted redactions, to use for training.
+Training will run automatically on redactions where applicable and at the time specified below. In the settings page, you can upload your own Documents, with highlighted redactions, to use for training.
 
 This process can be resource-intensive and may take some time depending on the amount of training data.
 
 ### Scheduled training
 
-You can run scheduled training through the Django Admin. Under Django Q, you can add a new entry with the following:
+You can run scheduled training by going to `/settings/training` and specifying the frequency then when you would like it to first run. Alternatively, you can add an entry in the Django admin under Django Q, you can add a new entry with the following:
 
 * Name: Monthly Model Training (or whatever you prefer)
 * Func: `training.tasks.train_model`
@@ -155,4 +155,4 @@ You can run scheduled training through the Django Admin. Under Django Q, you can
 After training, new models are available but not active. An administrator must activate a model for it to be used for new document processing.
 
 * **Default Model**: If no custom model is active, the system falls back to the default `en_core_web_lg` spaCy model.
-* **Activating a Model**: Model activation can be handled via the admin page. Activating a new model will automatically deactivate any other active model.
+* **Activating a Model**: Model activation can be handled via the settings page. Activating a new model will automatically deactivate any other active model.
