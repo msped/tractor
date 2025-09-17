@@ -15,10 +15,7 @@ import {
     Divider,
     Card,
     CardContent,
-    IconButton,
-    Tooltip
 } from '@mui/material';
-import InfoIcon from '@mui/icons-material/Info';
 import { getModels, setActiveModel } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
@@ -39,11 +36,6 @@ export default function ModelManagementCard() {
         } finally {
             setIsSubmitting(null);
         }
-    };
-
-    const handleViewDetails = (modelId) => {
-        // Placeholder for future implementation
-        toast('Details view coming soon!', { icon: 'ℹ️' });
     };
 
     return (
@@ -68,11 +60,6 @@ export default function ModelManagementCard() {
                                             <Button variant="contained" onClick={() => handleSetActive(model.id)} disabled={model.is_active || isSubmitting !== null} size="small">
                                                 {isSubmitting === model.id ? <CircularProgress color="inherit" size={20} /> : 'Set Active'}
                                             </Button>
-                                            <Tooltip title="View Details">
-                                                <IconButton onClick={() => handleViewDetails(model.id)} size="small">
-                                                    <InfoIcon />
-                                                </IconButton>
-                                            </Tooltip>
                                         </Box>
                                     }
                                 >
