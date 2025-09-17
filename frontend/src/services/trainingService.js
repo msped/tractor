@@ -65,6 +65,35 @@ export const getTrainingSchedules = async () => {
     }
 };
 
+export const createTrainingSchedule = async (scheduleData) => {
+    const session = await auth();
+    if (!session) throw new Error("Not authenticated");
+
+    try {
+        const response = await apiClient.post(`/schedules`, scheduleData, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to create schedule:", error.response?.data || error.message);
+        throw new Error("Failed to create training schedule.");
+    }
+};
+
+export const deleteTrainingSchedule = async (scheduleId) => {
+    const session = await auth();
+    if (!session) throw new Error("Not authenticated");
+
+    try {
+        await apiClient.delete(`/schedules/${scheduleId}`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+        });
+    } catch (error) {
+        console.error("Failed to delete schedule:", error.response?.data || error.message);
+        throw new Error("Failed to delete training schedule.");
+    }
+};
+
 export const getTrainingRuns = async () => {
     const session = await auth();
     if (!session) throw new Error("Not authenticated");
