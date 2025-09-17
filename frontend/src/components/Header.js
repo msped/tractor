@@ -2,8 +2,9 @@
 
 import React from 'react';
 import { signOut, useSession } from "next-auth/react";
-import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Box, IconButton } from '@mui/material';
 import Link from 'next/link';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 export default function Header() {
     const { data: session } = useSession();
@@ -36,6 +37,14 @@ export default function Header() {
                         <Typography variant="body1" component="div" sx={{ mx: 2 }}>
                             {session.user.username}
                         </Typography>
+                        <IconButton
+                            color="inherit"
+                            component={Link}
+                            href="/settings"
+                            sx={{ mr: 2 }}
+                        >
+                            <SettingsIcon />
+                        </IconButton>
                         <Button color="inherit" onClick={handleSignOut}>
                             Sign Out
                         </Button>

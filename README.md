@@ -4,8 +4,7 @@ Locally ran application to redact documents for subject access requests.
 
 ## Key Features
 
-* Briefly describe the main function (e.g., "Allows users to submit and track public service requests.").
-Allow the uploading of documents for Natural Language Processing (NLP).
+* Allow the uploading of documents for Natural Language Processing (NLP).
 * Provide redaction based on operational, Third Party Personally Identifiable Information (PII) from trained model.
 * Export case with all documents redacted in folder structure showcasing original, editied, and redacted versions.
 
@@ -115,35 +114,38 @@ As part of the package, during setup departments can train the model on informat
 
 The application should now be running locally at `http://localhost:3000`.
 
+#### WeasyPrint Issue
+
+If you get an error like cannot load library 'xxx': error xxx, it means that WeasyPrint can’t find this library. On macOS, you can set the DYLD_FALLBACK_LIBRARY_PATH environment variable:
+
+`export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH`
+
 ---
 
 ## Model Training
 
-The application supports training custom redaction models based on the redactions that users accept in completed cases.
+The application supports training custom redaction models based on the redactions that users accept in completed cases as well as the uploading of completed material to train from.
 
 ### How it Works
 
 1. **Data Collection**: The system gathers all documents marked as "Completed". For each document, it collects the text and the set of accepted redactions.
 2. **Training Format**: This data is converted into the format required by spaCy for training Named Entity Recognition (NER) models.
 3. **Training Process**: A new, blank spaCy model is trained from scratch using this data. The training process runs for a set number of iterations to improve the model's accuracy.
-4. **Model Versioning**: After training, the new model is saved to the `spacy_models/` directory with a timestamped version name (e.g., `model_20240521_143000`). A record of this new model is created in the database.
+4. **Model Versioning**: After training, the new model is saved to the `nlp_models/` directory with a timestamped version name (e.g., `model_20240521_143000`). A record of this new model is created in the database.
 
 ### Running the Training
 
-To initiate the training process, run the following Django management command from the `backend` directory (with your virtual environment activated):
-
-```bash
-python manage.py train_spacy_model
-```
+Training will run automatically on redactions where applicable and at the time specified below. In the settings page, you can upload your own Documents, with highlighted redactions, to use for training.
 
 This process can be resource-intensive and may take some time depending on the amount of training data.
 
 ### Scheduled training
 
-You can run scheduled training through the Django Admin. Under Django Q, you can add a new entry with the following:
+You can run scheduled training by going to `/settings/training` and specifying the frequency then when you would like it to first run. Alternatively, you can add an entry in the Django admin under Django Q, you can add a new entry with the following:
 
 * Name: Monthly Model Training (or whatever you prefer)
-* Func: `training.tasks.train_new_model
+* Func: `training.tasks.train_model`
+* Kwargs: `{"source": "redactions"}`
 * Schedule Type: Select from the drop down menu
 * Repeats: -1 (This means it will repeat forver)
 * Next Run: Set the date and time for the first time you want the training to run.
@@ -153,4 +155,4 @@ You can run scheduled training through the Django Admin. Under Django Q, you can
 After training, new models are available but not active. An administrator must activate a model for it to be used for new document processing.
 
 * **Default Model**: If no custom model is active, the system falls back to the default `en_core_web_lg` spaCy model.
-* **Activating a Model**: Model activation can be handled via the API. Activating a new model will automatically deactivate any other active model.
+* **Activating a Model**: Model activation can be handled via the settings page. Activating a new model will automatically deactivate any other active model.
