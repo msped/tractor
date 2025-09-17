@@ -10,17 +10,38 @@ import {
     TableHead,
     TableRow,
     Typography,
-    Tooltip
+    Tooltip,
+    Box,
+    IconButton
 } from '@mui/material';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 function formatScore(score) {
     return score ? (score * 100).toFixed(2) + '%' : 'N/A';
 }
 
+const scoreExplanation = (
+    <React.Fragment>
+        <Typography color="inherit" variant="body2" sx={{ mb: 1 }}>These scores evaluate the model&#39;s performance. Scores closer to 100% are better.</Typography>
+        <Box component="ul" sx={{ p: 0, m: 0, pl: 2 }}>
+            <Box component="li" sx={{ mb: 0.5, fontSize: '0.8rem' }}><strong>P (Precision):</strong> Of all the redactions the model suggested, what percentage were correct?</Box>
+            <Box component="li" sx={{ mb: 0.5, fontSize: '0.8rem' }}><strong>R (Recall):</strong> Of all the redactions that should have been made, what percentage did the model find?</Box>
+            <Box component="li" sx={{ mb: 0.5, fontSize: '0.8rem' }}><strong>F1-Score:</strong> A balanced measure of Precision and Recall.</Box>
+        </Box>
+    </React.Fragment>
+);
+
 export default function TrainingRunList({ runs }) {
     return (
         <Paper sx={{ p: 3, mt: 4 }}>
-            <Typography variant="h6" gutterBottom>Training Run History</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">Training Run History</Typography>
+                <Tooltip title={scoreExplanation}>
+                    <IconButton size="small" sx={{ ml: 0.5 }}>
+                        <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+            </Box>
             <TableContainer>
                 <Table size="small">
                     <TableHead>
