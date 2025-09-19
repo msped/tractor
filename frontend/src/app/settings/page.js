@@ -22,10 +22,10 @@ export default function SettingsPage() {
                 Settings
             </Typography>
             <Grid container spacing={3} sx={{ mt: 2 }}>
-                <Grid  size={{xs: 12, md: 6}}>
+                <Grid size={{xs: 12, md: 6}}>
                     <TrainingSettingsCard />
                 </Grid>
-                <Grid item size={{xs: 12}}>
+                <Grid size={{xs: 12}}>
                     <ModelManagementCard />
                 </Grid>
             </Grid>
