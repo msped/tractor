@@ -3,7 +3,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
-
+from auditlog.registry import auditlog
 from training.models import Model
 
 
@@ -221,3 +221,8 @@ class Redaction(models.Model):
 
     class Meta:
         ordering = ['start_char']
+
+
+auditlog.register(Case)
+auditlog.register(Document)
+auditlog.register(Redaction)
