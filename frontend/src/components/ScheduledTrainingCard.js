@@ -33,6 +33,7 @@ export default function ScheduledTrainingCard({ schedule }) {
         try {
             await createTrainingSchedule({
                 func: 'training.tasks.train_model',
+                kwargs: { source: "redactions" },
                 schedule_type: frequency, repeats: -1, // Repeat indefinitely
                 next_run: new Date(nextRun).toISOString()
             });
