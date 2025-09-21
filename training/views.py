@@ -88,7 +88,8 @@ class RunManualTrainingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        async_task("training.tasks.train_model", source="training_docs")
+        async_task("training.tasks.train_model",
+                   source="training_docs", user=request.user)
 
         return Response(
             {"status": "training started", "documents": docs.count()},
