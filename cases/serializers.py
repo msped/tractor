@@ -8,8 +8,6 @@ class CaseSerializer(serializers.ModelSerializer):
         source='get_status_display', read_only=True)
     created_by = serializers.CharField(
         source='created_by.username', read_only=True)
-    updated_by = serializers.CharField(
-        source='updated_by.username', read_only=True)
 
     class Meta:
         model = Case
@@ -21,8 +19,6 @@ class CaseSerializer(serializers.ModelSerializer):
             'data_subject_name',
             'data_subject_dob',
             'created_at',
-            'updated_at',
-            'updated_by',
             'created_by',
             'retention_review_date'
         ]

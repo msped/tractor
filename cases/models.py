@@ -2,16 +2,17 @@ import uuid
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-
+from dateutil.relativedelta import relativedelta
+from auditlog.registry import auditlog
 from training.models import Model
 
 
 def retention_review_date_default():
     """
-    Calculates a date five years from the current time.
+    Calculates a date six years from the current time.
     Used as the default for the Case retention_review_date field.
     """
-    return (timezone.now() + timezone.timedelta(days=365 * 5)).date()
+    return (timezone.now() + relativedelta(years=6)).date()
 
 
 class Case(models.Model):
@@ -62,16 +63,7 @@ class Case(models.Model):
         help_text="Date of birth of the data subject."
     )
 
-    # Audit and Ownership fields.
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    updated_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="updated_cases"
-    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -101,6 +93,26 @@ class Case(models.Model):
 
     def __str__(self):
         return f"Case {self.case_reference} - {self.data_subject_name}"
+
+    def _calculate_retention_date(self):
+        """
+        Calculates the retention date based on the data subject's age.
+        - For adults (or if DOB is unknown), it's 6 years from now.
+        - For minors, it's 6 years after they turn 18.
+        """
+        today = timezone.now().date()
+        if self.data_subject_dob:
+            age = relativedelta(today, self.data_subject_dob).years
+            if age < 18:
+                eighteenth_birthday = self.data_subject_dob + \
+                    relativedelta(years=18)
+                return eighteenth_birthday + relativedelta(years=6)
+        return today + relativedelta(years=6)
+
+    def save(self, *args, **kwargs):
+        if not self.pk:  # On creation
+            self.retention_review_date = self._calculate_retention_date()
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ['-created_at']
@@ -209,3 +221,8 @@ class Redaction(models.Model):
 
     class Meta:
         ordering = ['start_char']
+
+
+auditlog.register(Case)
+auditlog.register(Document)
+auditlog.register(Redaction)

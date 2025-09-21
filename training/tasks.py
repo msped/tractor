@@ -8,6 +8,7 @@ import spacy
 from spacy.tokens import DocBin
 from spacy.training import Example
 from cases.models import Document, Redaction
+from auditlog.models import LogEntryManager
 from .models import (
     Model,
     TrainingDocument,
@@ -126,7 +127,7 @@ def export_spacy_data(train_data, train_path, dev_path, split=0.8):
     db_dev.to_disk(dev_path)
 
 
-def train_model(source="both"):
+def train_model(source="redactions", user=None):
     """
     Train a new spaCy model using the config-driven pipeline.
     """
@@ -195,6 +196,17 @@ def train_model(source="both"):
     for cdoc in used_case_docs:
         TrainingRunCaseDoc.objects.create(
             training_run=training_run, document=cdoc)
+
+    if source == 'training_docs':
+        actor_info = "scheduled run"
+        if user is not None:
+            actor_info = f"by {user.frist_name} {user.last_name})"
+        LogEntryManager.log_create(
+            instance=new_model,
+            force_log=True,
+            actor=user,
+            changes={"training": f"Training started - {actor_info}"},
+        )
 
     print(
         f"Model trained and stored at {output_dir}, \

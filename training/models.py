@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from auditlog.registry import auditlog
 
 
 class Model(models.Model):
@@ -113,3 +114,7 @@ class TrainingRunTrainingDoc(models.Model):
 class TrainingRunCaseDoc(models.Model):
     training_run = models.ForeignKey(TrainingRun, on_delete=models.CASCADE)
     document = models.ForeignKey("cases.Document", on_delete=models.CASCADE)
+
+
+auditlog.register(TrainingDocument)
+auditlog.register(TrainingRun)
