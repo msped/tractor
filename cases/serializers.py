@@ -72,9 +72,8 @@ class DocumentSerializer(serializers.ModelSerializer):
             original_file=original_file, **validated_data)
 
         # Set filename and file_type based on the uploaded file
-        fileName, fileExtension = os.path.splitext(original_file.name)
-        instance.filename = fileName
-        instance.file_type = fileExtension
+        instance.filename = original_file.name
+        instance.file_type = os.path.splitext(original_file.name)[1]
         instance.save()
 
         return instance
