@@ -39,6 +39,7 @@ et_xmlfile==2.0.0
 filelock==3.18.0
 filetype==1.2.0
 fonttools==4.59.0
+freezegun==1.5.5
 fsspec==2025.5.1
 hf-xet==1.1.5
 huggingface-hub==0.33.1
