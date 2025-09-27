@@ -94,19 +94,24 @@ class Case(models.Model):
     def __str__(self):
         return f"Case {self.case_reference} - {self.data_subject_name}"
 
-    def _calculate_retention_date(self):
+    def _calculate_retention_date(self, today=None):
         """
         Calculates the retention date based on the data subject's age.
         - For adults (or if DOB is unknown), it's 6 years from now.
         - For minors, it's 6 years after they turn 18.
+        :param today: The date to calculate from. Defaults to timezone.now().
         """
-        today = timezone.now().date()
+        today = today or timezone.now().date()
         if self.data_subject_dob:
             age = relativedelta(today, self.data_subject_dob).years
+            eighteenth_birthday = self.data_subject_dob + \
+                relativedelta(years=18)
+
             if age < 18:
-                eighteenth_birthday = self.data_subject_dob + \
-                    relativedelta(years=18)
                 return eighteenth_birthday + relativedelta(years=6)
+            else:
+                return today + relativedelta(years=6)
+
         return today + relativedelta(years=6)
 
     def save(self, *args, **kwargs):
