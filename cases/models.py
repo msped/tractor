@@ -5,6 +5,7 @@ from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from auditlog.registry import auditlog
 from training.models import Model
+from django_q.tasks import async_task
 
 
 def retention_review_date_default():
@@ -90,6 +91,20 @@ class Case(models.Model):
     )
     export_task_id = models.CharField(
         max_length=255, null=True, blank=True)
+
+    def start_export(self):
+        """
+        Sets the case status to PROCESSING and triggers the background
+        task to generate the export package.
+        Returns the task_id.
+        """
+        self.export_status = self.ExportStatus.PROCESSING
+        task_id = async_task(
+            'cases.services.export_case_documents', self.id
+        )
+        self.export_task_id = task_id
+        self.save(update_fields=['export_status', 'export_task_id'])
+        return task_id
 
     def __str__(self):
         return f"Case {self.case_reference} - {self.data_subject_name}"
