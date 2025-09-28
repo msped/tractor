@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.test import override_settings
@@ -118,6 +119,24 @@ class CaseModelTests(TestCase):
             data_subject_name="Export Status Default"
         )
         self.assertEqual(case.export_status, Case.ExportStatus.NONE)
+
+    @patch("cases.models.async_task")
+    def test_start_export_method(self, mock_async_task):
+        """Test the start_export method on the Case model."""
+        mock_async_task.return_value = "model-test-task-id"
+        case = Case.objects.create(
+            case_reference="202507",
+            data_subject_name="Export Method Test"
+        )
+        self.assertEqual(case.export_status, Case.ExportStatus.NONE)
+
+        task_id = case.start_export()
+
+        self.assertEqual(task_id, "model-test-task-id")
+        mock_async_task.assert_called_once_with(
+            "cases.services.export_case_documents", case.id)
+        self.assertEqual(case.export_status, Case.ExportStatus.PROCESSING)
+        self.assertEqual(case.export_task_id, "model-test-task-id")
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
