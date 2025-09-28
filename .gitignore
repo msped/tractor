@@ -6,3 +6,5 @@ media/
 __pycache__/
 discussion.md
 .coverage
+.coveragerc
+htmlcov/
