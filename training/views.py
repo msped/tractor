@@ -79,6 +79,7 @@ class RunManualTrainingView(APIView):
     """
     Trigger training on unprocessed TrainingDocument objects.
     """
+    permission_classes = [IsAdminUser]
 
     def post(self, request):
         docs = TrainingDocument.objects.filter(processed=False)
