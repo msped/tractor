@@ -5,3 +5,5 @@ media/
 # Ignore Python cache files
 __pycache__/
 discussion.md
+.coverage
+htmlcov/

@@ -5,6 +5,7 @@ from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from auditlog.registry import auditlog
 from training.models import Model
+from django_q.tasks import async_task
 
 
 def retention_review_date_default():
@@ -91,22 +92,41 @@ class Case(models.Model):
     export_task_id = models.CharField(
         max_length=255, null=True, blank=True)
 
+    def start_export(self):
+        """
+        Sets the case status to PROCESSING and triggers the background
+        task to generate the export package.
+        Returns the task_id.
+        """
+        self.export_status = self.ExportStatus.PROCESSING
+        task_id = async_task(
+            'cases.services.export_case_documents', self.id
+        )
+        self.export_task_id = task_id
+        self.save(update_fields=['export_status', 'export_task_id'])
+        return task_id
+
     def __str__(self):
         return f"Case {self.case_reference} - {self.data_subject_name}"
 
-    def _calculate_retention_date(self):
+    def _calculate_retention_date(self, today=None):
         """
         Calculates the retention date based on the data subject's age.
         - For adults (or if DOB is unknown), it's 6 years from now.
         - For minors, it's 6 years after they turn 18.
+        :param today: The date to calculate from. Defaults to timezone.now().
         """
-        today = timezone.now().date()
+        today = today or timezone.now().date()
         if self.data_subject_dob:
             age = relativedelta(today, self.data_subject_dob).years
+            eighteenth_birthday = self.data_subject_dob + \
+                relativedelta(years=18)
+
             if age < 18:
-                eighteenth_birthday = self.data_subject_dob + \
-                    relativedelta(years=18)
                 return eighteenth_birthday + relativedelta(years=6)
+            else:
+                return today + relativedelta(years=6)
+
         return today + relativedelta(years=6)
 
     def save(self, *args, **kwargs):

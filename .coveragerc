@@ -1,0 +1,13 @@
+[run]
+source =
+    cases/
+    authentication/
+    training/
+
+omit =
+    */site-packages/*
+    env/*
+    *.pyc
+
+[report]
+show_missing = True
