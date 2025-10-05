@@ -17,12 +17,14 @@ from ..serializers import (
     RedactionSerializer,
 )
 
+from training.tests.base import NetworkBlockerMixin
+
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class SerializerTests(TestCase):
+class SerializerTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         """Set up test data for all serializer tests."""
         self.user = User.objects.create_user(

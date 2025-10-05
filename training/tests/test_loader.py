@@ -2,9 +2,10 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 from ..models import Model
 from ..loader import SpacyModelManager
+from .base import NetworkBlockerMixin
 
 
-class SpacyModelManagerTests(TestCase):
+class SpacyModelManagerTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         """
         Reset the singleton instance before each test to ensure isolation.

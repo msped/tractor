@@ -11,6 +11,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase, override_settings, APIClient
 
+from training.tests.base import NetworkBlockerMixin
 from ..models import Case, Document, Redaction
 
 User = get_user_model()
@@ -18,7 +19,7 @@ MEDIA_ROOT = tempfile.mkdtemp()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class ViewTests(APITestCase):
+class ViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         """Set up test data and authenticate a user for all view tests."""
         self.client = APIClient()

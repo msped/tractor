@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from dateutil.relativedelta import relativedelta
 from cases.models import Case, Document, Redaction
 from training.models import Model
+from training.tests.base import NetworkBlockerMixin
 
 User = get_user_model()
 
@@ -22,7 +23,7 @@ def return_test_file_name(filename):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class CaseModelTests(TestCase):
+class CaseModelTests(NetworkBlockerMixin, TestCase):
     def test_case_str(self):
         case = Case.objects.create(
             case_reference="202501",
@@ -140,7 +141,7 @@ class CaseModelTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class DocumentModelTests(TestCase):
+class DocumentModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.case = Case.objects.create(
             case_reference="202510",
@@ -195,7 +196,7 @@ class DocumentModelTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class RedactionModelTests(TestCase):
+class RedactionModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.case = Case.objects.create(
             case_reference="202520",

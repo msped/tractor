@@ -17,6 +17,7 @@ import spacy
 from cases.models import Document as CaseDocument
 from cases.models import Redaction
 from ..models import Model, TrainingDocument, TrainingRun
+from .base import NetworkBlockerMixin
 from ..tasks import (
     collect_training_data_detailed,
     export_spacy_data,
@@ -38,7 +39,7 @@ def create_test_docx(path, highlights):
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_collect"))
-class CollectTrainingDataDetailedTests(TestCase):
+class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.user = User.objects.create_user("testuser", password="password")
         self.case = Case.objects.create(case_reference="C1")
@@ -143,7 +144,7 @@ class CollectTrainingDataDetailedTests(TestCase):
         self.assertEqual(len(c_docs), 1)
 
 
-class ExportSpacyDataTests(TestCase):
+class ExportSpacyDataTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.train_data = [
             ("Who is John Smith?", {"entities": [(7, 17, "PERSON")]}),
@@ -204,7 +205,7 @@ class ExportSpacyDataTests(TestCase):
         "TURQUOISE": "OPERATIONAL_DATA",
     }
 )
-class TrainModelTests(TestCase):
+class TrainModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             "testuser",

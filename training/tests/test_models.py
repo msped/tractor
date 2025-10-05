@@ -12,13 +12,14 @@ from ..models import (
     TrainingRunCaseDoc,
     TrainingRunTrainingDoc,
 )
+from .base import NetworkBlockerMixin
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class ModelModelTests(TestCase):
+class ModelModelTests(NetworkBlockerMixin, TestCase):
     def test_model_str(self):
         model_active = Model.objects.create(
             name="active_model", path="/path/to/active", is_active=True
@@ -56,7 +57,7 @@ class ModelModelTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class TrainingDocumentModelTests(TestCase):
+class TrainingDocumentModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
             username="testuser", password="password")
@@ -84,7 +85,7 @@ class TrainingDocumentModelTests(TestCase):
         self.assertFalse(doc.processed)
 
 
-class TrainingEntityModelTests(TestCase):
+class TrainingEntityModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         user = User.objects.create_user(
             username="testuser", password="password")
@@ -105,7 +106,7 @@ class TrainingEntityModelTests(TestCase):
         self.assertIn("(DocForEntities)", str(entity))
 
 
-class TrainingRunModelTests(TestCase):
+class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.model = Model.objects.create(
             name="run_model", path="/path/to/run_model")

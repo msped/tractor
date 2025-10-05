@@ -18,13 +18,14 @@ from ..services import (
     process_document_and_create_redactions,
 )
 from training.models import Model as SpacyModel
+from training.tests.base import NetworkBlockerMixin
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class ServiceTests(TestCase):
+class ServiceTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         """Set up test data for all service tests."""
         self.user = User.objects.create_user(

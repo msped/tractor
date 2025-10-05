@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from django.test import TestCase
 
 from ..services import extract_entities_from_text
+from .base import NetworkBlockerMixin
 
 
 class MockSpan:
@@ -15,7 +16,7 @@ class MockSpan:
         self.end_char = end_char
 
 
-class ServicesTests(TestCase):
+class ServicesTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         # Create a temporary file to act as the document path
         self.temp_file = tempfile.NamedTemporaryFile(delete=False)
