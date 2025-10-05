@@ -49,7 +49,9 @@ def collect_training_data_detailed(source="both"):
                         current_pos = end_char
 
                         if run.font.highlight_color:
-                            color_name = str(run.font.highlight_color)
+                            color_enum_member = run.font.highlight_color
+                            color_name = color_enum_member.name \
+                                if color_enum_member else None
                             label = HIGHLIGHT_COLOR_TO_LABEL.get(color_name)
                             if label and run_text.strip():
                                 entities.append((start_char, end_char, label))
@@ -57,7 +59,6 @@ def collect_training_data_detailed(source="both"):
                         full_text += run_text
                     full_text += "\n"  # Add newline after each paragraph
                     current_pos += 1
-
                 if entities:
                     tdoc.extracted_text = full_text.strip()
                     tdoc.save(update_fields=['extracted_text'])
@@ -123,8 +124,10 @@ def export_spacy_data(train_data, train_path, dev_path, split=0.8):
         doc.ents = ents
         db_dev.add(doc)
 
-    db_train.to_disk(train_path)
-    db_dev.to_disk(dev_path)
+    if train_set:
+        db_train.to_disk(train_path)
+    if dev_set:
+        db_dev.to_disk(dev_path)
 
 
 def train_model(source="redactions", user=None):
@@ -187,11 +190,16 @@ def train_model(source="redactions", user=None):
     # Create TrainingRun
     training_run = TrainingRun.objects.create(model=new_model, source=source)
 
-    for tdoc in used_training_docs:
+    # Find the corresponding training data for each document to get the text
+    tdoc_texts = {tdoc: data[0] for tdoc, data in zip(used_training_docs,
+                                                      train_data)}
+
+    for tdoc, text in tdoc_texts.items():
         TrainingRunTrainingDoc.objects.create(
             training_run=training_run, document=tdoc)
+        tdoc.extracted_text = text
         tdoc.processed = True
-        tdoc.save(update_fields=["processed"])
+        tdoc.save(update_fields=["extracted_text", "processed"])
 
     for cdoc in used_case_docs:
         TrainingRunCaseDoc.objects.create(
@@ -200,7 +208,7 @@ def train_model(source="redactions", user=None):
     if source == 'training_docs':
         actor_info = "scheduled run"
         if user is not None:
-            actor_info = f"by {user.frist_name} {user.last_name})"
+            actor_info = f"by {user.first_name} {user.last_name}"
         LogEntryManager.log_create(
             instance=new_model,
             force_log=True,
