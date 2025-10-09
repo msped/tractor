@@ -2,7 +2,7 @@ import apiClient from '@/api/apiClient';
 import React from 'react';
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
-import DocumentViewComponent from '@/components/DocumentViewComponent';
+import { DocumentViewComponent } from '@/components/DocumentViewComponent';
 import { Box, Alert } from '@mui/material';
 
 export default async function page({ params }) {

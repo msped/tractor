@@ -3,7 +3,7 @@ import apiClient from '@/api/apiClient';
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { Box, Alert } from '@mui/material';
-import CaseDetailClientPage from '@/components/CaseDetailClientPage';
+import { CaseDetailClientPage } from '@/components/CaseDetailClientPage';
 
 export default async function page({ params }) {
     const { caseId } = await params;

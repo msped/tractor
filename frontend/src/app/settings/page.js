@@ -6,8 +6,8 @@ import {
     Typography,
     Grid
 } from '@mui/material';
-import ModelManagementCard from '@/components/ModelManagementCard';
-import TrainingSettingsCard from '@/components/TrainingSettingsCard';
+import { ModelManagementCard } from '@/components/ModelManagementCard';
+import { TrainingSettingsCard } from '@/components/TrainingSettingsCard';
 
 export default function SettingsPage() {
     return (

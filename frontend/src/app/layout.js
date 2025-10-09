@@ -4,8 +4,8 @@ import { ThemeProvider } from '@mui/material/styles';
 import { Toaster } from 'react-hot-toast';
 import theme from '../theme';
 import "./globals.css";
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
 import { SessionProvider } from "next-auth/react";
 
 const roboto = Roboto({
