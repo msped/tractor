@@ -25,8 +25,15 @@
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
 import { mount } from 'cypress/react'
-import Providers from '@/app/providers'
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
+import { ThemeProvider } from '@mui/material/styles';
+import theme from '@/theme';
 
 Cypress.Commands.add('mount', (component, options) => {
-    return mount(<Providers>{component}</Providers>, options)
+    return mount(
+        <AppRouterCacheProvider>
+            <ThemeProvider theme={theme}>
+                {component}
+                </ThemeProvider>
+            </AppRouterCacheProvider>, options);
 })
