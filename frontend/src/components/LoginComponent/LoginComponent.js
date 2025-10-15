@@ -1,9 +1,9 @@
 "use client";
 import React, { useState } from "react";
-import { signIn } from "next-auth/react"
+import { signIn as RealSignIn } from "next-auth/react"
 import { Box, Button, TextField, Typography, Paper } from "@mui/material";
 
-export const LoginComponent = () => {
+export const LoginComponent = ({ signIn = RealSignIn }) => {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
@@ -44,6 +44,7 @@ export const LoginComponent = () => {
                 <form onSubmit={handleLogin}>
                     <TextField
                         label="Username"
+                        name="username"
                         value={username}
                         onChange={e => setUsername(e.target.value)}
                         fullWidth
@@ -52,6 +53,7 @@ export const LoginComponent = () => {
                     />
                     <TextField
                         label="Password"
+                        name="password"
                         type="password"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
