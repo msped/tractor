@@ -23,7 +23,7 @@
 //
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
-
+import React from 'react';
 import { mount } from 'cypress/react'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'

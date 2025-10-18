@@ -1,0 +1,10 @@
+{
+  "presets": ["@babel/preset-react"],
+  "plugins": [
+    [
+      "istanbul",
+      { "useInlineSourceMaps": false, "include": ["src/**/*"], "exclude": ["**/*.spec.js"] }
+    ],
+    "@babel/plugin-proposal-class-properties"
+  ]
+}
