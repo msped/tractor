@@ -21,7 +21,7 @@ export const RejectReasonDialog = ({ open, onClose, onSubmit, redaction }) => {
                     Please provide a reason for rejecting the suggestion: <br />
                     <em>{`"${redaction?.text}"`}</em>
                 </DialogContentText>
-                <TextField autoFocus margin="dense" label="Rejection Reason" type="text" fullWidth multiline rows={3} variant="outlined" value={reason} onChange={(e) => setReason(e.target.value)} />
+                <TextField id="reject-reason" autoFocus margin="dense" label="Rejection Reason" type="text" fullWidth multiline rows={3} variant="outlined" value={reason} onChange={(e) => setReason(e.target.value)} />
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cancel</Button>
