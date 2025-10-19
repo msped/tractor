@@ -7,10 +7,17 @@ import {
 } from '@mui/material';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { createTrainingSchedule, deleteTrainingSchedule } from '@/services/trainingService';
+import { 
+    createTrainingSchedule as realCreateTrainingSchedule,
+    deleteTrainingSchedule as realDeleteTrainingSchedule
+} from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
-export const ScheduledTrainingCard = ({ schedule }) => {
+export const ScheduledTrainingCard = ({ 
+    schedule,
+    createTrainingSchedule = realCreateTrainingSchedule,
+    deleteTrainingSchedule = realDeleteTrainingSchedule  
+}) => {
     const getTomorrowAt9AM = () => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
