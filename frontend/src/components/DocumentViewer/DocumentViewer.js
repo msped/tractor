@@ -118,7 +118,6 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
         let marksToRender = [];
 
         if (viewMode === 'review') {
-            // Existing logic for the review page
             redactions.forEach(r => {
                 if (r.is_accepted) {
                     marksToRender.push({ ...r, mark_type: 'accepted' });
@@ -141,8 +140,6 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
                 });
             }
         } else {
-            // Simplified logic for 'final' or 'color-coded' view.
-            // The page component already filters for accepted redactions.
             marksToRender = redactions.map(r => ({ ...r, mark_type: 'accepted' }));
         }
 
@@ -151,8 +148,15 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
         const parts = [];
 
         sortedMarks.forEach((mark, index) => {
-            if (mark.start_char > lastIndex) {
-                parts.push(text.substring(lastIndex, mark.start_char));
+            const markStart = mark.start_char;
+            const markEndExclusive = mark.end_char + 1;
+
+            if (markStart > lastIndex) {
+                parts.push(
+                    <React.Fragment key={`text-${index}`}>
+                        {text.substring(lastIndex, markStart)}
+                    </React.Fragment>
+                );
             }
 
             let style = {};
@@ -164,6 +168,7 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
             } else {
                 style = getHighlightStyle(mark, isHovered, viewMode);
             }
+            const markText = text.substring(markStart, markEndExclusive);
 
             parts.push(
                 <Box
@@ -173,19 +178,18 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
                         cursor: viewMode === 'review' ? 'pointer' : 'default',
                     }}
                     key={key}
-                    // Click handler should only be active in review mode
                     onClick={viewMode === 'review' && onHighlightClick ? () => onHighlightClick(mark.id) : undefined}
                 >
-                    {mark.text}
+                    {markText}
                 </Box>
             );
-            lastIndex = Math.max(lastIndex, mark.end_char);
+            lastIndex = markEndExclusive;
         });
 
         if (lastIndex < text.length) {
-            parts.push(text.substring(lastIndex));
+            parts.push(<React.Fragment key="text-end">{text.substring(lastIndex)}</React.Fragment>);
         }
-        return parts.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>);
+        return parts;
     };
 
     return (
