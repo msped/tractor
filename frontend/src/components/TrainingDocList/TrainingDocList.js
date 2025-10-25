@@ -20,10 +20,10 @@ import {
     DialogTitle, Button
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { deleteTrainingDoc } from '@/services/trainingService';
+import { deleteTrainingDoc as deleteTrainingDocService } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
-export const TrainingDocList = ({ docs }) => {
+export const TrainingDocList = ({ docs, deleteTrainingDoc = deleteTrainingDocService }) => {
     const handleDelete = async (docId, docName) => {
         const toastId = toast.loading(`Deleting ${docName}...`);
         try {
