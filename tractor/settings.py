@@ -46,7 +46,17 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     "allauth.socialaccount.providers.microsoft",
+    "tailwind",
+    "theme",
 ]
+
+if DEBUG:
+    INSTALLED_APPS += [
+        'django_browser_reload',
+    ]
+
+
+TAILWIND_APP_NAME = 'theme'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -58,6 +68,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "allauth.account.middleware.AccountMiddleware",
 ]
+
+if DEBUG:
+    MIDDLEWARE += [
+        'django_browser_reload.middleware.BrowserReloadMiddleware',
+    ]
 
 ROOT_URLCONF = 'tractor.urls'
 
