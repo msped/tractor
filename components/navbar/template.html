@@ -1,0 +1,50 @@
+{% load static %}
+
+{# DaisyUI Navbar component provides the structure and styling of AppBar/Toolbar #}
+<div class="navbar bg-primary text-primary-content shadow-lg fixed top-0 z-50">
+    
+    {# Application Title / Home Link #}
+    <div class="flex-1">
+        <a href="{% url 'home' %}" class="btn btn-ghost text-xl font-bold uppercase tracking-widest">
+            tractor
+        </a>
+        
+        {% if user.is_authenticated %}
+            <a href="{% url 'cases' %}" class="btn btn-ghost ml-2">
+                Cases
+            </a>
+        {% endif %}
+    </div>
+
+    <div class="flex-none">
+        {% if user.is_authenticated %}
+            
+            <span class="text-sm mr-4 hidden sm:inline">
+                {{ user.username }}
+            </span>
+            
+            {# Settings Icon (using a simple SVG as a replacement for MUI icon) #}
+            <a href="{% url 'account_settings' %}" class="btn btn-ghost btn-circle mr-2" title="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.a1.724 1.724 0 002.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </a>
+            
+            {# Sign Out Button using HTMX #}
+            {# d-a: signout is the URL name for django-allauth signout view #}
+            <button 
+                class="btn btn-sm" 
+                hreft="{% url 'account_logout' %}" 
+            >
+                Sign Out
+            </button>
+            
+        {% else %}
+            {# User is Logged Out #}
+            <a href="{% url 'account_login' %}" class="btn btn-sm">
+                Sign In
+            </a>
+        {% endif %}
+    </div>
+</div>
