@@ -1,0 +1,28 @@
+{% load static tailwind_tags %}
+{% load django_htmx %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{% block title %}tractor{% endblock title %}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    {% tailwind_css %}
+    {% htmx_script %}
+
+    {% block extra_head %}{% endblock extra_head %}
+</head>
+
+<body 
+    class="bg-gray-50 text-black font-serif leading-normal tracking-normal"
+    hx-headers="{'x-csrftoken': '{{ csrf_token }}'}"
+>
+    <div id="page-container" class="flex flex-col min-h-screen">
+        {% component "navbar" user=request.user %}
+        <main class="flex-grow p-4 md:p-8" id="main-content">
+            {% block content %}{% endblock content %}
+        </main>
+    
+    </div>
+</body>
+</html>
