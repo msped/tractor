@@ -1,9 +1,6 @@
 {% load static %}
 
-{# DaisyUI Navbar component provides the structure and styling of AppBar/Toolbar #}
 <div class="navbar bg-primary text-primary-content shadow-lg fixed top-0 z-50">
-    
-    {# Application Title / Home Link #}
     <div class="flex-1">
         <a href="{% url 'home' %}" class="btn btn-ghost text-xl font-bold uppercase tracking-widest">
             tractor
@@ -39,12 +36,6 @@
             >
                 Sign Out
             </button>
-            
-        {% else %}
-            {# User is Logged Out #}
-            <a href="{% url 'account_login' %}" class="btn btn-sm">
-                Sign In
-            </a>
         {% endif %}
     </div>
 </div>
