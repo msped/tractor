@@ -1,10 +1,11 @@
-from django_components import component
+from django_components import component, register
 
 
+@register("navbar")
 class Navbar(component.Component):
     template_name = "navbar/template.html"
 
-    def get_context_data(self, request):
+    def get_context_data(self, user):
         return {
-            'user': request.user
+            'user': user
         }
