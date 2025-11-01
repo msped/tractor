@@ -18,7 +18,7 @@
     hx-headers="{'x-csrftoken': '{{ csrf_token }}'}"
 >
     <div id="page-container" class="flex flex-col min-h-screen">
-        {% component "navbar" user=request.user %}
+        {% component "navbar" user=request.user %}{% endcomponent %}
         <main class="flex-grow p-4 md:p-8" id="main-content">
             {% block content %}{% endblock content %}
         </main>
