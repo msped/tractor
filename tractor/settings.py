@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     'django_components',
     "theme",
     "django_htmx",
+    "crispy_forms",
+    "crispy_daisyui",
 ]
 
 if DEBUG:
@@ -61,6 +63,9 @@ if DEBUG:
 
 
 TAILWIND_APP_NAME = 'theme'
+
+CRISPY_ALLOWED_TEMPLATE_PACKS = "daisyui"
+CRISPY_TEMPLATE_PACK = "daisyui"
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -84,7 +89,7 @@ ROOT_URLCONF = 'tractor.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
@@ -142,16 +147,20 @@ AUTHENTICATION_BACKENDS = [
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        'NAME': ('django.contrib.auth.password_validation.'
+                 'UserAttributeSimilarityValidator'),
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'NAME': ('django.contrib.auth.password_validation.'
+                 'MinimumLengthValidator'),
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        'NAME': ('django.contrib.auth.password_validation.'
+                 'CommonPasswordValidator'),
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'NAME': ('django.contrib.auth.password_validation.'
+                 'NumericPasswordValidator'),
     },
 ]
 
@@ -190,3 +199,5 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
+
+SOCIALACCOUNT_LOGIN_ON_GET = True
