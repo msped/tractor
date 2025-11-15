@@ -43,6 +43,16 @@ describe('<CaseDocuments />', () => {
     cy.contains('No documents have been uploaded for this case.').should('be.visible');
   });
 
+  it('disables the upload button if the case is finalised', () => {
+    cy.fullMount(
+        <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={true} />,
+        mountOpts
+    );
+
+    cy.contains('button', 'Upload Document').should('be.disabled');
+    cy.contains('button', 'Upload Document').trigger('mouseover', { force: true });
+    cy.contains('This case is finalised and no longer accepts new documents.').should('be.visible');
+  });
   it('opens upload dialog and lists selected files', () => {
     cy.fullMount(
         <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
@@ -52,18 +62,29 @@ describe('<CaseDocuments />', () => {
     cy.contains('button', 'Upload Document').click();
     cy.contains('Upload New Document').should('be.visible');
 
-    cy.window().then((win) => {
-      const file = new win.File(['hello'], 'test.pdf', { type: 'application/pdf' });
-      const data = new win.DataTransfer();
-      data.items.add(file);
-      cy.get('#file-upload-input').then($input => {
-        $input[0].files = data.files;
-        cy.wrap($input).trigger('change', { force: true });
-      });
-    });
+    cy.get('#file-upload-input').selectFile({
+      contents: Cypress.Buffer.from('file content'),
+      fileName: 'test.pdf',
+      mimeType: 'application/pdf'
+    }, { force: true });
 
     cy.contains('Files to upload:').should('be.visible');
     cy.contains('test.pdf').should('be.visible');
+  });
+
+  it('allows removing a file from the upload list', () => {
+    cy.fullMount(
+        <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+        mountOpts
+    );
+
+    cy.contains('button', 'Upload Document').click();
+    cy.get('#file-upload-input').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'file-to-remove.txt' }, { force: true });
+
+    cy.contains('li', 'file-to-remove.txt').should('be.visible');
+    cy.contains('li', 'file-to-remove.txt').find('button[aria-label="delete"]').click();
+    cy.contains('li', 'file-to-remove.txt').should('not.exist');
+    cy.contains('Files to upload:').should('not.exist');
   });
 
   context('Drag and Drop', () => {
