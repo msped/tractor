@@ -16,6 +16,7 @@ jobs:
 
       - name: Run Cypress tests
         uses: cypress-io/github-action@v6
+        working-directory: frontend
         with:
           start: npm run dev
           wait-on: "http://localhost:3000"
@@ -25,5 +26,6 @@ jobs:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
 
       - name: Generate and check coverage
+        working-directory: frontend
         run: |
           npx nyc report --reporter=lcov --reporter=text --check-coverage --lines 80 --functions 80 -- branches 80
