@@ -49,15 +49,18 @@ export const DocumentListItem = ({
             return;
         }
 
-        const pollStatus = async () => {
-            const updatedDoc = await getDocument(doc.id);
-            if (updatedDoc.status !== 'Processing') {
-                handleDocumentUpdate();
+        const intervalId = setInterval(async () => {
+            try {
+                const updatedDoc = await getDocument(doc.id);
+                if (updatedDoc.status !== 'Processing') {
+                    clearInterval(intervalId);
+                    handleDocumentUpdate();
+                }
+            } catch (error) {
+                console.error('Failed to poll document status:', error);
                 clearInterval(intervalId);
             }
-        };
-
-        const intervalId = setInterval(pollStatus, 5000);
+        }, 5000);
 
         return () => clearInterval(intervalId);
 
