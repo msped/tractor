@@ -19,8 +19,8 @@ jobs:
         with:
           working-directory: ./frontend
           component: true
-          env:
-            NEXT_PUBLIC_API_HOST: ${{ secrets.NEXT_PUBLIC_API_HOST }}
+        env:
+          NEXT_PUBLIC_API_HOST: ${{ secrets.NEXT_PUBLIC_API_HOST }}
 
       - name: Generate and check coverage
         working-directory: ./frontend
