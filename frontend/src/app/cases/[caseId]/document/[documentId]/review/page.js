@@ -2,7 +2,7 @@ import React from 'react'
 import apiClient from '@/api/apiClient';
 import { auth } from "@/auth"
 
-import RedactionReviewPage from '@/components/RedactionComponent';
+import { RedactionComponent } from '@/components/RedactionComponent';
 
 export default async function page({ params }) {
     const { caseId, documentId } = await params;
@@ -25,7 +25,7 @@ export default async function page({ params }) {
         fetchError = "There was an issue retrieving the document for review. Please try again later.";
     }
 
-    return <RedactionReviewPage
+    return <RedactionComponent
         document={documentFile}
         initialRedactions={documentFile?.redactions || []}
     />

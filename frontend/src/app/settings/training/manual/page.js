@@ -1,9 +1,9 @@
 "use client"
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Typography } from "@mui/material";
-import TrainingUpload from "@/components/TrainingUpload";
-import TrainingDocList from "@/components/TrainingDocList";
+import { Typography } from "@mui/material";
+import { TrainingUpload } from "@/components/TrainingUpload";
+import { TrainingDocList } from "@/components/TrainingDocList";
 import { getTrainingDocs } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 

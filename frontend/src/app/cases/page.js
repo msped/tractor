@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import { Box, Typography, Container } from '@mui/material';
 import apiClient from '@/api/apiClient';
 
-import DataTable from '@/components/DataTable';
+import { DataTable } from '@/components/DataTable';
 
 export default async function page() {
     const session = await auth();
