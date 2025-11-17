@@ -1,6 +1,6 @@
 import React from 'react';
 import { CaseInformation } from '@/components/CaseInformation';
-import { SessionProvider } from 'next-auth/react';
+import apiClient from '@/api/apiClient';
 
 const mockCaseOpen = {
     id: 1,
@@ -25,19 +25,14 @@ const mockSession = {
     expires: '2100-01-01T00:00:00Z',
 };
 
-const TestWrapper = ({ children }) => (
-    <SessionProvider session={mockSession}>
-        {children}
-    </SessionProvider>
-);
 
 describe('<CaseInformation />', () => {
     let onUpdateSpy;
 
     beforeEach(() => {
         onUpdateSpy = cy.stub().as('onUpdate');
-        cy.intercept('PATCH', '/api/cases/*', { statusCode: 200, body: {} }).as('updateCase');
-        cy.intercept('DELETE', '/api/cases/*', { statusCode: 204, body: {} }).as('deleteCase');
+        cy.stub(apiClient, 'patch').as('updateCase').resolves({ data: {} });
+        cy.stub(apiClient, 'delete').as('deleteCase').resolves({});
     });
 
     it('renders case details correctly', () => {
@@ -94,9 +89,11 @@ describe('<CaseInformation />', () => {
             cy.get('input[name="case_reference"]').clear().type('CASE-001-UPDATED');
             cy.get('button').contains('Save').click();
 
-            cy.wait('@updateCase').its('request.body').should('deep.include', {
-                case_reference: 'CASE-001-UPDATED',
-            });
+            cy.get('@updateCase').should('have.been.calledWith',
+                `/cases/${mockCaseOpen.id}`,
+                Cypress.sinon.match.has('case_reference', 'CASE-001-UPDATED'),
+                Cypress.sinon.match.object
+            );
 
             cy.contains('Case updated.').should('be.visible');
             cy.get('@onUpdate').should('have.been.calledOnce');
@@ -128,9 +125,11 @@ describe('<CaseInformation />', () => {
         it('updates the status to Completed and calls onUpdate', () => {
             cy.get('li[role="menuitem"]').contains('Mark as Completed').click();
 
-            cy.wait('@updateCase').its('request.body').should('deep.equal', {
-                status: 'COMPLETED',
-            });
+            cy.get('@updateCase').should('have.been.calledWith',
+                `/cases/${mockCaseOpen.id}`,
+                { status: 'COMPLETED' },
+                Cypress.sinon.match.object
+            );
 
             cy.contains('Case status updated.').should('be.visible');
             cy.get('@onUpdate').should('have.been.calledOnce');
@@ -140,9 +139,11 @@ describe('<CaseInformation />', () => {
         it('updates the status to Closed and calls onUpdate', () => {
             cy.get('li[role="menuitem"]').contains('Mark as Closed').click();
 
-            cy.wait('@updateCase').its('request.body').should('deep.equal', {
-                status: 'CLOSED',
-            });
+            cy.get('@updateCase').should('have.been.calledWith',
+                `/cases/${mockCaseOpen.id}`,
+                { status: 'CLOSED' },
+                Cypress.sinon.match.object
+            );
 
             cy.contains('Case status updated.').should('be.visible');
             cy.get('@onUpdate').should('have.been.calledOnce');
@@ -168,7 +169,11 @@ describe('<CaseInformation />', () => {
         it('deletes the case and navigates on confirmation', () => {
             cy.get('button').contains('Delete').click();
 
-            cy.wait('@deleteCase');
+            cy.get('@deleteCase').should('have.been.calledWith',
+                `/cases/${mockCaseOpen.id}`,
+                Cypress.sinon.match.object
+            );
+
             cy.contains('Case deleted.').should('be.visible');
             cy.get('@router:push').should('have.been.calledWith', '/cases');
         });
@@ -192,7 +197,6 @@ describe('<CaseInformation />', () => {
         cy.get('input[name="case_reference"]').clear().type('NEW-REF');
         cy.get('button').contains('Save').click();
 
-        cy.wait('@updateCase');
         cy.get('@router:refresh').should('have.been.calledOnce');
     });
 });
