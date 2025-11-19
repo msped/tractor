@@ -1,6 +1,6 @@
-# Subject Access Manager (SAM)
+# Tractor
 
-Locally ran application to redact documents for subject access requests.
+Locally ran application to redact documents with a trained model.
 
 ## Key Features
 
@@ -43,7 +43,7 @@ The simplist hosting solution is to use [Docker](https://www.docker.com/) to hos
 
 The service uses the **spaCy** library to perform Named Entity Recognition (NER) on user-submitted text. This is essential for automatically identifying key information (like people, places, and dates) to improve service efficiency. The spaCy library requires the torch framework as its machine learning backend.
 
-As part of the package, during setup departments can train the model on information based off previous Subject Access Requests. This ensures that the information it identifies will speed up your organisations workflow.
+As part of the package, during setup departments can train the model on previous documents. This ensures that the information it identifies will speed up your organisations workflow. Currently, this only works for highlighting within a word document.
 
 ---
 
@@ -60,14 +60,14 @@ As part of the package, during setup departments can train the model on informat
 1. **Clone the repository:**
 
     ```bash
-    git clone https://github.com/msped/subject-access-manager
+    git clone https://github.com/msped/tractor
     ```
 
 2. **Setup the Backend (Django):**
 
     ```bash
-    # Navigate to the backend directory
-    cd backend
+    # Navigate to the tractor directory
+    cd tractor
 
     # Create and activate a virtual environment
     python -m venv venv
@@ -92,11 +92,11 @@ As part of the package, during setup departments can train the model on informat
     # Install Node.js dependencies
     npm install
 
-    # Create a .env.local file for environment variables
-    cp .env.local.example .env.local
+    # Create a .env file for environment variables
+    cp .env.example .env
     ```
 
-### Running the Application
+### Running the Application in development
 
 1. **Start the Django Backend Server:**
 
@@ -110,6 +110,13 @@ As part of the package, during setup departments can train the model on informat
     ```bash
     # In a new terminal, in the /frontend directory
     npm run dev
+    ```
+
+3. **Start django-q to listen for tasks**
+
+    ```bash
+    # In a new terminal, in the root directory
+    python manage.py qcluster
     ```
 
 The application should now be running locally at `http://localhost:3000`.
