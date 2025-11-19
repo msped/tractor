@@ -21,7 +21,7 @@ export const Header = () => {
                     href="/"
                     sx={{ color: 'inherit', textDecoration: 'none' }}
                 >
-                    SAM
+                    Tractor
                 </Typography>
 
                 {session && (
