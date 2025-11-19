@@ -194,5 +194,11 @@ Q_CLUSTER = {
     'retry': 120,
     'queue_limit': 50,
     'bulk': 10,
-    'orm': 'default'
+    'orm': 'default',
+    'schedule': {
+        'delete_old_cases_daily': {
+            'func': 'cases.services.delete_cases_past_retention_date',
+            'schedule_type': 'D',
+        }
+    }
 }
