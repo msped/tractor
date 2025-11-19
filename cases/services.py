@@ -3,12 +3,16 @@ import os
 import shutil
 import zipfile
 from .models import Case, Document, Redaction
+import logging
 import inflect
 from training.loader import SpacyModelManager
 from django.db import transaction
+from django.utils import timezone
 from django.core.files.base import ContentFile
 from weasyprint import HTML, CSS
 from training.services import extract_entities_from_text
+
+logger = logging.getLogger(__name__)
 
 
 def process_document_and_create_redactions(document_id):
@@ -21,11 +25,9 @@ def process_document_and_create_redactions(document_id):
         print(f"Document with id {document_id} not found.")
         return
 
-    # Get the active model instance from the manager
     manager = SpacyModelManager.get_instance()
     active_model_instance = manager.get_model_entry()
 
-    # Update the document with the model that is being used for processing
     document.spacy_model = active_model_instance
     document.save(update_fields=['spacy_model'])
 
@@ -82,7 +84,6 @@ def find_and_flag_matching_text_in_case(redaction_id):
     source_document = source_redaction.document
     case = source_document.case
 
-    # Get all other documents in the case.
     other_documents = Document.objects.filter(
         case=case,
         status__in=[
@@ -193,13 +194,11 @@ def _generate_pdf_from_document(document, mode='disclosure'):
 
     redactions = document.redactions.filter(is_accepted=True)
 
-    # Sort redactions in reverse order to handle nested tags correctly
     sorted_redactions = sorted(
         redactions, key=lambda r: r.start_char, reverse=True)
 
     for r in sorted_redactions:
         if mode == 'disclosure':
-            # Securely replace each character of the text with a block.
             block_text = '█' * len(r.text)
             replacement = f'<span class="redaction">{block_text}</span>'
         else:  # 'redacted' mode
@@ -255,12 +254,10 @@ def export_case_documents(case_id):
     documents = case.documents.all()
 
     for doc in documents:
-        # 1. Copy original file to 'unedited'
         if doc.original_file:
             shutil.copy(doc.original_file.path, os.path.join(
                 unedited_dir, doc.original_file.name.split('/')[-1]))
 
-        # 2. Generate 'redacted' PDF
         redacted_pdf_content = _generate_pdf_from_document(
             doc, mode='redacted')
         if redacted_pdf_content:
@@ -269,7 +266,6 @@ def export_case_documents(case_id):
             ) as f:
                 f.write(redacted_pdf_content)
 
-        # 3. Generate 'disclosure' PDF
         disclosure_pdf_content = _generate_pdf_from_document(
             doc, mode='disclosure')
         if disclosure_pdf_content:
@@ -278,7 +274,6 @@ def export_case_documents(case_id):
             ) as f:
                 f.write(disclosure_pdf_content)
 
-    # 4. Create the ZIP file
     zip_file_path = f"{temp_export_dir}.zip"
     with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for root, _, files in os.walk(temp_export_dir):
@@ -288,7 +283,6 @@ def export_case_documents(case_id):
                 arcname = os.path.relpath(full_path, temp_export_dir)
                 zipf.write(full_path, arcname)
 
-    # 5. Save the ZIP to the Case model and update status
     with open(zip_file_path, 'rb') as f:
         zip_content = f.read()
         case.export_file.save(
@@ -301,6 +295,32 @@ def export_case_documents(case_id):
     case.export_status = Case.ExportStatus.COMPLETED
     case.save(update_fields=['export_file', 'export_status'])
 
-    # 6. Clean up temporary files
     shutil.rmtree(temp_export_dir)
     os.remove(zip_file_path)
+
+
+def delete_cases_past_retention_date():
+    today = timezone.now().date()
+
+    cases_to_delete_qs = Case.objects.filter(retention_review_date__lt=today)
+    count = cases_to_delete_qs.count()
+
+    if count == 0:
+        message = 'No cases are due for deletion.'
+        logger.info(message)
+        return message
+
+    logger.info(f'Found {count} case(s) due for deletion.')
+
+    deleted_case_refs = []
+    for case in cases_to_delete_qs.iterator():
+        case_ref = case.case_reference
+        logger.info(
+            f'Deleting case {case_ref} ' +
+            f'(Retention Date: {case.retention_review_date})')
+        case.delete()
+        deleted_case_refs.append(case_ref)
+        logger.info(f'Successfully deleted case {case_ref}.')
+
+    return f'Successfully deleted {len(deleted_case_refs)} ' +\
+        f'case(s): {", ".join(deleted_case_refs)}.'
