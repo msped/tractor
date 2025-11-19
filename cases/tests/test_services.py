@@ -4,11 +4,13 @@ import tempfile
 import uuid
 import zipfile
 from datetime import date
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
+from dateutil.relativedelta import relativedelta
 
 from ..models import Case, Document, Redaction
 from ..services import (
@@ -17,6 +19,7 @@ from ..services import (
     find_and_flag_matching_text_in_case,
     process_document_and_create_redactions,
 )
+from ..services import delete_cases_past_retention_date
 from training.models import Model as SpacyModel
 from training.tests.base import NetworkBlockerMixin
 
@@ -290,7 +293,6 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     def test_export_case_not_found(self):
         """Test that the export function handles a non-existent case ID."""
         non_existent_id = uuid.uuid4()
-        # This should run without raising an exception
         export_case_documents(non_existent_id)
         self.assertFalse(Case.objects.filter(id=non_existent_id).exists())
 
@@ -318,3 +320,94 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         redactions = doc2.redactions.order_by('start_char')
         self.assertEqual(redactions[0].text, "party")
         self.assertEqual(redactions[1].text, "parties")
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class DeleteOldCasesServiceTest(TestCase):
+    """
+    Test suite for the `delete_cases_past_retention_date` service function.
+    """
+
+    def test_no_cases_due_for_deletion(self):
+        """
+        Test that the service function correctly handles the case where no
+        cases are due for deletion.
+        """
+        Case.objects.create(
+            case_reference="FUTR01",
+            data_subject_name="Future Person",
+            retention_review_date=timezone.now().date() + relativedelta(days=1)
+        )
+
+        with patch('cases.services.logger') as mock_logger:
+            result = delete_cases_past_retention_date()
+            self.assertEqual(result, 'No cases are due for deletion.')
+            self.assertEqual(Case.objects.count(), 1)
+            mock_logger.info.assert_called_with(
+                'No cases are due for deletion.')
+
+    def test_deletes_case_past_retention_date(self):
+        """
+        Test that a single case past its retention date is correctly deleted,
+        along with its associated files.
+        """
+        past_date = timezone.now().date() - relativedelta(days=1)
+        case_to_delete = Case.objects.create(
+            case_reference="PAST01",
+            data_subject_name="Past Person",
+            retention_review_date=past_date
+        )
+
+        doc_file = SimpleUploadedFile("test_doc.txt", b"some content")
+        doc = Document.objects.create(
+            case=case_to_delete,
+            original_file=doc_file
+        )
+        self.assertTrue(os.path.exists(doc.original_file.path))
+
+        export_file = SimpleUploadedFile("export.zip", b"zip content")
+        case_to_delete.export_file.save(export_file.name, export_file)
+        self.assertTrue(os.path.exists(case_to_delete.export_file.path))
+
+        Case.objects.create(
+            case_reference="FUTR02",
+            data_subject_name="Future Person 2",
+            retention_review_date=timezone.now().date() + relativedelta(
+                days=10
+            )
+        )
+
+        self.assertEqual(Case.objects.count(), 2)
+        self.assertEqual(Document.objects.count(), 1)
+
+        with patch('cases.services.logger') as mock_logger:
+            result = delete_cases_past_retention_date()
+            self.assertEqual(
+                result,
+                'Successfully deleted 1 case(s): PAST01.'
+            )
+            mock_logger.info.assert_has_calls([
+                call('Found 1 case(s) due for deletion.'),
+                call(f'Deleting case PAST01 (Retention Date: {past_date})'),
+                call('Successfully deleted case PAST01.')
+            ])
+
+        self.assertEqual(Case.objects.count(), 1)
+        self.assertFalse(Case.objects.filter(case_reference="PAST01").exists())
+        self.assertTrue(Case.objects.filter(
+            case_reference="FUTR02").exists())
+        self.assertEqual(Document.objects.count(), 0)
+
+    def test_iterator_is_used_for_efficiency(self):
+        """
+        Verify that the .iterator() method is called on the queryset to ensure
+        memory efficiency when dealing with a large number of cases.
+        """
+        with patch('cases.models.Case.objects.filter') as mock_filter:
+            mock_iterator = MagicMock()
+            mock_iterator.count.return_value = 0
+            mock_filter.return_value.iterator.return_value = mock_iterator
+
+            delete_cases_past_retention_date()
+
+            mock_filter.return_value.iterator.assert_called_once()
