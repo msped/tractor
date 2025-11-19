@@ -18,7 +18,7 @@ def retention_review_date_default():
 
 class Case(models.Model):
     """
-    Represents a single Subject Access Request case. This is the top-level
+    Represents a single case. This is the top-level
     container for all related documents and information.
     """
     class Status(models.TextChoices):

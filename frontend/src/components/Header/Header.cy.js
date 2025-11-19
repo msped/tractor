@@ -14,7 +14,7 @@ describe('<Header />', () => {
     });
 
     it('should display the app name and a sign-in button', () => {
-      cy.contains('a', 'SAM').should('be.visible').and('have.attr', 'href', '/');
+      cy.contains('a', 'Tractor').should('be.visible').and('have.attr', 'href', '/');
       cy.contains('a', 'Sign In').should('be.visible');
     });
 
@@ -39,7 +39,7 @@ describe('<Header />', () => {
     });
 
     it('should display the app name, cases link, and user info', () => {
-      cy.contains('a', 'SAM').should('be.visible');
+      cy.contains('a', 'Tractor').should('be.visible');
       cy.contains('a', 'Cases').should('be.visible').and('have.attr', 'href', '/cases');
       cy.contains(mockSession.user.username).should('be.visible');
     });

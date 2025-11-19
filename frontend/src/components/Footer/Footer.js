@@ -14,7 +14,7 @@ export const Footer = () => {
             }}
         >
             <Typography variant="body2" color="text.secondary">
-                &copy; {new Date().getFullYear()} Subject Access Manager (SAM). All rights reserved.
+                &copy; {new Date().getFullYear()} Tractor. All rights reserved.
             </Typography>
         </Box>
     )

@@ -1,6 +1,6 @@
-# Accessibility statement for Subject Access Manager (SAM)
+# Accessibility statement for Tractor
 
-This website is run by [Your Organisation Name]. We want as many people as possible to be able to use this website. For example, that means you should be able to:
+This website is run by Matt Edwards [@msped](https://github.com/msped). We want as many people as possible to be able to use this website. For example, that means you should be able to:
 
 * change colours, contrast levels and fonts
 * navigate most of the website using just a keyboard

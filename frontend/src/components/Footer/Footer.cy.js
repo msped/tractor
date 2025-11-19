@@ -6,6 +6,6 @@ describe('<Footer />', () => {
     cy.mount(<Footer />);
 
     const currentYear = new Date().getFullYear();
-    cy.get('footer').contains(`© ${currentYear} Subject Access Manager (SAM). All rights reserved.`);
+    cy.get('footer').contains(`© ${currentYear} Tractor. All rights reserved.`);
   });
 });

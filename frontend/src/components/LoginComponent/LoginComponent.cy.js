@@ -10,7 +10,7 @@ describe('<LoginComponent />', () => {
 
   it('should render the login form correctly', () => {
     cy.mount(<LoginComponent />);
-    cy.contains('h1', 'Welcome to Subject Access Manager (SAM)').should('be.visible');
+    cy.contains('h1', 'Welcome to Tractor').should('be.visible');
     cy.get('input[name="username"]').should('be.visible');
     cy.get('input[name="password"]').should('be.visible');
     cy.contains('button', 'Login').should('be.visible');
