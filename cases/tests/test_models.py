@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from datetime import date
 from freezegun import freeze_time
 from dateutil.relativedelta import relativedelta
-from cases.models import Case, Document, Redaction
+from cases.models import Case, Document, Redaction, RedactionContext
 from training.models import Model
 from training.tests.base import NetworkBlockerMixin
 
@@ -246,3 +246,35 @@ class RedactionModelTests(NetworkBlockerMixin, TestCase):
         )
         self.assertTrue(redaction.is_suggestion)
         self.assertFalse(redaction.is_accepted)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionContextModelTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="202530",
+            data_subject_name="Context Test"
+        )
+        file = SimpleUploadedFile("context.txt", b"file_content")
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=file
+        )
+        self.redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="test"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def test_redaction_context_creation_and_str(self):
+        """Test creating a RedactionContext and its string representation."""
+        context = RedactionContext.objects.create(
+            redaction=self.redaction, text="This is context."
+        )
+        self.assertEqual(RedactionContext.objects.count(), 1)
+        self.assertEqual(context.redaction, self.redaction)
+        self.assertEqual(context.text, "This is context.")
