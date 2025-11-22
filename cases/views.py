@@ -9,13 +9,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 
-from .models import Case, Document, Redaction
+from .models import Case, Document, Redaction, RedactionContext
 from .serializers import (
     CaseSerializer,
     CaseDetailSerializer,
     DocumentSerializer,
     DocumentReviewSerializer,
     RedactionSerializer,
+    RedactionContextSerializer,
 )
 
 
@@ -150,3 +151,35 @@ class RedactionDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = RedactionSerializer
     lookup_field = 'id'
     lookup_url_kwarg = 'pk'
+
+
+class RedactionContextView(APIView):
+    """
+    API view to get, create, or update the context for a specific redaction.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = RedactionContextSerializer
+
+    def post(self, request, redaction_id, *args, **kwargs):
+        redaction = get_object_or_404(Redaction, pk=redaction_id)
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Use update_or_create to handle both creation of a new context
+        # and update of an existing one.
+        context, created = RedactionContext.objects.update_or_create(
+            redaction=redaction,
+            defaults={'text': serializer.validated_data['text']}
+        )
+
+        status_code = status.HTTP_201_CREATED \
+            if created else status.HTTP_200_OK
+        return Response(
+            self.serializer_class(context).data,
+            status=status_code
+        )
+
+    def delete(self, request, redaction_id, *args, **kwargs):
+        context = get_object_or_404(RedactionContext, pk=redaction_id)
+        context.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
