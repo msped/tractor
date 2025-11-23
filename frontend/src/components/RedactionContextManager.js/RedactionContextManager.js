@@ -78,6 +78,7 @@ export const RedactionContextManager = ({ redactionId, context, isEditing, onCan
         multiline
         rows={3}
         label="Context for Disclosure"
+        name="Context for Disclosure"
         value={contextText}
         onChange={(e) => setContextText(e.target.value)}
         helperText="This text will replace the redaction in the final export."
