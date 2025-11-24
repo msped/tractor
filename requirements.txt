@@ -95,6 +95,7 @@ Pygments==2.19.2
 PyJWT==2.9.0
 pylatexenc==2.10
 pyparsing==3.2.3
+pypdf==6.3.0
 pypdfium2==4.30.1
 pyphen==0.17.2
 python-bidi==0.6.6

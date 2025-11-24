@@ -8,12 +8,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
-from ..models import Case, Document, Redaction
+from ..models import Case, Document, Redaction, RedactionContext
 from ..serializers import (
     CaseDetailSerializer,
     CaseSerializer,
     DocumentReviewSerializer,
     DocumentSerializer,
+    RedactionContextSerializer,
     RedactionSerializer,
 )
 
@@ -241,3 +242,44 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
             "retention_review_date",
         }
         self.assertEqual(set(serializer.data.keys()), expected_fields)
+
+    def test_redaction_context_serializer_read(self):
+        """Test serialization of a RedactionContext instance."""
+        context = RedactionContext.objects.create(
+            redaction=self.redaction, text="This is context."
+        )
+        serializer = RedactionContextSerializer(instance=context)
+        data = serializer.data
+
+        self.assertEqual(data["redaction"], self.redaction.id)
+        self.assertEqual(data["text"], "This is context.")
+
+    def test_redaction_context_serializer_create(self):
+        """Test deserialization and creation of a RedactionContext."""
+        data = {"text": "New context for redaction."}
+        serializer = RedactionContextSerializer(data=data)
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+
+        instance = serializer.save(redaction=self.redaction)
+
+        self.assertEqual(RedactionContext.objects.count(), 1)
+        self.assertEqual(instance.redaction, self.redaction)
+        self.assertEqual(instance.text, "New context for redaction.")
+
+    def test_redaction_serializer_includes_context(self):
+        """
+        Test that the RedactionSerializer correctly includes the nested
+        RedactionContext data when it exists.
+        """
+        serializer_no_context = RedactionSerializer(instance=self.redaction)
+        self.assertIsNone(serializer_no_context.data["context"])
+
+        RedactionContext.objects.create(
+            redaction=self.redaction, text="This is important context."
+        )
+        self.redaction.refresh_from_db()
+
+        serializer_with_context = RedactionSerializer(instance=self.redaction)
+        context_data = serializer_with_context.data["context"]
+        self.assertIsNotNone(context_data)
+        self.assertEqual(context_data["text"], "This is important context.")

@@ -12,7 +12,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase, override_settings, APIClient
 
 from training.tests.base import NetworkBlockerMixin
-from ..models import Case, Document, Redaction
+from ..models import Case, Document, Redaction, RedactionContext
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
@@ -293,6 +293,57 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertFalse(Redaction.objects.filter(
             id=self.redaction.id).exists())
 
+    def test_create_redaction_context(self):
+        """Test creating a context for a redaction."""
+        url = reverse(
+            "redaction-context", kwargs={"redaction_id": self.redaction.id}
+        )
+        data = {"text": "This is some context."}
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["text"], "This is some context.")
+        self.assertTrue(
+            RedactionContext.objects.filter(
+                redaction=self.redaction).exists()
+        )
+
+    def test_update_redaction_context(self):
+        """Test updating an existing context for a redaction."""
+        # First, create a context
+        RedactionContext.objects.create(
+            redaction=self.redaction, text="Initial context."
+        )
+
+        url = reverse(
+            "redaction-context", kwargs={"redaction_id": self.redaction.id}
+        )
+        data = {"text": "Updated context."}
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["text"], "Updated context.")
+        self.redaction.context.refresh_from_db()
+        self.assertEqual(self.redaction.context.text, "Updated context.")
+
+    def test_delete_redaction_context(self):
+        """Test deleting an existing context for a redaction."""
+        RedactionContext.objects.create(
+            redaction=self.redaction, text="Context to be deleted."
+        )
+        self.assertTrue(
+            RedactionContext.objects.filter(redaction=self.redaction).exists()
+        )
+
+        url = reverse(
+            "redaction-context", kwargs={"redaction_id": self.redaction.id}
+        )
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(RedactionContext.objects.filter(
+            redaction=self.redaction).exists())
+
     def test_unauthenticated_access_fails(self):
         """Test that unauthenticated users receive a 403 Forbidden error for
         all views."""
@@ -329,7 +380,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
                 "kwargs": {
                     "pk": self.redaction.id
                 }
-            },
+            }
         }
 
         for name, details in endpoints.items():

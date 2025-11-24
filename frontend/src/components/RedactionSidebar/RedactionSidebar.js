@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, Card, CardContent, CardActions, Button, Chip, ButtonGroup, Menu, MenuItem } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import { RedactionContextManager } from '../RedactionContextManager.js';
 
 const REDACTION_TYPE_LABELS = {
     'PII': 'Third-Party PII',
@@ -10,6 +13,13 @@ const REDACTION_TYPE_LABELS = {
 };
 
 const getRedactionTypeLabel = (type) => REDACTION_TYPE_LABELS[type] || 'Suggestion';
+
+const truncateText = (text, maxLength = 23) => {
+    if (!text || text.length <= maxLength) {
+        return text;
+    }
+    return text.substring(0, maxLength) + '...';
+};
 
 export const RedactionSidebar = ({
     redactions,
@@ -20,11 +30,13 @@ export const RedactionSidebar = ({
     onSuggestionMouseEnter,
     onSuggestionMouseLeave,
     scrollToId,
-    removeScrollId
+    removeScrollId,
+    onContextSave,
 }) => {
     const { rejected, accepted, pending, manual } = redactions;
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
+    const [editingContextId, setEditingContextId] = useState(null);
     const itemRefs = useRef({});
 
     const handleAccordionChange = (panel) => (event, isExpanded) => {
@@ -122,7 +134,17 @@ export const RedactionSidebar = ({
                                                             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Reason for rejection: {item.justification}</Typography>
                                                         )}
                                                     </CardContent>
-                                                    <CardActions sx={{ justifyContent: 'flex-end' }}>
+                                                    <CardActions sx={{ justifyContent: (sectionKey === 'accepted' || sectionKey === 'manual') ? 'space-between' : 'flex-end' }}>
+                                                        {(sectionKey === 'accepted' || sectionKey === 'manual') &&
+                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                <Button startIcon={item.context ? <EditIcon /> : <AddIcon />} variant="text" size='small' onClick={() => setEditingContextId(item.id)}>
+                                                                    Context
+                                                                </Button>
+                                                                {item.context?.text && (
+                                                                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>{`"${truncateText(item.context.text)}"`}</Typography>
+                                                                )}
+                                                            </Box>
+                                                        }
                                                         {sectionKey === 'rejected' && (<Button size="small" color="primary" variant='outlined' onClick={() => onRemove(item.id)}>Re-evaluate</Button>)}
                                                         {(sectionKey === 'manual' || sectionKey === 'accepted') && (<Button size="small" color="error" variant='contained' onClick={() => onRemove(item.id)}>Remove</Button>)}
                                                         {sectionKey === 'pending' &&
@@ -143,6 +165,17 @@ export const RedactionSidebar = ({
                                                             </Box>
                                                         }
                                                     </CardActions>
+                                                    {(sectionKey === 'accepted' || sectionKey === 'manual') && (
+                                                        <div data-testid={`redaction-context-manager-${item.id}`}>
+                                                        <RedactionContextManager
+                                                            redactionId={item.id}
+                                                            context={item.context}
+                                                            isEditing={editingContextId === item.id}
+                                                            onCancel={() => setEditingContextId(null)}
+                                                            onSaveSuccess={onContextSave}
+                                                        />
+                                                        </div>
+                                                    )}
                                                 </Card>
                                             </ListItem>
                                         ))}

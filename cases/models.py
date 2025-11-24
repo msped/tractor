@@ -243,6 +243,23 @@ class Redaction(models.Model):
         ordering = ['start_char']
 
 
+class RedactionContext(models.Model):
+    """
+    Stores optional, user-provided context for a specific redaction.
+    This context is displayed in place of a black-box redaction in the
+    final exported document to provide more clarity.
+    """
+    redaction = models.OneToOneField(
+        Redaction,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="context"
+    )
+    text = models.TextField(
+        help_text="User-provided context for the redaction."
+    )
+
+
 auditlog.register(Case)
 auditlog.register(Document)
 auditlog.register(Redaction)

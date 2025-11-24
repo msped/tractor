@@ -1,10 +1,12 @@
 import os
+import io
 import shutil
 import tempfile
 import uuid
 import zipfile
 from datetime import date
 from unittest.mock import MagicMock, patch, call
+from pypdf import PdfReader
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -12,7 +14,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 
-from ..models import Case, Document, Redaction
+from ..models import Case, Document, Redaction, RedactionContext
 from ..services import (
     _generate_pdf_from_document,
     export_case_documents,
@@ -231,6 +233,34 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIsNotNone(pdf_content_redacted)
         self.assertIsInstance(pdf_content_redacted, bytes)
         self.assertTrue(pdf_content_redacted.startswith(b"%PDF-"))
+
+    def test_generate_pdf_with_redaction_context(self):
+        """
+        Test that redaction context text appears in the final disclosure PDF.
+        """
+        self.document.extracted_text = "The secret ingredient is PII."
+        self.document.save()
+        redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=25, end_char=28, text="PII",
+            is_accepted=True,
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        context_text = "a type of cheese"
+        RedactionContext.objects.create(
+            redaction=redaction, text=context_text
+        )
+
+        pdf_content = _generate_pdf_from_document(
+            self.document, mode="disclosure")
+
+        self.assertIsNotNone(pdf_content)
+        self.assertTrue(pdf_content.startswith(b"%PDF-"))
+
+        bytes_content = io.BytesIO(pdf_content)
+        pdf = PdfReader(bytes_content)
+        page_text = pdf.pages[0].extract_text()
+        self.assertIn(context_text, page_text)
 
     def test_generate_pdf_no_text(self):
         """Test PDF generation for a document with no extracted text."""

@@ -192,7 +192,9 @@ def _generate_pdf_from_document(document, mode='disclosure'):
     if not text:
         return None
 
-    redactions = document.redactions.filter(is_accepted=True)
+    redactions = document.redactions.filter(
+        is_accepted=True
+    ).select_related('context')
 
     sorted_redactions = sorted(
         redactions, key=lambda r: r.start_char, reverse=True)
@@ -200,10 +202,19 @@ def _generate_pdf_from_document(document, mode='disclosure'):
     for r in sorted_redactions:
         if mode == 'disclosure':
             block_text = '█' * len(r.text)
-            replacement = f'<span class="redaction">{block_text}</span>'
-        else:  # 'redacted' mode
-            replacement = f'<span class="redaction type-{r.redaction_type}">\
-            {r.text}</span>'
+            replacement_text = block_text
+            if hasattr(r, 'context'):
+                replacement = '<span class="redaction disclosure-context"' +\
+                    f'>[{r.context.text}]</span>'
+            else:
+                replacement = '<span class="redaction"' +\
+                    f'>{replacement_text}</span>'
+        else:
+            replacement = f'<span class="redaction type-{r.redaction_type}"' +\
+                f'>{r.text}</span>'
+            if hasattr(r, 'context'):
+                replacement += ' <span class="internal-context-note">' +\
+                    f'[Context: {r.context.text}]</span>'
         text = text[:r.start_char] + replacement + text[r.end_char:]
 
     html_string = f"""
@@ -218,10 +229,14 @@ def _generate_pdf_from_document(document, mode='disclosure'):
 
     css_string = """
     .redaction { background-color: black; color: black; }
+    .disclosure-context { background-color: initial;
+    color: initial; font-style: italic; }
     .type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }
     .type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }
     .type-DS_INFO { background-color: rgba(177, 156, 217, 0.8);\
           color: initial; }
+    .internal-context-note { color: #555;
+    font-style: italic; font-size: 0.9em; }
     """
 
     return HTML(string=html_string).write_pdf(
