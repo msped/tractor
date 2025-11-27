@@ -12,7 +12,7 @@ import { toast } from 'react-hot-toast';
 import { updateRedactionContext, deleteRedactionContent } from '@/services/redactionService';
 
 
-export const RedactionContextManager = ({ redactionId, context, isEditing, onCancel, onSaveSuccess }) =>{
+export const RedactionContextManager = ({ redactionId, context, isEditing, onCancel, onContextSave }) =>{
   const [contextText, setContextText] = useState(context?.text || '');
   const [initialText, setInitialText] = useState(context?.text || '');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,7 +25,8 @@ export const RedactionContextManager = ({ redactionId, context, isEditing, onCan
       const updatedContext = await updateRedactionContext(redactionId, { text: contextText });
       setInitialText(contextText);
       toast.success('Context saved successfully.');
-      onSaveSuccess(redactionId, updatedContext.text);
+      onContextSave(redactionId, updatedContext.text);
+      onCancel();
     } catch (err) {
       setError('Failed to save context.');
       console.error(err);
@@ -42,7 +43,8 @@ export const RedactionContextManager = ({ redactionId, context, isEditing, onCan
         setContextText('');
         setInitialText('');
         toast.success('Context deleted successfully.');
-        onSaveSuccess(redactionId, '');
+        onContextSave(redactionId, null);
+        onCancel();
       })
       .catch((err) => {
         setError('Failed to delete context.');

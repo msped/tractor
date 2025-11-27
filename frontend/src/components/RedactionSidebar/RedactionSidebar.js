@@ -172,7 +172,7 @@ export const RedactionSidebar = ({
                                                             context={item.context}
                                                             isEditing={editingContextId === item.id}
                                                             onCancel={() => setEditingContextId(null)}
-                                                            onSaveSuccess={onContextSave}
+                                                            onContextSave={onContextSave}
                                                         />
                                                         </div>
                                                     )}
