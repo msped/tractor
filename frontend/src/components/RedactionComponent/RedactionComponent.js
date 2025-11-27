@@ -122,6 +122,17 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         setPendingRedaction(null);
     }, []);
 
+    const handleOnContextSave = useCallback((redactionId, newContextText) => {
+        setRedactions(prevRedactions =>
+            prevRedactions.map(r => {
+                if (r.id === redactionId) {
+                    return { ...r, context: newContextText ? { text: newContextText } : null };
+                }
+                return r;
+            })
+        );
+    }, []);
+
     const handleCreateManualRedaction = useCallback(async (redactionType) => {
         if (!newSelection) return;
         const newRedaction = {
@@ -252,6 +263,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 onSuggestionMouseLeave={handleSuggestionMouseLeave}
                 scrollToId={scrollToId}
                 removeScrollId={handleRemoveScrollId}
+                onContextSave={handleOnContextSave}
             />
 
             <ManualRedactionPopover
