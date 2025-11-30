@@ -1,16 +1,12 @@
-"use server"
-
 import apiClient from '@/api/apiClient';
-import { auth } from '@/auth';
 
-export const getModels = async () => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const getModels = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         const response = await apiClient.get(`/models`, {
             headers: {
-                'Authorization': `Bearer ${session.access_token}`,
+                'Authorization': `Bearer ${accessToken}`,
             },
         });
         return response.data;
@@ -20,13 +16,12 @@ export const getModels = async () => {
     }
 };
 
-export const setActiveModel = async (modelId) => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const setActiveModel = async (modelId, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         await apiClient.post(`/models/${modelId}/set-active`, {}, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
     } catch (error) {
         console.error("Failed to set active model:", error.response?.data || error.message);
@@ -34,13 +29,12 @@ export const setActiveModel = async (modelId) => {
     }
 };
 
-export const getTrainingDocs = async () => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const getTrainingDocs = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         const response = await apiClient.get(`/training-docs`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         return response.data;
     } catch (error) {
@@ -49,13 +43,12 @@ export const getTrainingDocs = async () => {
     }
 };
 
-export const getTrainingSchedules = async () => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const getTrainingSchedules = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         const response = await apiClient.get(`/schedules`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         // Assuming there is only one schedule as per the request
         return response.data.length > 0 ? response.data[0] : null;
@@ -65,13 +58,12 @@ export const getTrainingSchedules = async () => {
     }
 };
 
-export const createTrainingSchedule = async (scheduleData) => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const createTrainingSchedule = async (scheduleData, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         const response = await apiClient.post(`/schedules`, scheduleData, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         return response.data;
     } catch (error) {
@@ -80,13 +72,12 @@ export const createTrainingSchedule = async (scheduleData) => {
     }
 };
 
-export const deleteTrainingSchedule = async (scheduleId) => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const deleteTrainingSchedule = async (scheduleId, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         await apiClient.delete(`/schedules/${scheduleId}`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
     } catch (error) {
         console.error("Failed to delete schedule:", error.response?.data || error.message);
@@ -94,13 +85,12 @@ export const deleteTrainingSchedule = async (scheduleId) => {
     }
 };
 
-export const getTrainingRuns = async () => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const getTrainingRuns = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         const response = await apiClient.get(`/training-runs`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         return response.data;
     } catch (error) {
@@ -109,13 +99,12 @@ export const getTrainingRuns = async () => {
     }
 };
 
-export const deleteTrainingDoc = async (docId) => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const deleteTrainingDoc = async (docId, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         await apiClient.delete(`/training-docs/${docId}`, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
     } catch (error) {
         console.error("Failed to delete training doc:", error.response?.data || error.message);
@@ -124,9 +113,8 @@ export const deleteTrainingDoc = async (docId) => {
     }
 };
 
-export const uploadTrainingDoc = async (file) => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const uploadTrainingDoc = async (file, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     const formData = new FormData();
     formData.append('original_file', file);
@@ -135,7 +123,7 @@ export const uploadTrainingDoc = async (file) => {
     try {
         await apiClient.post(`/training-docs`, formData, {
             headers: {
-                'Authorization': `Bearer ${session.access_token}`,
+                'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'multipart/form-data',
             },
         });
@@ -146,13 +134,12 @@ export const uploadTrainingDoc = async (file) => {
     }
 };
 
-export const runManualTraining = async () => {
-    const session = await auth();
-    if (!session) throw new Error("Not authenticated");
+export const runManualTraining = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
 
     try {
         const response = await apiClient.post(`/training/run-now`, {}, {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         return response.data;
     } catch (error) {
