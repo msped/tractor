@@ -54,7 +54,7 @@ export const DocumentListItem = ({
 
         const intervalId = setInterval(async () => {
             try {
-                const updatedDoc = await getDocument(doc.id, session.accessToken);
+                const updatedDoc = await getDocument(doc.id, session.access_token);
                 if (updatedDoc.status !== 'Processing') {
                     clearInterval(intervalId);
                     handleDocumentUpdate();
@@ -67,7 +67,7 @@ export const DocumentListItem = ({
 
         return () => clearInterval(intervalId);
 
-    }, [doc.id, doc.status, handleDocumentUpdate, session.accessToken]);
+    }, [doc.id, doc.status, handleDocumentUpdate, session.access_token]);
 
     return (
         <ListItem

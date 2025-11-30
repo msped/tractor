@@ -30,7 +30,7 @@ export const TrainingDocList = ({ docs, deleteTrainingDoc = deleteTrainingDocSer
     const handleDelete = async (docId, docName) => {
         const toastId = toast.loading(`Deleting ${docName}...`);
         try {
-            await deleteTrainingDoc(docId, session?.accessToken);
+            await deleteTrainingDoc(docId, session?.access_token);
             toast.success("Document deleted successfully.", { id: toastId });
         } catch (error) {
             toast.error(error.message, { id: toastId });
