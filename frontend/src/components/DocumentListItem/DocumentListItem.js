@@ -14,6 +14,7 @@ import {
 import ArticleIcon from '@mui/icons-material/Article';
 import DeleteIcon from '@mui/icons-material/Delete';
 import NextLink from 'next/link';
+import { useSession } from 'next-auth/react';
 
 import { getDocument } from '@/services/documentService';
 
@@ -41,6 +42,8 @@ export const DocumentListItem = ({
     isCaseFinalised 
 }) => {
 
+    const { data: session } = useSession();
+
     // This useEffect handles polling for a newly uploaded document.
     // Once the status is no longer 'Processing', it calls the parent's update function
     // and stops its own polling.
@@ -51,7 +54,7 @@ export const DocumentListItem = ({
 
         const intervalId = setInterval(async () => {
             try {
-                const updatedDoc = await getDocument(doc.id);
+                const updatedDoc = await getDocument(doc.id, session.accessToken);
                 if (updatedDoc.status !== 'Processing') {
                     clearInterval(intervalId);
                     handleDocumentUpdate();
@@ -64,7 +67,7 @@ export const DocumentListItem = ({
 
         return () => clearInterval(intervalId);
 
-    }, [doc.id, doc.status, handleDocumentUpdate]);
+    }, [doc.id, doc.status, handleDocumentUpdate, session.accessToken]);
 
     return (
         <ListItem

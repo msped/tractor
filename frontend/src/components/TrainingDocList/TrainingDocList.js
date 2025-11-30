@@ -21,13 +21,16 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { deleteTrainingDoc as deleteTrainingDocService } from '@/services/trainingService';
+import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 export const TrainingDocList = ({ docs, deleteTrainingDoc = deleteTrainingDocService }) => {
+    const { data: session } = useSession();
+    
     const handleDelete = async (docId, docName) => {
         const toastId = toast.loading(`Deleting ${docName}...`);
         try {
-            await deleteTrainingDoc(docId);
+            await deleteTrainingDoc(docId, session?.accessToken);
             toast.success("Document deleted successfully.", { id: toastId });
         } catch (error) {
             toast.error(error.message, { id: toastId });

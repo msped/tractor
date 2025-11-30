@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Button, CircularProgress } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
-import apiClient from '@/api/apiClient';
+import { createCaseExport } from '@/services/caseService';
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
@@ -15,11 +15,8 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
     const handleGenerateExport = async () => {
         setIsProcessing(true);
         try {
-            await apiClient.post(`/cases/${caseData.id}/export`, {}, {
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                },
-            });
+            await createCaseExport(caseData.id, session.access_token);
+            toast.success('Export generation started.', { id: 'export-toast' });
             // Trigger a re-fetch of the case data to get the 'PROCESSING' status
             if (onUpdate) onUpdate();
         } catch (error) {
