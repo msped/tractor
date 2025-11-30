@@ -3,6 +3,8 @@ import { ScheduledTrainingCard } from './ScheduledTrainingCard';
 import * as trainingService from '@/services/trainingService';
 import { Card } from '@mui/material';
 
+const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+
 describe('<ScheduledTrainingCard />', () => {
     context('When no schedule exists', () => {
         beforeEach(() => {
@@ -12,14 +14,15 @@ describe('<ScheduledTrainingCard />', () => {
             const deleteTrainingScheduleStub = cy.stub(
                 trainingService, 'deleteTrainingSchedule'
             ).as('deleteTrainingScheduleStub').resolves();
-            cy.mount(
+            cy.fullMount(
                 <Card>
                     <ScheduledTrainingCard
                         schedule={null}
                         createTrainingSchedule={createTrainingScheduleStub}
                         deleteTrainingSchedule={deleteTrainingScheduleStub}
                     />
-                </Card>
+                </Card>,
+                mountOpts
             );
         });
 
@@ -85,14 +88,15 @@ describe('<ScheduledTrainingCard />', () => {
             const deleteTrainingScheduleStub = cy.stub(
                 trainingService, 'deleteTrainingSchedule'
             ).as('deleteTrainingScheduleStub').resolves();
-            cy.mount(
+            cy.fullMount(
                 <Card>
                     <ScheduledTrainingCard
                         schedule={mockSchedule}
                         createTrainingSchedule={createTrainingScheduleStub}
                         deleteTrainingSchedule={deleteTrainingScheduleStub}
                     />
-                </Card>
+                </Card>,
+                mountOpts
             );
         });
 
