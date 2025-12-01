@@ -67,7 +67,7 @@ export const DocumentListItem = ({
 
         return () => clearInterval(intervalId);
 
-    }, [doc.id, doc.status, handleDocumentUpdate, session.access_token]);
+    }, [doc.id, doc.status, handleDocumentUpdate, session?.access_token]);
 
     return (
         <ListItem
