@@ -1,12 +1,7 @@
 import React from 'react';
 import { RedactionSidebar } from './RedactionSidebar';
 
-const truncateText = (text, maxLength = 23) => {
-    if (!text || text.length <= maxLength) {
-        return text;
-    }
-    return text.substring(0, maxLength) + '...';
-};
+const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
 
 describe('<RedactionSidebar />', () => {
     const mockRedactions = {
@@ -43,13 +38,13 @@ describe('<RedactionSidebar />', () => {
 
     it('renders empty state when no redactions are provided', () => {
         const emptyRedactions = { pending: [], accepted: [], rejected: [], manual: [] };
-        cy.mount(<RedactionSidebar {...baseProps} redactions={emptyRedactions} />);
+        cy.fullMount(<RedactionSidebar {...baseProps} redactions={emptyRedactions} />, mountOpts);
         cy.contains('No redactions or suggestions yet.').should('be.visible');
     });
 
     context('Rendering with redactions', () => {
         beforeEach(() => {
-            cy.mount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
         });
 
         it('renders all redaction sections with correct counts', () => {
@@ -104,7 +99,7 @@ describe('<RedactionSidebar />', () => {
 
     context('User Interactions', () => {
         beforeEach(() => {
-            cy.mount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
         });
 
         it('calls onAccept when "Accept" is clicked', () => {
@@ -132,7 +127,7 @@ describe('<RedactionSidebar />', () => {
 
     context('Change Type and Accept Menu', () => {
         beforeEach(() => {
-            cy.mount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
         });
 
         it('opens the menu and shows correct options', () => {
@@ -162,8 +157,9 @@ describe('<RedactionSidebar />', () => {
 
         it('expands the correct accordion and scrolls to the item', () => {
             const scrollIntoViewStub = cy.stub().as('scrollIntoView');
-            cy.mount(
-                <RedactionSidebar {...baseProps} redactions={mockRedactions} scrollToId="a1" />
+            cy.fullMount(
+                <RedactionSidebar {...baseProps} redactions={mockRedactions} scrollToId="a1" />,
+                mountOpts
             ).then(({ component, rerender }) => {
                 cy.contains('li', 'accepted text').then($el => {
                     $el[0].scrollIntoView = scrollIntoViewStub;
@@ -188,7 +184,7 @@ describe('<RedactionSidebar />', () => {
 
     context('Context Management', () => {
         beforeEach(() => {
-            cy.mount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
             // Set a larger viewport to prevent clipping issues in headless mode
             cy.viewport(1280, 720);
             cy.contains('accepted (2)').click();
