@@ -17,15 +17,15 @@ export const createCase = async (caseData, accessToken) => {
 export const getCase = async (caseId, accessToken) => {
 
     try {
-        const response = await apiClient.post(`/cases/${caseId}`, caseData, {
+        const response = await apiClient.get(`/cases/${caseId}`, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
             },
         });
         return response.data;
     } catch (error) {
-        console.error("Failed to create case:", error.response?.data || error.message);
-        throw new Error("Failed to create case. Please try again.");
+        console.error("Failed to get case:", error.response?.data || error.message);
+        throw new Error("Failed to get case. Please try again.");
     }
 };
 
