@@ -5,19 +5,21 @@ import { Typography } from "@mui/material";
 import { TrainingUpload } from "@/components/TrainingUpload";
 import { TrainingDocList } from "@/components/TrainingDocList";
 import { getTrainingDocs } from '@/services/trainingService';
+import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 export default function TrainingPage() {
+    const { data: session } = useSession();
     const [docs, setDocs] = useState([]);
 
     const fetchDocs = useCallback(async () => {
         try {
-            const data = await getTrainingDocs();
+            const data = await getTrainingDocs(session?.access_token);
             setDocs(data);
         } catch (error) {
             toast.error(error.message);
         }
-    }, []);
+    }, [session?.access_token]);
 
     useEffect(() => {
         fetchDocs();
