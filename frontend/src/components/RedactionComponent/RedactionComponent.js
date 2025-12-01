@@ -9,10 +9,11 @@ import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { markAsComplete } from '@/services/documentService'
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
-
+import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 export const RedactionComponent = ({ document, initialRedactions }) => {
+    const { data: session } = useSession();
     const [redactions, setRedactions] = useState(initialRedactions || []);
     const [currentDocument, setCurrentDocument] = useState(document);
     const [isLoading, setIsLoading] = useState(false);
@@ -36,14 +37,17 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         try {
-            const updatedRedaction = await updateRedaction(redactionId, { is_accepted: true });
+            const updatedRedaction = await updateRedaction(
+                redactionId, { is_accepted: true },
+                session?.access_token
+            );
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
         } catch (error) {
             toast.error("Failed to accept suggestion. Please try again.");
         }
-    }, []);
+    }, [session?.access_token]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         try {
@@ -53,7 +57,8 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     redaction_type: newType,
                     is_accepted: true,
                     is_suggestion: false   
-                });
+                }, session?.access_token
+            );
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
@@ -61,7 +66,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         } catch (error) {
             toast.error("Failed to change suggestion type. Please try again.");
         }
-    }, []);
+    }, [session?.access_token]);
 
     const handleOpenRejectDialog = useCallback((redaction) => {
         setRejectionTarget(redaction);
@@ -70,7 +75,11 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
     const handleRejectSuggestion = useCallback(async (redactionId, reason) => {
         try {
-            const updatedRedaction = await updateRedaction(redactionId, { is_accepted: false, justification: reason });
+            const updatedRedaction = await updateRedaction(
+                redactionId, 
+                { is_accepted: false, justification: reason },
+                session?.access_token
+            );
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
@@ -79,7 +88,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         } catch(error) {
             toast.error("Failed to reject suggestion. Please try again.");
         };
-    }, []);
+    }, [session?.access_token]);
 
     const handleRemoveRedaction = useCallback(async (redactionId) => {
         const redactionToRemove = redactions.find(r => r.id === redactionId);
@@ -88,7 +97,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         // If it was a user-created redaction, delete it from the server.
         if (!redactionToRemove.is_suggestion) {
             try {
-                await deleteRedaction(redactionId);
+                await deleteRedaction(redactionId, session?.access_token);
                 setRedactions(prev => prev.filter(r => r.id !== redactionId));
                 toast.success("Redaction deleted.");
             } catch (error) {
@@ -99,7 +108,11 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
         // If it was an AI suggestion (accepted or rejected), revert it to a pending suggestion.
         try {
-            const updatedRedaction = await updateRedaction(redactionId, { is_accepted: false, justification: null });
+            const updatedRedaction = await updateRedaction(
+                redactionId,
+                { is_accepted: false, justification: null },
+                session?.access_token
+            );
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
@@ -107,7 +120,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         } catch (error) {
             toast.error("Failed to revert suggestion. Please try again.");
         }
-    }, [redactions]);
+    }, [redactions, session?.access_token]);
 
     const handleTextSelect = useCallback((selection, range) => {
         setNewSelection(selection);
@@ -143,7 +156,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             is_accepted: true,
         };
         try {
-            const createdRedaction = await createRedaction(document.id, newRedaction);
+            const createdRedaction = await createRedaction(document.id, newRedaction, session?.access_token);
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
             toast.success("Redaction created successfully.");
@@ -153,7 +166,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             toast.error("Failed to create redaction. Please try again.");
         }
         
-    }, [newSelection, document.id, handleCloseManualRedactionPopover]);
+    }, [newSelection, document.id, handleCloseManualRedactionPopover, session?.access_token]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);
@@ -174,7 +187,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     const handleMarkAsComplete = useCallback(async () => {
         setIsLoading(true);
         try {
-            const updatedDocument = await markAsComplete(currentDocument.id);
+            const updatedDocument = await markAsComplete(currentDocument.id, session?.access_token);
             setCurrentDocument(updatedDocument);
             toast.success("Document is ready for disclosure.");
         } catch (error) {
@@ -182,7 +195,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [currentDocument.id]);
+    }, [currentDocument.id, session?.access_token]);
 
 
     const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);

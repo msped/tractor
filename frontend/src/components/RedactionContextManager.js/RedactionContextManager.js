@@ -8,11 +8,13 @@ import {
   IconButton,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { useSession } from 'next-auth/react';
 import { toast } from 'react-hot-toast';
-import { updateRedactionContext, deleteRedactionContent } from '@/services/redactionService';
+import { updateRedactionContext, deleteRedactionContext } from '@/services/redactionService';
 
 
-export const RedactionContextManager = ({ redactionId, context, isEditing, onCancel, onContextSave }) =>{
+export const RedactionContextManager = ({ redactionId, context, isEditing, onCancel, onContextSave }) => {
+  const { data: session } = useSession();
   const [contextText, setContextText] = useState(context?.text || '');
   const [initialText, setInitialText] = useState(context?.text || '');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,7 +24,11 @@ export const RedactionContextManager = ({ redactionId, context, isEditing, onCan
     setIsLoading(true);
     setError(null);
     try {
-      const updatedContext = await updateRedactionContext(redactionId, { text: contextText });
+      const updatedContext = await updateRedactionContext(
+        redactionId,
+        { text: contextText },
+        session?.access_token
+      );
       setInitialText(contextText);
       toast.success('Context saved successfully.');
       onContextSave(redactionId, updatedContext.text);
@@ -38,7 +44,7 @@ export const RedactionContextManager = ({ redactionId, context, isEditing, onCan
   const handleDeleteContext = () => {
     setIsLoading(true);
     setError(null);
-    deleteRedactionContent(redactionId)
+    deleteRedactionContext(redactionId, session?.access_token)
       .then(() => {
         setContextText('');
         setInitialText('');

@@ -10,9 +10,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { CaseInformation } from '@/components/CaseInformation';
 import { CaseDocuments } from '@/components/CaseDocuments';
 import { CaseExportManager } from '@/components/CaseExportManager';
-import apiClient from '@/api/apiClient';
-
-const fetcher = (url, token) => apiClient.get(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.data);
 
 export const CaseDetailClientPage = ({ initialCaseData }) => {
     const { data: session } = useSession();
@@ -21,7 +18,7 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
     // Use SWR for data fetching and automatic revalidation
     const { data: caseData, mutate } = useSWR(
         session ? [`/cases/${caseId}`, session.access_token] : null,
-        ([url, token]) => fetcher(url, token),
+        ([url, token]) => getCase(caseId, token),
         {
             fallbackData: initialCaseData,
             // Set up polling interval ONLY if the export is processing
