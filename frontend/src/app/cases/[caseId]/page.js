@@ -1,9 +1,9 @@
 import React from 'react'
-import apiClient from '@/api/apiClient';
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { Box, Alert } from '@mui/material';
 import { CaseDetailClientPage } from '@/components/CaseDetailClientPage';
+import { getCase } from '@/services/caseService';
 
 export default async function page({ params }) {
     const { caseId } = await params;
@@ -17,12 +17,8 @@ export default async function page({ params }) {
     let fetchError = null;
 
     try {
-        const caseResponse = await apiClient.get(`cases/${caseId}`, {
-            headers: {
-                Authorization: `Bearer ${session.access_token}`,
-            },
-        });
-        initialCaseData = caseResponse.data;
+        const caseResponse = await getCase(caseId, session.access_token);
+        initialCaseData = caseResponse;
     } catch (error) {
         if (error.response?.status === 401) {
             redirect('/');
