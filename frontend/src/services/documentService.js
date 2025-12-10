@@ -38,7 +38,7 @@ export const uploadDocuments = async (caseId, formData, accessToken) => {
 
 export const deleteDocument = async (docId, accessToken) => {
     try {
-        const response = apiClient.delete(`/cases/documents/${docId}`, {
+        const response = await apiClient.delete(`/cases/documents/${docId}`, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
             },
