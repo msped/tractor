@@ -10,6 +10,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { CaseInformation } from '@/components/CaseInformation';
 import { CaseDocuments } from '@/components/CaseDocuments';
 import { CaseExportManager } from '@/components/CaseExportManager';
+import { getCase } from '@/services/caseService';
 
 export const CaseDetailClientPage = ({ initialCaseData }) => {
     const { data: session } = useSession();
@@ -25,6 +26,10 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
             refreshInterval: (data) => (data?.export_status === 'PROCESSING' ? 5000 : 0),
         }
     );
+
+    const handleMutate = React.useCallback(async () => {
+        if (mutate) await mutate();
+    }, [mutate]);
 
     if (!caseData) {
         return <Container sx={{ textAlign: 'center', mt: 5 }}><CircularProgress /></Container>;
@@ -45,13 +50,13 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
                     >
                         Back to Cases
                     </Button>
-                    <CaseExportManager caseData={caseData} onUpdate={mutate} />
+                    <CaseExportManager caseData={caseData} onUpdate={handleMutate} />
                 </Box>
-                <CaseInformation caseObject={caseData} onUpdate={mutate} />
+                <CaseInformation caseObject={caseData} onUpdate={handleMutate} />
                 <CaseDocuments
                     caseId={caseData.id}
                     documents={caseData.documents}
-                    onUpdate={mutate}
+                    onUpdate={handleMutate}
                     isCaseFinalised={isCaseFinalised}
                 />
             </Stack>
