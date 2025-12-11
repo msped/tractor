@@ -1,10 +1,6 @@
-"use server"
-
 import apiClient from '@/api/apiClient';
-import { auth } from '@/auth';
 
-export const createRedaction = async (documentId, createData) => {
-    const session = await auth();
+export const createRedaction = async (documentId, createData, accessToken) => {
 
     try {
         const response = await apiClient.post(
@@ -12,7 +8,7 @@ export const createRedaction = async (documentId, createData) => {
             createData,
             {
                 headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                 },
             }
         );
@@ -26,8 +22,7 @@ export const createRedaction = async (documentId, createData) => {
     }
 };
 
-export const updateRedaction = async (redactionId, updateData) => {
-    const session = await auth();
+export const updateRedaction = async (redactionId, updateData, accessToken) => {
 
     try {
         const response = await apiClient.patch(
@@ -35,7 +30,7 @@ export const updateRedaction = async (redactionId, updateData) => {
             updateData,
             {
                 headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                 },
             }
         );
@@ -49,15 +44,14 @@ export const updateRedaction = async (redactionId, updateData) => {
     }
 };
 
-export const deleteRedaction = async (redactionId) => {
-    const session = await auth();
+export const deleteRedaction = async (redactionId, accessToken) => {
 
     try {
         const response = await apiClient.delete(
             `cases/document/redaction/${redactionId}`,
             {
                 headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                 },
             }
         );
@@ -72,8 +66,7 @@ export const deleteRedaction = async (redactionId) => {
     }
 };
 
-export const updateRedactionContext = async (redactionId, contextData) => {
-    const session = await auth();
+export const updateRedactionContext = async (redactionId, contextData, accessToken) => {
 
     try {
         const response = await apiClient.post(
@@ -81,7 +74,7 @@ export const updateRedactionContext = async (redactionId, contextData) => {
             contextData,
             {
                 headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                 },
             }
         );
@@ -95,15 +88,14 @@ export const updateRedactionContext = async (redactionId, contextData) => {
     }
 };
 
-export const deleteRedactionContent = async (redactionId) => {
-    const session = await auth();
+export const deleteRedactionContext = async (redactionId, accessToken) => {
 
     try {
         const response = await apiClient.delete(
             `cases/document/redaction/${redactionId}/context`,
             {
                 headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
+                    'Authorization': `Bearer ${accessToken}`,
                 },
             }
         );

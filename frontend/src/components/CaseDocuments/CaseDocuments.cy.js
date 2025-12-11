@@ -1,6 +1,6 @@
 import React from 'react';
 import { CaseDocuments } from './CaseDocuments';
-import apiClient from '@/api/apiClient';
+import * as documentService from '@/services/documentService';
 
 describe('<CaseDocuments />', () => {
   const caseId = 'case-1';
@@ -131,122 +131,122 @@ describe('<CaseDocuments />', () => {
     });
   });
 
-  it('allows renaming a file before upload', () => {
-    const onUpdate = cy.stub().as('onUpdate');
-    const postStub = cy.stub(apiClient, 'post').resolves({
-        body: {
-            id: 'doc-123',
-            filename: 'new-cool-name.pdf',
-            file_type: 'pdf',
-            uploaded_at: new Date().toISOString(),
-            status: 'Processing'
-        }
-    }).as('postApi');
-
-    cy.fullMount(
-        <CaseDocuments caseId={caseId} documents={[]} onUpdate={onUpdate} isCaseFinalised={false} />,
-        mountOpts
-    );
-
-    cy.contains('button', 'Upload Document').click();
-
-    cy.window().then((win) => {
-      const file = new win.File(['content'], 'original-name.pdf', { type: 'application/pdf' });
-      const dt = new win.DataTransfer();
-      dt.items.add(file);
-      cy.get('#file-upload-input').then($input => {
-        $input[0].files = dt.files;
-        cy.wrap($input).trigger('change', { force: true });
-      });
-    });
-    
-    cy.contains('li', 'original-name.pdf').within(() => {
-        cy.get('input[value="original-name"]').clear().type('new-cool-name');
+  context('User Interactions with API calls', () => {
+    beforeEach(() => {
+      cy.intercept('GET', `/api/cases/documents/*`).as('getDocumentRequest');
     });
 
-    cy.get('[role="dialog"]').contains('button', 'Upload').click();
-
-    cy.get('@postApi').its('firstCall.args.1').invoke('get', 'original_file').its('name').should('eq', 'new-cool-name.pdf');
-  });
-
-  it('uploads files successfully and calls onUpdate', () => {
-    const onUpdate = cy.stub().as('onUpdate');
-    const postStub = cy.stub(apiClient, 'post').resolves({}).as('postApi');
-
-    cy.fullMount(
-        <CaseDocuments caseId={caseId} documents={[]} onUpdate={onUpdate} isCaseFinalised={false} />,
-        mountOpts
-    );
-
-    cy.contains('button', 'Upload Document').click();
-
-    cy.window().then((win) => {
-      const file = new win.File(['content'], 'upload.pdf', { type: 'application/pdf' });
-      const dt = new win.DataTransfer();
-      dt.items.add(file);
-      cy.get('#file-upload-input').then($input => {
-        $input[0].files = dt.files;
-        cy.wrap($input).trigger('change', { force: true });
-      });
+    it('uploads files successfully and calls onUpdate', () => {
+      cy.intercept('POST', `/api/cases/${caseId}/documents`, {
+        statusCode: 201, body: [
+          {
+            "id": "fea19d1a-61b5-4850-a75d-6cbb6081a90a",
+            "original_file": "original_file.pdf",
+            "filename": "new-cool-name",
+            "file_type": ".docx",
+            "status": "Processing",
+            "extracted_text": null,
+            "uploaded_at": "2025-12-03T21:33:55.651034Z",
+            "redactions": []
+          }
+        ]
+      }).as('uploadRequest');
+      const onUpdate = cy.stub().as('onUpdate');
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={onUpdate} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.contains('button', 'Upload Document').click();
+      cy.get('#file-upload-input').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'upload.pdf' }, { force: true });
       cy.get('[role="dialog"]').contains('button', 'Upload').click();
+
+      cy.wait('@uploadRequest');
+      cy.get('@onUpdate').should('have.been.calledOnce');
+      cy.contains('Documents uploaded successfully.').should('be.visible');
     });
 
+    it('shows upload error toast when service rejects with detail', () => {
+      cy.intercept('POST', `/api/cases/${caseId}/documents`, { statusCode: 500, body: { detail: 'Server is on fire' } }).as('uploadRequest');
 
-    cy.get('@postApi').should('have.been.calledOnce');
-    cy.get('@onUpdate').should('have.been.calledOnce');
-    cy.contains('Documents uploaded successfully.').should('be.visible');
-  });
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.contains('button', 'Upload Document').click({ force: true });
+      cy.get('#file-upload-input').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'big.pdf' }, { force: true });
+      cy.get('[role="dialog"]').contains('button', 'Upload').click();
 
-  it('shows upload error toast when apiClient.post rejects with detail', () => {
-    const err = { response: { data: { detail: 'File too large' } } };
-    cy.stub(apiClient, 'post').rejects(err).as('postErr');
+      cy.wait('@uploadRequest');
+      cy.contains('Failed to upload document(s): Server is on fire').should('be.visible');
+    });
 
-    cy.fullMount(
-        <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+    it('deletes a document successfully and calls onUpdate', () => {
+      cy.intercept('DELETE', '/api/cases/documents/*', { statusCode: 204 }).as('deleteRequest');
+      const onUpdate = cy.stub().as('onUpdate');
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={docs} onUpdate={onUpdate} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.get('li').first().find('button[aria-label="delete"]').click();
+
+      cy.wait('@deleteRequest');
+      cy.get('@onUpdate').should('have.been.calledOnce');
+      cy.contains('Document deleted.').should('be.visible');
+    });
+
+    it('shows delete error toast when service rejects', () => {
+      cy.intercept('DELETE', '/api/cases/documents/*', { statusCode: 500 }).as('deleteRequest');
+      
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.get('li').last().find('button[aria-label="delete"]').click();
+
+      cy.contains('Failed to delete document. Please try again.').should('be.visible');
+    });
+
+    it('allows renaming a file before upload', () => {
+      cy.intercept('POST', `/api/cases/${caseId}/documents`, {
+        statusCode: 201, body: [
+          {
+            "id": "fea19d1a-61b5-4850-a75d-6cbb6081a90a",
+            "original_file": "original_file.pdf",
+            "filename": "new-cool-name",
+            "file_type": ".docx",
+            "status": "Processing",
+            "extracted_text": null,
+            "uploaded_at": "2025-12-03T21:33:55.651034Z",
+            "redactions": []
+          }
+        ]
+      }).as('uploadRequest');
+      const onUpdate = cy.stub().as('onUpdate');
+      cy.fullMount(
+        <CaseDocuments caseId={caseId} documents={[]} onUpdate={onUpdate} isCaseFinalised={false} />,
         mountOpts
-    );
+      );
 
-    cy.contains('button', 'Upload Document').click();
+      cy.contains('button', 'Upload Document').click();
 
-    cy.window().then((win) => {
-      const file = new win.File(['x'], 'big.pdf', { type: 'application/pdf' });
-      const dt = new win.DataTransfer();
-      dt.items.add(file);
-      cy.get('#file-upload-input').then($input => {
-        $input[0].files = dt.files;
-        cy.wrap($input).trigger('change', { force: true });
+      cy.get('#file-upload-input').selectFile({
+        contents: Cypress.Buffer.from('file content'),
+        fileName: 'original-name.pdf',
+        mimeType: 'application/pdf'
+      }, { force: true });
+      
+      cy.contains('li', 'original-name.pdf').within(() => {
+        cy.get('input[value="original-name"]').clear().type('new-cool-name');
+      });
+
+      cy.get('[role="dialog"]').contains('button', 'Upload').click();
+      
+      cy.wait('@uploadRequest').then((interception) => {
+        cy.get('@onUpdate').should('have.been.calledOnce');
+        cy.wrap(interception.request.body)
+          .should('contain', 'filename="new-cool-name.pdf"')
+          .and('contain', 'name="original_file"');
       });
     });
-
-    cy.get('[role="dialog"]').contains('button', 'Upload').click();
-    cy.contains('Upload failed: File too large').should('be.visible');
-  });
-
-  it('deletes a document successfully and calls onUpdate', () => {
-    const onUpdate = cy.stub().as('onUpdate');
-    cy.stub(apiClient, 'delete').resolves({}).as('deleteApi');
-
-    cy.fullMount(
-        <CaseDocuments caseId={caseId} documents={docs} onUpdate={onUpdate} isCaseFinalised={false} />,
-        mountOpts
-    );
-    cy.get('li').first().find('button[aria-label="delete"]').click();
-
-    cy.get('@deleteApi').should('have.been.calledOnce');
-    cy.get('@onUpdate').should('have.been.calledOnce');
-    cy.contains('Document deleted.').should('be.visible');
-  });
-
-  it('shows delete error toast when apiClient.delete rejects', () => {
-    cy.stub(apiClient, 'delete').rejects(new Error('nope')).as('deleteErr');
-
-    cy.fullMount(
-        <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
-        mountOpts
-    );
-
-    cy.get('li').last().find('button[aria-label="delete"]').click();
-
-    cy.contains('Failed to delete document. Please try again.').should('be.visible');
   });
 });

@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import apiClient from '@/api/apiClient';
+import { deleteCase, updateCase } from '@/services/caseService';
 import toast from 'react-hot-toast';
 
 const formatDate = (dateString) => {
@@ -102,11 +102,7 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
         if (!editableCase || !session) return;
 
         try {
-            await apiClient.patch(`/cases/${caseObject.id}`, editableCase, {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                },
-            });
+            await updateCase(caseObject.id, editableCase, session?.access_token);
             handleCloseEditDialog();
             toast.success('Case updated.');
             if (onUpdate) onUpdate(); else router.refresh();
@@ -121,11 +117,7 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
 
         const toastId = toast.loading(`Updating status...`);
         try {
-            await apiClient.patch(`/cases/${caseObject.id}`, { status: newStatus }, {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                },
-            });
+            await updateCase(caseObject.id, { status: newStatus }, session?.access_token);
             toast.success('Case status updated.', { id: toastId });
             if (onUpdate) onUpdate();
         } catch (error) {
@@ -137,11 +129,8 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
         if (!caseObject || !session) return;
 
         try {
-            await apiClient.delete(`/cases/${caseObject.id}`, {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                },
-            });
+            await deleteCase(caseObject.id, session?.access_token);
+            handleCloseEditDialog();
             router.push('/cases');
             toast.success('Case deleted.');
         } catch (error) {

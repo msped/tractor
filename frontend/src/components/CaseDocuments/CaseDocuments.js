@@ -25,7 +25,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import apiClient from '@/api/apiClient';
+import { uploadDocuments, deleteDocument } from '@/services/documentService';
 import { DocumentListItem } from '@/components/DocumentListItem';
 import toast from 'react-hot-toast';
 
@@ -102,13 +102,9 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         if (!caseId) return;
 
         try {
-            await apiClient.delete(`/cases/documents/${docId}`, {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                },
-            });
-            if (onUpdate) onUpdate();
+            await deleteDocument(docId, session?.access_token);
             toast.success('Document deleted.');
+            if (onUpdate) await onUpdate();
         } catch (error) {
             toast.error('Failed to delete document. Please try again.');
         }
@@ -126,22 +122,12 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         });
 
         try {
-            const response = await apiClient.post(`/cases/${caseId}/documents`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    'Authorization': `Bearer ${session.access_token}`,
-                },
-            });
-            if (onUpdate) onUpdate();
-            toast.success('Documents uploaded successfully.');
-        } catch (error) {
-            if (error.response && error.response.data) {
-                toast.error(`Upload failed: ${error.response.data.detail || 'Unknown error'}`);
-            } else {
-                toast.error('Failed to upload documents. Please try again.');
-            }
-        } finally {
+            await uploadDocuments(caseId, formData, session?.access_token);
             handleCloseDialog();
+            toast.success('Documents uploaded successfully.');
+            if (onUpdate) await onUpdate();
+        } catch (error) {
+            toast.error(error.message || 'Failed to upload documents. Please try again.');
         }
     };
 
@@ -197,7 +183,10 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
                         type="file"
                         hidden
                         multiple
-                        onChange={(e) => handleFilesSelected(e.target.files)}
+                        onChange={(e) => {
+                            handleFilesSelected(e.target.files)
+                            e.target.value = null;
+                        }}
                     />
                     <Button
                         fullWidth

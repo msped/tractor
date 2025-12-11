@@ -12,8 +12,11 @@ import {
     Alert
 } from '@mui/material';
 import { createCase } from '@/services/caseService';
+import { useSession } from "next-auth/react"
 
 export default function NewCasePage() {
+    const { data: session } = useSession();
+
     const router = useRouter();
     const [caseReference, setCaseReference] = useState('');
     const [dataSubjectName, setDataSubjectName] = useState('');
@@ -33,7 +36,7 @@ export default function NewCasePage() {
         };
 
         try {
-            const newCase = await createCase(caseData);
+            const newCase = await createCase(caseData, session.access_token);
             // Redirect to the new case's detail page on success
             router.push(`/cases/${newCase.id}`);
         } catch (e) {

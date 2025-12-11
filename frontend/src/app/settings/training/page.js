@@ -3,14 +3,16 @@ import { Typography, Grid, Card, CardContent, Button, Box } from "@mui/material"
 import { ScheduledTrainingCard } from '@/components/ScheduleTrainingCard';
 import { TrainingRunList } from '@/components/TrainingRunList';
 import { getTrainingSchedules, getTrainingRuns } from '@/services/trainingService';
+import { auth } from "@/auth";
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
 
 export default async function TrainingPage() {
+    const session = await auth();
     let schedule = null, runs = [], error = null;
     try {
         [schedule, runs] = await Promise.all([
-            getTrainingSchedules(),
-            getTrainingRuns()
+            getTrainingSchedules(session?.access_token),
+            getTrainingRuns(session?.access_token)
         ]);
     } catch (e) {
         error = e.message;

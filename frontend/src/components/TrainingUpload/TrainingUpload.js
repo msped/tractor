@@ -4,9 +4,11 @@ import React, { useState, useRef } from 'react';
 import { Box, Button, Typography, Paper } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { uploadTrainingDoc, runManualTraining } from '@/services/trainingService';
+import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast';
 
 export const TrainingUpload = ({ unprocessedDocsCount }) => {
+    const { data: session } = useSession();
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef(null);
 
@@ -25,7 +27,7 @@ export const TrainingUpload = ({ unprocessedDocsCount }) => {
         }
 
         const toastId = toast.loading(`Uploading ${docxFiles.length} document(s)...`);
-        const uploadPromises = docxFiles.map(file => uploadTrainingDoc(file));
+        const uploadPromises = docxFiles.map(file => uploadTrainingDoc(file, session?.access_token));
 
         try {
             await Promise.all(uploadPromises);
@@ -51,7 +53,7 @@ export const TrainingUpload = ({ unprocessedDocsCount }) => {
     const handleRunTraining = async () => {
         const toastId = toast.loading("Starting training process...");
         try {
-            const response = await runManualTraining();
+            const response = await runManualTraining(session?.access_token);
             toast.success(`Training started on ${response.documents} documents.`, { id: toastId });
         } catch (error) {
             toast.error(error.message, { id: toastId });
@@ -92,6 +94,7 @@ export const TrainingUpload = ({ unprocessedDocsCount }) => {
                     type="file"
                     hidden
                     accept=".docx"
+                    multiple
                     onChange={(e) => handleFilesSelected(e.target.files)}
                 />
                 <Box sx={{ pointerEvents: 'none', textAlign: 'center' }}>

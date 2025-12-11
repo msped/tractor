@@ -16,19 +16,25 @@ import {
     Card,
     CardContent,
 } from '@mui/material';
+import { useSession } from 'next-auth/react';
 import { getModels, setActiveModel } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
-const modelsFetcher = () => getModels();
-
 export const ModelManagementCard = () => {
-    const { data: models, error, isLoading, mutate } = useSWR('models', modelsFetcher);
+    const { data: session } = useSession();
+    const { data: models, error, isLoading, mutate } = useSWR(
+        // The key: if access_token is null, SWR will not fetch.
+        session?.access_token ? ['models', session.access_token] : null,
+        // The fetcher: receives the key as arguments.
+        ([key, token]) => getModels(token)
+    );
     const [isSubmitting, setIsSubmitting] = useState(null);
 
     const handleSetActive = async (modelId) => {
         setIsSubmitting(modelId);
         try {
-            await setActiveModel(modelId);
+            // Pass the access token to the service function
+            await setActiveModel(modelId, session?.access_token);
             toast.success('Model activated successfully!');
             await mutate();
         } catch (e) {
@@ -57,7 +63,12 @@ export const ModelManagementCard = () => {
                                     disablePadding
                                     secondaryAction={
                                         <Box sx={{ display: 'flex', gap: 1 }}>
-                                            <Button variant="contained" onClick={() => handleSetActive(model.id)} disabled={model.is_active || isSubmitting !== null} size="small">
+                                            <Button
+                                                variant="contained"
+                                                onClick={() => handleSetActive(model.id)}
+                                                disabled={model.is_active || isSubmitting !== null || !session?.access_token}
+                                                size="small"
+                                            >
                                                 {isSubmitting === model.id ? <CircularProgress color="inherit" size={20} /> : 'Set Active'}
                                             </Button>
                                         </Box>
