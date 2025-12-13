@@ -25,7 +25,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { uploadDocuments, deleteDocument } from '@/services/documentService';
+import { uploadDocuments, deleteDocument, resubmitDocument } from '@/services/documentService';
 import { DocumentListItem } from '@/components/DocumentListItem';
 import toast from 'react-hot-toast';
 
@@ -110,6 +110,17 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         }
     };
 
+    const handleResubmitDocument = async (docId) => {
+        if (!caseId) return;
+
+        try {
+            await resubmitDocument(docId, session?.access_token);
+            toast.success('Document resubmitted for processing.');
+            if (onUpdate) await onUpdate();
+        } catch (error) {
+            toast.error('Failed to resubmit document. Please try again.');
+        }
+    };
 
     const handleUpload = async () => {
         if (selectedFiles.length === 0 || !caseId) return;
@@ -161,6 +172,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
                                     doc={doc}
                                     caseId={caseId}
                                     onDelete={handleDeleteDocument}
+                                    onResubmit={handleResubmitDocument}
                                     handleDocumentUpdate={onUpdate}
                                     isCaseFinalised={isCaseFinalised}
                                 />

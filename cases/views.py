@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from django_q.tasks import async_task
 
 from .models import Case, Document, Redaction, RedactionContext
 from .serializers import (
@@ -118,6 +119,29 @@ class DocumentDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = DocumentSerializer
     lookup_field = 'id'
     lookup_url_kwarg = 'document_id'
+
+
+class DocumentResubmitView(APIView):
+    """
+    API view to resubmit a document for processing.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, document_id, *args, **kwargs):
+        document = get_object_or_404(Document, id=document_id)
+        if document.status in [Document.Status.ERROR]:
+            document.status = Document.Status.PROCESSING
+            document.save(update_fields=['status'])
+            async_task(
+                'cases.services.process_document_and_create_redactions',
+                document.id
+            )
+            return Response(
+                status=status.HTTP_200_OK
+            )
+        return Response(
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class DocumentReviewView(RetrieveAPIView):

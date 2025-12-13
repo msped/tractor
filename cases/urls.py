@@ -9,6 +9,7 @@ from .views import (
     CaseExportView,
     RedactionDetailView,
     RedactionContextView,
+    DocumentResubmitView,
 )
 
 urlpatterns = [
@@ -23,16 +24,23 @@ urlpatterns = [
         DocumentDetailView.as_view(),
         name='document-detail'
     ),
+    path('cases/documents/<uuid:document_id>/resubmit',
+         DocumentResubmitView.as_view(),
+         name='document-resubmit',
+         ),
     path('cases/<uuid:case_id>/document/<uuid:document_id>/review',
          DocumentReviewView.as_view(),
          name='document-review',
          ),
     path('cases/document/<uuid:document_id>/redaction',
          RedactionListCreateView.as_view(),
-         name='redaction-list-create'),
+         name='redaction-list-create'
+         ),
     path('cases/document/redaction/<uuid:pk>',
-         RedactionDetailView.as_view(), name='redaction-detail'),
+         RedactionDetailView.as_view(), name='redaction-detail'
+         ),
     path('cases/document/redaction/<uuid:redaction_id>/context',
          RedactionContextView.as_view(),
-         name='redaction-context'),
+         name='redaction-context'
+         ),
 ]

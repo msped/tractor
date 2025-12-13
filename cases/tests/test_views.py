@@ -344,6 +344,49 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertFalse(RedactionContext.objects.filter(
             redaction=self.redaction).exists())
 
+    @patch("cases.views.async_task")
+    def test_resubmit_document_success(self, mock_async_task):
+        """Test resubmitting a document in ERROR status."""
+        self.document.status = Document.Status.ERROR
+        self.document.save()
+
+        url = reverse("document-resubmit",
+                      kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, Document.Status.PROCESSING)
+        mock_async_task.assert_called_once_with(
+            'cases.services.process_document_and_create_redactions',
+            self.document.id
+        )
+
+    @patch("cases.views.async_task")
+    def test_resubmit_document_wrong_status(self, mock_async_task):
+        """Test resubmitting a document not in ERROR status fails."""
+        self.document.status = Document.Status.READY_FOR_REVIEW
+        self.document.save()
+
+        url = reverse("document-resubmit",
+                      kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status,
+                         Document.Status.READY_FOR_REVIEW)
+        mock_async_task.assert_not_called()
+
+    def test_resubmit_document_not_found(self):
+        """Test resubmitting a non-existent document returns 404."""
+        non_existent_uuid = uuid.uuid4()
+        url = reverse("document-resubmit",
+                      kwargs={"document_id": non_existent_uuid})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_unauthenticated_access_fails(self):
         """Test that unauthenticated users receive a 403 Forbidden error for
         all views."""
@@ -379,6 +422,12 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
                 "method": "get",
                 "kwargs": {
                     "pk": self.redaction.id
+                }
+            },
+            "document-resubmit": {
+                "method": "post",
+                "kwargs": {
+                    "document_id": self.document.id
                 }
             }
         }
