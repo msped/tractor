@@ -123,7 +123,7 @@ The application should now be running locally at `http://localhost:3000`.
 
 #### WeasyPrint Issue
 
-If you get an error like cannot load library 'xxx': error xxx, it means that WeasyPrint can’t find this library. On macOS, you can set the DYLD_FALLBACK_LIBRARY_PATH environment variable:
+If you get an error like cannot load library 'xxx': error xxx, it means that WeasyPrint can’t find this library. On macOS, you can set the DYLD_FALLBACK_LIBRARY_PATH environment variable [See more](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#troubleshooting):
 
 `export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH`
 
