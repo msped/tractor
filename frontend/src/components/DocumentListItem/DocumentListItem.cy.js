@@ -100,34 +100,30 @@ describe('<DocumentListItem />', () => {
             cy.clock();
         });
 
-        // it.only('polls for status and calls update when status changes from "Processing"', () => {
-        //     const processingDoc = { ...baseDoc, status: 'Processing' };
-        //     const updatedDoc = { ...baseDoc, status: 'Ready for Review' };
-        //     const handleUpdate = cy.stub().as('handleUpdateStub');
+        it('polls for status and calls update when status changes from "Processing"', () => {
+            const processingDoc = { ...baseDoc, status: 'Processing' };
+            const updatedDoc = { ...baseDoc, status: 'Ready for Review' };
+            const handleUpdate = cy.stub().as('handleUpdateStub');
 
-        //     cy.stub(documentService, 'getDocument').callsFake((...args) => { 
-        //         console.log('documentService called with ', args);
-        //         return Promise.resolve(updatedDoc);
-        //     }).as('getDocumentStub');
+            cy.intercept('GET', `/api/cases/documents/${processingDoc.id}`, {status: 200, body: updatedDoc }).as('getDocumentStub');
 
-        //     cy.fullMount(
-        //         <DocumentListItem doc={processingDoc} caseId={caseId} onDelete={() => {}} handleDocumentUpdate={handleUpdate} isCaseFinalised={false} />,
-        //         mountOpts
-        //     );
+            cy.fullMount(
+                <DocumentListItem
+                    doc={processingDoc}
+                    caseId={caseId}
+                    onDelete={() => {}}
+                    handleDocumentUpdate={handleUpdate}
+                    isCaseFinalised={false}
+                />,
+                mountOpts
+            );
 
-        //     cy.get('@getDocumentStub').should('not.have.been.called');
+            cy.contains('Processing').should('be.visible');
 
-        //     cy.tick(5000);
-            
-        //     cy.then(() => {
-        //         // cy.get('@getDocumentStub').should('have.been.calledOnceWith', processingDoc.id);
-        //         cy.get('@getDocumentStub').should('have.been.calledOnce');
-        //     })
-        //     // cy.get('@handleUpdateStub').should('have.been.calledOnce');
+            cy.tick(5000);
 
-        //     // cy.tick(5000);
-        //     // cy.get('@getDocumentStub').should('have.been.calledOnce');
-        // });
+            cy.get('@handleUpdateStub').should('have.been.calledOnce');
+        });
 
         it('does not poll if status is not "Processing"', () => {
             const handleUpdate = cy.stub().as('handleUpdateStub');
@@ -140,6 +136,34 @@ describe('<DocumentListItem />', () => {
 
             cy.tick(10000);
             cy.get('@getDocumentStub').should('not.have.been.called');
+        });
+    });
+
+    context('Resubmission handling', () => {
+        it('shows "Resubmit" button for "Error" status and calls onResubmit when clicked', () => {
+            const resubmitDoc = { ...baseDoc, status: 'Error' };
+            const onResubmit = cy.stub().as('onResubmitStub');
+
+            cy.fullMount(
+                <DocumentListItem doc={resubmitDoc} caseId={caseId} onDelete={() => {}} onResubmit={onResubmit} handleDocumentUpdate={() => {}} isCaseFinalised={false} />,
+                mountOpts
+            );
+
+            cy.get('button[aria-label="resubmit"]')
+                .should('be.visible')
+                .click();
+
+            cy.get('@onResubmitStub').should('have.been.calledOnceWith', resubmitDoc.id);
+        });
+
+        it('disables the resubmit button when the case is finalised', () => {
+            const resubmitDoc = { ...baseDoc, status: 'Error' };
+            cy.fullMount(
+                <DocumentListItem doc={resubmitDoc} caseId={caseId} onDelete={() => {}} onResubmit={() => {}} handleDocumentUpdate={() => {}} isCaseFinalised={true} />,
+                mountOpts
+            );
+
+            cy.get('button[aria-label="resubmit"]').should('be.disabled');
         });
     });
 });

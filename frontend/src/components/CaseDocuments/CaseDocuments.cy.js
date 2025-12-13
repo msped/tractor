@@ -19,6 +19,13 @@ describe('<CaseDocuments />', () => {
       uploaded_at_at: '2024-05-21T12:30:00Z',
       status: 'Ready for Review'
     },
+    {
+      id: 'doc-3',
+      filename: 'document_gamma.pdf',
+      file_type: 'pdf',
+      uploaded_at: '2024-05-22T15:45:00Z',
+      status: 'Error'
+    }
   ];
 
   const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
@@ -248,5 +255,38 @@ describe('<CaseDocuments />', () => {
           .and('contain', 'name="original_file"');
       });
     });
+
+    context('Re-submit document for processing', () => {
+      it('resubmits a document successfully and calls onUpdate', () => {
+        cy.intercept('POST', '/api/cases/documents/*/resubmit', { statusCode: 200 }).as('resubmitRequest');
+        const onUpdate = cy.stub().as('onUpdate');
+        cy.fullMount(
+            <CaseDocuments caseId={caseId} documents={docs} onUpdate={onUpdate} isCaseFinalised={false} />,
+            mountOpts
+        );
+        cy.contains('li', 'document_gamma.pdf').within(() => {
+          cy.get('button[aria-label="resubmit"]').click();
+        });
+
+        cy.wait('@resubmitRequest');
+        cy.get('@onUpdate').should('have.been.calledOnce');
+        cy.contains('Document resubmitted for processing.').should('be.visible');
+      });
+
+      it('shows resubmit error toast when service rejects', () => {
+        cy.intercept('POST', '/api/cases/documents/*/resubmit', { statusCode: 500 }).as('resubmitRequest');
+        
+        cy.fullMount(
+            <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
+            mountOpts
+        );
+        cy.contains('li', 'document_gamma.pdf').within(() => {
+          cy.get('button[aria-label="resubmit"]').click();
+        });
+
+        cy.wait('@resubmitRequest');
+        cy.contains('Failed to resubmit document. Please try again.').should('be.visible');
+      });
+    })
   });
 });
