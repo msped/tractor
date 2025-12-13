@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import ArticleIcon from '@mui/icons-material/Article';
 import DeleteIcon from '@mui/icons-material/Delete';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import NextLink from 'next/link';
 import { useSession } from 'next-auth/react';
 
@@ -38,6 +39,7 @@ export const DocumentListItem = ({
     doc,
     caseId,
     onDelete,
+    onResubmit,
     handleDocumentUpdate,
     isCaseFinalised 
 }) => {
@@ -48,13 +50,13 @@ export const DocumentListItem = ({
     // Once the status is no longer 'Processing', it calls the parent's update function
     // and stops its own polling.
     useEffect(() => {
-        if (doc.status !== 'Processing') {
+        if (doc.status !== 'Processing' || !session?.access_token) {
             return;
         }
 
         const intervalId = setInterval(async () => {
             try {
-                const updatedDoc = await getDocument(doc.id, session.access_token);
+                const updatedDoc = await getDocument(doc.id, session?.access_token);
                 if (updatedDoc.status !== 'Processing') {
                     clearInterval(intervalId);
                     handleDocumentUpdate();
@@ -92,6 +94,15 @@ export const DocumentListItem = ({
                         >
                             Open
                         </Button>
+                    )}
+                    {doc.status === 'Error' && (
+                        <Tooltip title={isCaseFinalised || doc.status !== 'Error' ? "Cannot re-submit document." : "Re-submit document for processing"}>
+                            <span>
+                                <IconButton aria-label="resubmit" onClick={() => onResubmit(doc.id)} disabled={isCaseFinalised || !doc.status === 'Error'}>
+                                    <RefreshIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                     )}
                     <Tooltip title={isCaseFinalised ? "Cannot delete documents from a finalised case." : "Delete document"}>
                         <span>
