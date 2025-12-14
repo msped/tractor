@@ -13,7 +13,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
     const prevExportStatusRef = useRef(caseData.export_status);
 
     const hasIncompleteDocuments = caseData.documents?.some(doc => doc.status !== 'Completed');
-    const isButtonDisabled = isProcessing || caseData.export_status === 'PROCESSING' || caseData.documents.length === 0 || hasIncompleteDocuments;
+    const isButtonDisabled = caseData.documents === undefined ? true : isProcessing || caseData.export_status === 'PROCESSING' || caseData.documents.length === 0 || hasIncompleteDocuments;
 
     const handleGenerateExport = async () => {
         setIsProcessing(true);
