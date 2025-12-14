@@ -13,7 +13,8 @@ def retention_review_date_default():
     Calculates a date six years from the current time.
     Used as the default for the Case retention_review_date field.
     """
-    return (timezone.now() + relativedelta(years=6)).date()
+    retention_years = getattr(settings, 'CASE_RETENTION_YEARS', 6)
+    return (timezone.now() + relativedelta(years=retention_years)).date()
 
 
 class Case(models.Model):
@@ -117,17 +118,20 @@ class Case(models.Model):
         :param today: The date to calculate from. Defaults to timezone.now().
         """
         today = today or timezone.now().date()
+        retention_years = getattr(settings, 'CASE_RETENTION_YEARS', 6)
         if self.data_subject_dob:
             age = relativedelta(today, self.data_subject_dob).years
             eighteenth_birthday = self.data_subject_dob + \
                 relativedelta(years=18)
 
             if age < 18:
-                return eighteenth_birthday + relativedelta(years=6)
+                return (
+                    eighteenth_birthday +
+                    relativedelta(years=retention_years))
             else:
-                return today + relativedelta(years=6)
+                return today + relativedelta(years=retention_years)
 
-        return today + relativedelta(years=6)
+        return today + relativedelta(years=retention_years)
 
     def save(self, *args, **kwargs):
         if not self.pk:  # On creation
