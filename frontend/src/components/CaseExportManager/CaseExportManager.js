@@ -12,6 +12,9 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const prevExportStatusRef = useRef(caseData.export_status);
 
+    const hasIncompleteDocuments = caseData.documents?.some(doc => doc.status !== 'Completed');
+    const isButtonDisabled = isProcessing || caseData.export_status === 'PROCESSING' || caseData.documents.length === 0 || hasIncompleteDocuments;
+
     const handleGenerateExport = async () => {
         setIsProcessing(true);
         try {
@@ -75,14 +78,14 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
                 );
             case 'ERROR':
                 return (
-                    <Button variant="contained" color="error" onClick={handleGenerateExport}>
+                    <Button variant="contained" color="error" onClick={handleGenerateExport} disabled={isButtonDisabled}>
                         Retry Export
                     </Button>
                 );
             case 'NONE':
             default:
                 return (
-                    <Button variant="contained" color="primary" onClick={handleGenerateExport} disabled={isProcessing}>
+                    <Button variant="contained" color="primary" onClick={handleGenerateExport} disabled={isButtonDisabled}>
                         Generate Disclosure Package
                     </Button>
                 );
