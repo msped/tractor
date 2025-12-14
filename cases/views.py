@@ -30,6 +30,19 @@ class CaseExportView(APIView):
     def post(self, request, case_id, *args, **kwargs):
         case = get_object_or_404(Case, id=case_id)
 
+        if not case.documents.exists():
+            return Response(
+                {'detail': 'There are no documents to export.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if case.documents.exclude(status=Document.Status.COMPLETED).exists():
+            return Response(
+                {'detail': 'All documents must be marked as completed before '
+                 'generating a disclosure package.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         task_id = case.start_export()
 
         return Response(
