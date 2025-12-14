@@ -33,8 +33,9 @@ describe('<CaseExportManager />', () => {
                 statusCode: 200,
                 body: { case_id: baseCaseData.id, export_status: 'PROCESSING' },
             }).as('postExport');
+            const testCaseData = { ...baseCaseData, documents: [{ id: 'doc-1', status: 'Completed' }] };
             cy.fullMount(
-                <CaseExportManager caseData={baseCaseData} onUpdate={onUpdateSpy} />,
+                <CaseExportManager caseData={testCaseData} onUpdate={onUpdateSpy} />,
                 mountOptions
             );
 
@@ -47,8 +48,9 @@ describe('<CaseExportManager />', () => {
 
         it('shows an error toast if the API call fails', () => {
             cy.intercept('POST', `**/cases/${baseCaseData.id}/export`, { statusCode: 500 }).as('postExportError');
+            const testCaseData = { ...baseCaseData, documents: [{ id: 'doc-1', status: 'Completed' }] };
             cy.fullMount(
-                <CaseExportManager caseData={baseCaseData} onUpdate={() => {}} />,
+                <CaseExportManager caseData={testCaseData} onUpdate={() => {}} />,
                 mountOptions
             );
 
@@ -88,7 +90,7 @@ describe('<CaseExportManager />', () => {
     context('when status is ERROR', () => {
         it('renders a retry button that re-triggers the export', () => {
             cy.intercept('POST', `**/cases/${baseCaseData.id}/export`).as('postExport');
-            const errorCase = { ...baseCaseData, export_status: 'ERROR' };
+            const errorCase = { ...baseCaseData, export_status: 'ERROR', documents: [{ id: 'doc-1', status: 'Completed' }] };
             cy.fullMount(<CaseExportManager caseData={errorCase} />, mountOptions);
 
             cy.contains('button', 'Retry Export').should('be.visible').click();
