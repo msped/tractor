@@ -57,6 +57,10 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     @patch("cases.models.async_task")
     def test_case_export_triggers_task(self, mock_async_task):
         """Test that the CaseExportView triggers a background task."""
+        # Ensure the document is marked as completed
+        self.document.status = Document.Status.COMPLETED
+        self.document.save()
+
         mock_async_task.return_value = "test-task-id"
         url = reverse("case-export", kwargs={"case_id": self.case.id})
         response = self.client.post(url)
@@ -78,6 +82,27 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_case_export_no_documents(self):
+        """Test that exporting a case with no documents returns 400."""
+        empty_case = Case.objects.create(
+            case_reference="EMPTY1",
+            data_subject_name="Empty Case",
+            created_by=self.user
+        )
+        url = reverse("case-export", kwargs={"case_id": empty_case.id})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_case_export_incomplete_documents(self):
+        """Test that exporting a case with incomplete documents returns 400."""
+        self.document.status = Document.Status.READY_FOR_REVIEW
+        self.document.save()
+
+        url = reverse("case-export", kwargs={"case_id": self.case.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_list_cases(self):
         """Test listing all cases."""

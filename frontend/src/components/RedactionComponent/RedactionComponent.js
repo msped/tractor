@@ -216,7 +216,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
                     <Box>
-                        <Button component={NextLink} href={`/cases/${currentDocument.case}`} variant="contained" color="primary">
+                        <Button component={NextLink} href={`/cases/${currentDocument.case || currentDocument.id}`} variant="contained" color="primary">
                             Back to Case
                         </Button>
                     </Box>
