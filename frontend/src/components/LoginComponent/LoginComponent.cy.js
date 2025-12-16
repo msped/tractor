@@ -14,6 +14,7 @@ describe('<LoginComponent />', () => {
     cy.get('input[name="username"]').should('be.visible');
     cy.get('input[name="password"]').should('be.visible');
     cy.contains('button', 'Login').should('be.visible');
+    cy.contains('OR').should('not.exist');
   });
 
   it('should allow typing into username and password fields', () => {
@@ -64,5 +65,26 @@ describe('<LoginComponent />', () => {
 
       cy.contains('Login failed. Please check your credentials.').should('be.visible');
     });
+  });
+
+  it('should render external provider buttons and trigger signIn', () => {
+    const providers = {
+      "microsoft-entra-id": {
+        id: "microsoft-entra-id",
+        name: "Microsoft",
+        type: "oauth",
+        signinUrl: "http://localhost:3000/api/auth/signin/microsoft-entra-id",
+        callbackUrl: "http://localhost:3000/api/auth/callback/microsoft-entra-id"
+      }
+    };
+    cy.intercept('GET', '/api/auth/providers', { body: providers }).as('getProviders');
+    const signInStub = cy.stub().resolves({ ok: true }).as('signInStub');
+
+    cy.mount(<LoginComponent signIn={signInStub} />);
+    cy.wait('@getProviders');
+
+    cy.contains('OR').should('be.visible');
+    cy.contains('button', 'Sign in with Microsoft').should('be.visible').click();
+    cy.get('@signInStub').should('have.been.calledWith', 'microsoft-entra-id', { callbackUrl: '/cases' });
   });
 });

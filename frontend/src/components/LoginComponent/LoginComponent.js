@@ -1,12 +1,22 @@
 "use client";
-import React, { useState } from "react";
-import { signIn as RealSignIn } from "next-auth/react"
-import { Box, Button, TextField, Typography, Paper } from "@mui/material";
+import React, { useState, useEffect } from "react";
+import { signIn as RealSignIn, getProviders } from "next-auth/react"
+import { Box, Button, TextField, Typography, Paper, Divider } from "@mui/material";
 
 export const LoginComponent = ({ signIn = RealSignIn }) => {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const [providers, setProviders] = useState(null);
+
+    useEffect(() => {
+        const fetchProviders = async () => {
+            const res = await getProviders();
+            console.log(res);
+            setProviders(res);
+        };
+        fetchProviders();
+    }, []);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -21,6 +31,10 @@ export const LoginComponent = ({ signIn = RealSignIn }) => {
             setError("Login failed. Please check your credentials.");
         }
     };
+
+    const otherProviders = providers
+        ? Object.values(providers).filter((provider) => provider.id !== "credentials")
+        : [];
 
     return (
         <Box
@@ -75,6 +89,22 @@ export const LoginComponent = ({ signIn = RealSignIn }) => {
                     >
                         Login
                     </Button>
+                    {otherProviders.length > 0 && (
+                        <>
+                            <Divider sx={{ my: 2 }}>OR</Divider>
+                            {otherProviders.map((provider) => (
+                                <Button
+                                    key={provider.id}
+                                    variant="outlined"
+                                    fullWidth
+                                    onClick={() => signIn(provider.id, { callbackUrl: "/cases" })}
+                                    sx={{ mt: 1 }}
+                                >
+                                    Sign in with {provider.name}
+                                </Button>
+                            ))}
+                        </>
+                    )}
                 </form>
             </Paper>
         </Box>
