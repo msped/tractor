@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.core.files.base import ContentFile
 from weasyprint import HTML, CSS
+from weasyprint.text.fonts import FontConfiguration
 from training.services import extract_entities_from_text
 
 logger = logging.getLogger(__name__)
@@ -204,17 +205,13 @@ def _generate_pdf_from_document(document, mode='disclosure'):
             block_text = '█' * len(r.text)
             replacement_text = block_text
             if hasattr(r, 'context'):
-                replacement = '<span class="redaction disclosure-context"' +\
-                    f'>[{r.context.text}]</span>'
+                replacement = f'<span class="redaction disclosure-context">[{r.context.text}]</span>'
             else:
-                replacement = '<span class="redaction"' +\
-                    f'>{replacement_text}</span>'
+                replacement = f'<span class="redaction">{replacement_text}</span>'
         else:
-            replacement = f'<span class="redaction type-{r.redaction_type}"' +\
-                f'>{r.text}</span>'
+            replacement = f'<span class="redaction type-{r.redaction_type}">{r.text}</span>'
             if hasattr(r, 'context'):
-                replacement += ' <span class="internal-context-note">' +\
-                    f'[Context: {r.context.text}]</span>'
+                replacement += f'<span class="internal-context-note">[Context: {r.context.text}]</span>'
         text = text[:r.start_char] + replacement + text[r.end_char:]
 
     html_string = f"""
@@ -223,7 +220,7 @@ def _generate_pdf_from_document(document, mode='disclosure'):
     <head><title>{document.filename}</title></head>
     <body>
     <pre style="white-space: pre-wrap; word-wrap: break-word; \
-        font-family: monospace;">{text}</pre></body>
+        font-family: Calibri, sans-serif;">{text}</pre></body>
     </html>
     """
 
@@ -239,8 +236,10 @@ def _generate_pdf_from_document(document, mode='disclosure'):
     font-style: italic; font-size: 0.9em; }
     """
 
+    font_config = FontConfiguration()
     return HTML(string=html_string).write_pdf(
-        stylesheets=[CSS(string=css_string)]
+        stylesheets=[CSS(string=css_string, font_config=font_config)],
+        font_config=font_config
     )
 
 
