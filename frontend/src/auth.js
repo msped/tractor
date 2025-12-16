@@ -1,5 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id"
+
 import apiClient from "./api/apiClient";
 
 const BACKEND_ACCESS_TOKEN_LIFETIME = 45 * 60;            // 45 minutes
@@ -13,7 +15,23 @@ const SIGN_IN_HANDLERS = {
     "credentials": async (user, account, profile, email, credentials) => {
         return true;
     },
+    "microsoft-entra-id": async (user, account, profile, email, credentials) => {
+        try {
+            const response = await apiClient.post(
+                '/auth/microsoft',
+                {
+                    access_token: account['access_token'],
+                }
+            )
+            account['meta'] = response.data;
+            return true;
+        } catch (error) {
+            console.error("Sign in handler error: ", error);
+            return false
+        }
+    },
 };
+
 const SIGN_IN_PROVIDERS = Object.keys(SIGN_IN_HANDLERS);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -40,6 +58,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 }
                 return null;
             },
+        }),
+        MicrosoftEntraID({
+            clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
+            clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET,
+            issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
         }),
     ],
     callbacks: {
