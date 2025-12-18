@@ -10,10 +10,12 @@ import { DocumentViewer } from '@/components/DocumentViewer';
 import { markAsComplete } from '@/services/documentService'
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
 export const RedactionComponent = ({ document, initialRedactions }) => {
     const { data: session } = useSession();
+    const router = useRouter();
     const [redactions, setRedactions] = useState(initialRedactions || []);
     const [currentDocument, setCurrentDocument] = useState(document);
     const [isLoading, setIsLoading] = useState(false);
@@ -187,15 +189,16 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     const handleMarkAsComplete = useCallback(async () => {
         setIsLoading(true);
         try {
-            const updatedDocument = await markAsComplete(currentDocument.id, session?.access_token);
-            setCurrentDocument(updatedDocument);
+            const updatedDocument =  await markAsComplete(currentDocument.id, session?.access_token);
+            console.log(updatedDocument);
             toast.success("Document is ready for disclosure.");
+            router.push(`/cases/${currentDocument.case}`);
         } catch (error) {
             toast.error("Failed to mark document as complete. Please try again.");
         } finally {
             setIsLoading(false);
         }
-    }, [currentDocument.id, session?.access_token]);
+    }, [ currentDocument.id, currentDocument.case, session?.access_token, router]);
 
 
     const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
