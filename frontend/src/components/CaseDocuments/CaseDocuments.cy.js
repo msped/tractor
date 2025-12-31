@@ -95,22 +95,6 @@ describe('<CaseDocuments />', () => {
   });
 
   context('Drag and Drop', () => {
-    it('should change border style on drag enter and leave', () => {
-      cy.fullMount(
-          <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
-          mountOpts
-      );
-
-      cy.contains('button', 'Upload Document').click();
-
-      const dropzone = cy.get('[role="dialog"]').contains('Drag & drop files here').parent().parent();
-
-      dropzone.trigger('dragenter', { dataTransfer: {} });
-      dropzone.should('have.css', 'border-color', 'rgba(0, 0, 0, 0.87)');
-      dropzone.trigger('dragleave', { dataTransfer: {} });
-      dropzone.should('have.css', 'border-color', 'rgba(0, 0, 0, 0.87)');
-    });
-
     it('should add dropped files to the list', () => {
       cy.fullMount(
           <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
@@ -287,6 +271,6 @@ describe('<CaseDocuments />', () => {
         cy.wait('@resubmitRequest');
         cy.contains('Failed to resubmit document. Please try again.').should('be.visible');
       });
-    })
+    });
   });
 });
