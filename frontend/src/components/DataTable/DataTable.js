@@ -230,5 +230,6 @@ export const DataTable = ({ rows }) => {
                 },
             },
         }}
+        sx={{ height: '100%', width: '100%' }}
     />;
 }
