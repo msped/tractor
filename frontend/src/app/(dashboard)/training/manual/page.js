@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Typography } from "@mui/material";
+import { Container } from "@mui/material";
 import { TrainingUpload } from "@/components/TrainingUpload";
 import { TrainingDocList } from "@/components/TrainingDocList";
 import { getTrainingDocs } from '@/services/trainingService';
@@ -28,12 +28,9 @@ export default function TrainingPage() {
     const unprocessedDocsCount = docs.filter(d => !d.processed).length;
 
     return (
-        <>
-            <Typography variant="h4" fontWeight={600} component='h1' align={'center'} gutterBottom>
-                Manual Training
-            </Typography>
+        <Container>
             <TrainingUpload onUpload={fetchDocs} unprocessedDocsCount={unprocessedDocsCount} />
             <TrainingDocList docs={docs} refreshDocs={fetchDocs} />
-        </>
+        </Container>
     );
 }

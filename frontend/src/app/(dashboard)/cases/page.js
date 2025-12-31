@@ -32,11 +32,6 @@ export default async function page() {
 
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
-            <Box sx={{ textAlign: 'center', mb: 4 }}>
-                <Typography variant="h4" component="h1" gutterBottom>
-                    Cases
-                </Typography>
-            </Box>
             <Box sx={{ height: 600, width: '100%', my: 4 }}>
                 {fetchError ? (
                     <Typography color="error">{fetchError}</Typography>
