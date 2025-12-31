@@ -1,7 +1,6 @@
 import { Roboto } from 'next/font/google';
 import { Toaster } from 'react-hot-toast';
 import "./globals.css";
-import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 import Providers from '@/app/providers'
 
@@ -18,7 +17,6 @@ export default async function RootLayout({ children }) {
     <html lang="en" className={roboto.variable}>
       <body>
         <Providers>
-          <Header />
             {children}
           <Footer />
           <Toaster/>
