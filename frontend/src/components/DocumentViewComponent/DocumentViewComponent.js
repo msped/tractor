@@ -14,7 +14,7 @@ export const DocumentViewComponent = ({ caseId, document, redactions }) => {
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)', flexDirection: 'column' }}>
-            <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+            <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1, marginTop: 0 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
                     <Box>
                         <Button component={NextLink} href={`/cases/${caseId}`} variant="contained" color="primary">
@@ -27,7 +27,6 @@ export const DocumentViewComponent = ({ caseId, document, redactions }) => {
                     <Box sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        backgroundColor: 'background.paper',
                         padding: 1,
                         borderRadius: 1,
                     }}>
