@@ -232,7 +232,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                 <span>
                                     <Button
                                         variant="contained"
-                                        color="primary"
+                                        color="info"
                                         disabled={pendingSuggestions.length > 0 || isLoading}
                                         onClick={handleMarkAsComplete}
                                         sx={{
