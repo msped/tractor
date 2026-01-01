@@ -39,7 +39,7 @@ describe('<TrainingDocList />', () => {
 
         cy.contains('tr', 'document_beta.docx').within(() => {
             cy.contains('td', 'user_two').should('be.visible');
-            cy.contains('span', 'Unprocessed').parent().should('be.visible').and('have.css', 'background-color', 'rgb(181, 84, 1)');
+            cy.contains('span', 'Unprocessed').parent().should('be.visible').and('have.css', 'background-color', 'rgb(237, 108, 2)');
         });
     });
 
@@ -50,27 +50,19 @@ describe('<TrainingDocList />', () => {
 
     context('Delete Document Flow', () => {
         it('opens confirmation dialog on delete click, then cancels', () => {
-            // Stub the service function so we can assert it's NOT called
             const deleteStub = cy.stub().as('deleteTrainingDoc');
 
-            // Pass the stub as a prop
             cy.fullMount(<TrainingDocList docs={mockDocs} deleteTrainingDoc={deleteStub} />, mountOptions);
 
-            // Find the delete button for the first doc and click it
             cy.contains('tr', 'document_alpha.pdf').find('button[aria-label="Delete Document"]').click();
 
-            // Check that the dialog is open and shows the correct text
             cy.get('[role="dialog"]').should('be.visible');
             cy.contains('Confirm Deletion').should('be.visible');
             cy.contains('Are you sure you want to delete "document_alpha.pdf"?').should('be.visible');
 
-            // Click cancel
             cy.get('[role="dialog"]').contains('button', 'Cancel').click();
-
-            // Dialog should be closed
             cy.get('[role="dialog"]').should('not.exist');
 
-            // The API call should not have been made
             expect(deleteStub).not.to.be.called;
         });
 
