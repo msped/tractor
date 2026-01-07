@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Redactor (internally "Tractor") is a document redaction application with ML-powered Named Entity Recognition. Users upload documents, the system identifies sensitive information using spaCy NER, and users can accept/reject redactions before exporting redacted versions. Supports model training from user-accepted redactions.
+Tractor is a document redaction application with ML-powered Named Entity Recognition. Users upload documents, the system identifies sensitive information using spaCy NER, and users can accept/reject redactions before exporting redacted versions. Supports model training from user-accepted redactions.
 
 ## Commands
 
@@ -52,7 +52,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 ### Project Structure
 
 ```bash
-redactor/
+tractor/
 ├── frontend/src/
 │   ├── app/                    # Next.js App Router pages
 │   │   └── (dashboard)/        # Grouped route with shared layout
