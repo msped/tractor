@@ -11,6 +11,12 @@ const roboto = Roboto({
   variable: '--font-roboto',
 });
 
+export const metadata = {
+  other: {
+    'apple-mobile-web-app-title': 'Tractor',
+  },
+};
+
 export default async function RootLayout({ children }) {
 
   return (
