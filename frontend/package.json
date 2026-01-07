@@ -1,7 +1,29 @@
 {
-  "name": "frontend",
+  "name": "tractor-frontend",
   "version": "0.1.0",
+  "description": "Document redaction application with ML-powered Named Entity Recognition",
   "private": true,
+  "license": "AGPL-3.0",
+  "author": "Matthew Edwards",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/msped/tractor.git",
+    "directory": "frontend"
+  },
+  "bugs": {
+    "url": "https://github.com/msped/tractor/issues"
+  },
+  "homepage": "https://github.com/msped/tractor#readme",
+  "keywords": [
+    "redaction",
+    "document-processing",
+    "nlp",
+    "named-entity-recognition",
+    "spacy",
+    "nextjs",
+    "react",
+    "material-ui"
+  ],
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
