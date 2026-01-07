@@ -1,9 +1,9 @@
-import apiClient from '@/api/apiClient';
 import React from 'react';
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { DocumentViewComponent } from '@/components/DocumentViewComponent';
 import { Box, Alert } from '@mui/material';
+import { getDocument } from '@/services/documentService';
 
 export default async function page({ params }) {
     const { caseId, documentId } = await params;
@@ -16,15 +16,9 @@ export default async function page({ params }) {
     let documentData = null;
     let redactions = [];
     let fetchError = null;
-    
-    try {
-        const docResponse = await apiClient.get(`cases/documents/${documentId}`, {
-            headers: {
-                Authorization: `Bearer ${session.access_token}`,
-            },
-        });
 
-        documentData = docResponse.data;
+    try {
+        documentData = await getDocument(documentId, session.access_token);
         const allRedactions = documentData.redactions || [];
 
         // For the view page, we only care about redactions that have been confirmed.
@@ -32,9 +26,6 @@ export default async function page({ params }) {
         redactions = allRedactions.filter(r => r.is_accepted || !r.is_suggestion);
 
     } catch (error) {
-        if (error.response?.status === 401) {
-            redirect('/');
-        }
         console.error("Failed to fetch document for view:", error);
         fetchError = "There was an issue retrieving the document. Please try again later.";
     }
