@@ -4,25 +4,38 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0004_redaction_justification_and_more'),
+        ("cases", "0004_redaction_justification_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='case',
-            name='export_file',
-            field=models.FileField(blank=True, help_text='The path to the generated ZIP export file.', null=True, upload_to='exports/%Y/%m/%d/'),
+            model_name="case",
+            name="export_file",
+            field=models.FileField(
+                blank=True,
+                help_text="The path to the generated ZIP export file.",
+                null=True,
+                upload_to="exports/%Y/%m/%d/",
+            ),
         ),
         migrations.AddField(
-            model_name='case',
-            name='export_status',
-            field=models.CharField(choices=[('NONE', 'Not Generated'), ('PROCESSING', 'Processing'), ('COMPLETED', 'Completed'), ('ERROR', 'Error')], default='NONE', max_length=20),
+            model_name="case",
+            name="export_status",
+            field=models.CharField(
+                choices=[
+                    ("NONE", "Not Generated"),
+                    ("PROCESSING", "Processing"),
+                    ("COMPLETED", "Completed"),
+                    ("ERROR", "Error"),
+                ],
+                default="NONE",
+                max_length=20,
+            ),
         ),
         migrations.AddField(
-            model_name='case',
-            name='export_task_id',
+            model_name="case",
+            name="export_task_id",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
     ]

@@ -1,5 +1,6 @@
-from django.db import migrations
 import uuid
+
+from django.db import migrations
 
 
 def create_default_model(apps, schema_editor):
@@ -25,7 +26,6 @@ def remove_default_model(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("training", "0002_model_f1_score_model_precision_model_recall"),
     ]

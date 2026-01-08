@@ -1,5 +1,6 @@
-from .loader import SpacyModelManager
 from spacy_layout import spaCyLayout
+
+from .loader import SpacyModelManager
 
 
 def extract_entities_from_text(path):
@@ -21,11 +22,6 @@ def extract_entities_from_text(path):
 
     results = []
     for ent in ner_doc.ents:
-        results.append({
-            'text': ent.text,
-            'label': ent.label_,
-            'start_char': ent.start_char,
-            'end_char': ent.end_char
-        })
+        results.append({"text": ent.text, "label": ent.label_, "start_char": ent.start_char, "end_char": ent.end_char})
 
     return extracted_text, results

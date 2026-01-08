@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0005_case_export_file_case_export_status_and_more'),
+        ("cases", "0005_case_export_file_case_export_status_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='case',
-            name='export_file',
-            field=models.FileField(blank=True, help_text='The path to the generated ZIP export file.', null=True, upload_to='exports/<django.db.models.fields.UUIDField>/'),
+            model_name="case",
+            name="export_file",
+            field=models.FileField(
+                blank=True,
+                help_text="The path to the generated ZIP export file.",
+                null=True,
+                upload_to="exports/<django.db.models.fields.UUIDField>/",
+            ),
         ),
     ]

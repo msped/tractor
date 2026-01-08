@@ -1,6 +1,6 @@
 from allauth.socialaccount.providers.microsoft.views import MicrosoftGraphOAuth2Adapter
-from dj_rest_auth.registration.views import SocialLoginView
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
+from dj_rest_auth.registration.views import SocialLoginView
 
 
 class MicrosoftLogin(SocialLoginView):

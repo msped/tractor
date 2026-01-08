@@ -8,6 +8,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
+from training.tests.base import NetworkBlockerMixin
+
 from ..models import Case, Document, Redaction, RedactionContext
 from ..serializers import (
     CaseDetailSerializer,
@@ -18,8 +20,6 @@ from ..serializers import (
     RedactionSerializer,
 )
 
-from training.tests.base import NetworkBlockerMixin
-
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
 
@@ -28,18 +28,14 @@ MEDIA_ROOT = tempfile.mkdtemp()
 class SerializerTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         """Set up test data for all serializer tests."""
-        self.user = User.objects.create_user(
-            username="testuser", password="password"
-        )
+        self.user = User.objects.create_user(username="testuser", password="password")
         self.case = Case.objects.create(
             case_reference="202001",
             data_subject_name="John Doe",
             data_subject_dob=date(1990, 1, 1),
             created_by=self.user,
         )
-        self.test_file = SimpleUploadedFile(
-            "document.pdf", b"This is a test file.", "application/pdf"
-        )
+        self.test_file = SimpleUploadedFile("document.pdf", b"This is a test file.", "application/pdf")
         self.document = Document.objects.create(
             case=self.case,
             original_file=self.test_file,
@@ -119,9 +115,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
     def test_document_serializer_update_status(self):
         """Test updating a Document's status via the serializer."""
         data = {"new_status": Document.Status.COMPLETED}
-        serializer = DocumentSerializer(
-            instance=self.document, data=data, partial=True
-        )
+        serializer = DocumentSerializer(instance=self.document, data=data, partial=True)
         self.assertTrue(serializer.is_valid(raise_exception=True))
         instance = serializer.save()
 
@@ -141,8 +135,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(data["id"], str(self.case.id))
         self.assertIn("documents", data)
         self.assertEqual(len(data["documents"]), 2)
-        self.assertEqual(data["documents"][0]["filename"],
-                         self.document.filename)
+        self.assertEqual(data["documents"][0]["filename"], self.document.filename)
         self.assertIn("export_status", data)
         self.assertIn("export_file", data)
         self.assertIn("export_task_id", data)
@@ -190,15 +183,12 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
             "is_accepted": True,
             "justification": "User accepted this suggestion.",
         }
-        serializer = RedactionSerializer(
-            instance=self.redaction, data=data, partial=True
-        )
+        serializer = RedactionSerializer(instance=self.redaction, data=data, partial=True)
         self.assertTrue(serializer.is_valid(raise_exception=True))
         instance = serializer.save()
 
         self.assertTrue(instance.is_accepted)
-        self.assertEqual(instance.justification,
-                         "User accepted this suggestion.")
+        self.assertEqual(instance.justification, "User accepted this suggestion.")
 
     def test_document_review_serializer_read(self):
         """Test serialization for the document review view."""
@@ -245,9 +235,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
 
     def test_redaction_context_serializer_read(self):
         """Test serialization of a RedactionContext instance."""
-        context = RedactionContext.objects.create(
-            redaction=self.redaction, text="This is context."
-        )
+        context = RedactionContext.objects.create(redaction=self.redaction, text="This is context.")
         serializer = RedactionContextSerializer(instance=context)
         data = serializer.data
 
@@ -274,9 +262,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         serializer_no_context = RedactionSerializer(instance=self.redaction)
         self.assertIsNone(serializer_no_context.data["context"])
 
-        RedactionContext.objects.create(
-            redaction=self.redaction, text="This is important context."
-        )
+        RedactionContext.objects.create(redaction=self.redaction, text="This is important context.")
         self.redaction.refresh_from_db()
 
         serializer_with_context = RedactionSerializer(instance=self.redaction)

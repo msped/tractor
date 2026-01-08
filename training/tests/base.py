@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 class DisallowedHost(AssertionError):
     """Custom exception for disallowed network connections."""
+
     pass
 
 
@@ -16,7 +17,8 @@ class NetworkBlockerMixin:
     requests. Connections to 'localhost' and '127.0.0.1' are allowed to
     permit database connections within the test environment.
     """
-    allowed_hosts = ['localhost', '127.0.0.1']
+
+    allowed_hosts = ["localhost", "127.0.0.1"]
 
     @classmethod
     def setUpClass(cls):
@@ -26,12 +28,10 @@ class NetworkBlockerMixin:
         def block_connect(sock, address):
             host, _ = address
             if host not in cls.allowed_hosts:
-                raise DisallowedHost(
-                    f"Network connection to {host} is not allowed."
-                )
+                raise DisallowedHost(f"Network connection to {host} is not allowed.")
             cls.original_connect(sock, address)
 
-        cls.socket_patcher = patch('socket.socket.connect', block_connect)
+        cls.socket_patcher = patch("socket.socket.connect", block_connect)
         cls.socket_patcher.start()
 
     @classmethod

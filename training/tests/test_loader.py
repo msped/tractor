@@ -1,7 +1,9 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from django.test import TestCase
-from ..models import Model
+
 from ..loader import SpacyModelManager
+from ..models import Model
 from .base import NetworkBlockerMixin
 
 
@@ -27,12 +29,8 @@ class SpacyModelManagerTests(NetworkBlockerMixin, TestCase):
         mock_model_object = MagicMock()
         mock_spacy_load.return_value = mock_model_object
 
-        active_model = Model.objects.create(
-            name="active_model", path="/path/to/active", is_active=True
-        )
-        Model.objects.create(
-            name="inactive_model", path="/path/to/inactive", is_active=False
-        )
+        active_model = Model.objects.create(name="active_model", path="/path/to/active", is_active=True)
+        Model.objects.create(name="inactive_model", path="/path/to/inactive", is_active=False)
 
         manager = SpacyModelManager.get_instance()
 
@@ -47,9 +45,7 @@ class SpacyModelManagerTests(NetworkBlockerMixin, TestCase):
         Test that get_model() returns the already loaded
         model without reloading.
         """
-        Model.objects.create(
-            name="active_model", path="/path/to/active", is_active=True
-        )
+        Model.objects.create(name="active_model", path="/path/to/active", is_active=True)
 
         manager = SpacyModelManager.get_instance()
         self.assertEqual(mock_spacy_load.call_count, 1)
@@ -61,12 +57,8 @@ class SpacyModelManagerTests(NetworkBlockerMixin, TestCase):
     @patch("training.loader.spacy.load")
     def test_switch_model(self, mock_spacy_load):
         """Test switching to a different model."""
-        active_model = Model.objects.create(
-            name="active_model", path="/path/to/active", is_active=True
-        )
-        inactive_model = Model.objects.create(
-            name="inactive_model", path="/path/to/inactive", is_active=False
-        )
+        active_model = Model.objects.create(name="active_model", path="/path/to/active", is_active=True)
+        inactive_model = Model.objects.create(name="inactive_model", path="/path/to/inactive", is_active=False)
 
         manager = SpacyModelManager.get_instance()
 

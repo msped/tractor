@@ -1,5 +1,6 @@
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from django.test import TestCase
 
 from ..services import extract_entities_from_text
@@ -25,13 +26,12 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     def tearDown(self):
         import os
+
         os.remove(self.file_path)
 
     @patch("training.services.spaCyLayout")
     @patch("training.services.SpacyModelManager")
-    def test_extract_entities_from_text_success(
-        self, mock_model_manager, mock_spacy_layout
-    ):
+    def test_extract_entities_from_text_success(self, mock_model_manager, mock_spacy_layout):
         """
         Test successful entity extraction.
         """
@@ -54,9 +54,7 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
         extracted_text, results = extract_entities_from_text(self.file_path)
 
-        self.assertEqual(
-            extracted_text, "Hello, I'm John Doe and I live in London."
-        )
+        self.assertEqual(extracted_text, "Hello, I'm John Doe and I live in London.")
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["text"], "John Doe")
         self.assertEqual(results[0]["label"], "PERSON")
@@ -67,32 +65,26 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_manager_instance.get_model.assert_called_once()
         mock_spacy_layout.assert_called_once_with(mock_nlp)
         mock_layout_instance.assert_called_once_with(self.file_path)
-        mock_nlp.assert_called_once_with(
-            "Hello, I'm John Doe and I live in London.")
+        mock_nlp.assert_called_once_with("Hello, I'm John Doe and I live in London.")
 
     @patch("training.services.SpacyModelManager")
     def test_extract_entities_no_model_found(self, mock_model_manager):
         """
         Test that a ValueError is raised if no active model is found.
         """
-        mock_model_manager.get_instance.return_value.get_model.return_value = \
-            None
+        mock_model_manager.get_instance.return_value.get_model.return_value = None
 
-        with self.assertRaisesMessage(ValueError,
-                                      "No active spaCy model found."):
+        with self.assertRaisesMessage(ValueError, "No active spaCy model found."):
             extract_entities_from_text(self.file_path)
 
     @patch("training.services.spaCyLayout")
     @patch("training.services.SpacyModelManager")
-    def test_extract_entities_no_text_in_document(
-        self, mock_model_manager, mock_spacy_layout
-    ):
+    def test_extract_entities_no_text_in_document(self, mock_model_manager, mock_spacy_layout):
         """
         Test that a ValueError is raised if the document contains no text.
         """
         mock_nlp = MagicMock()
-        mock_model_manager.get_instance.return_value.get_model.return_value = \
-            mock_nlp
+        mock_model_manager.get_instance.return_value.get_model.return_value = mock_nlp
 
         mock_layout_instance = MagicMock()
         mock_layout_doc = MagicMock()
@@ -100,6 +92,5 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_layout_instance.return_value = mock_layout_doc
         mock_spacy_layout.return_value = mock_layout_instance
 
-        with self.assertRaisesMessage(ValueError,
-                                      "No text found in the document."):
+        with self.assertRaisesMessage(ValueError, "No text found in the document."):
             extract_entities_from_text(self.file_path)
