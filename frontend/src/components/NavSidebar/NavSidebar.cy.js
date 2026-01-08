@@ -3,7 +3,19 @@ import { PathnameContext } from 'next/dist/shared/lib/hooks-client-context.share
 import { NavSidebar } from './NavSidebar';
 import { SidebarProvider, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED } from '@/contexts/SidebarContext';
 
-const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+const mockUser = {
+    name: 'John Doe',
+    email: 'john.doe@example.com',
+    image: null,
+};
+
+const mountOpts = {
+    mockSession: {
+        access_token: 'fake-token',
+        status: 'authenticated',
+        user: mockUser,
+    }
+};
 
 const mountNavSidebar = (pathname = '/cases') => {
     return cy.fullMount(
@@ -191,6 +203,49 @@ describe('<NavSidebar />', () => {
                 .closest('.MuiListItemButton-root')
                 .should('have.css', 'background-color')
                 .and('not.equal', 'rgba(0, 0, 0, 0)');
+        });
+    });
+
+    context('User Profile Section', () => {
+        beforeEach(() => {
+            mountNavSidebar('/cases');
+        });
+
+        it('displays user avatar with initials when no image provided', () => {
+            cy.get('.MuiAvatar-root')
+                .should('be.visible')
+                .and('contain.text', 'JD');
+        });
+
+        it('displays user name when expanded', () => {
+            cy.contains('John Doe').should('be.visible');
+        });
+
+        it('displays user email when expanded', () => {
+            cy.contains('john.doe@example.com').should('be.visible');
+        });
+
+        it('displays logout button when expanded', () => {
+            cy.get('[data-testid="LogoutIcon"]').should('be.visible');
+        });
+
+        it('hides user name and email when collapsed', () => {
+            cy.get('[data-testid="ChevronLeftIcon"]').parent('button').click();
+
+            cy.contains('John Doe').should('not.exist');
+            cy.contains('john.doe@example.com').should('not.exist');
+        });
+
+        it('shows avatar when collapsed', () => {
+            cy.get('[data-testid="ChevronLeftIcon"]').parent('button').click();
+
+            cy.get('.MuiAvatar-root').should('be.visible');
+        });
+
+        it('shows logout icon when collapsed', () => {
+            cy.get('[data-testid="ChevronLeftIcon"]').parent('button').click();
+
+            cy.get('[data-testid="LogoutIcon"]').should('be.visible');
         });
     });
 });

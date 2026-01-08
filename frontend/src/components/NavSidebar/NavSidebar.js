@@ -13,6 +13,7 @@ import {
     Typography,
     IconButton,
     Tooltip,
+    Avatar,
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import PsychologyIcon from '@mui/icons-material/Psychology';
@@ -20,6 +21,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import AddIcon from '@mui/icons-material/Add';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { useSession, signOut } from 'next-auth/react';
 import { useSidebar, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED } from '@/contexts/SidebarContext';
 
 export { SIDEBAR_WIDTH_EXPANDED as SIDEBAR_WIDTH };
@@ -27,8 +30,19 @@ export { SIDEBAR_WIDTH_EXPANDED as SIDEBAR_WIDTH };
 export function NavSidebar() {
     const pathname = usePathname();
     const { collapsed, toggle, width } = useSidebar();
+    const { data: session } = useSession();
 
-    // Show team UI only for org plans when user has multiple teams or is an admin
+    const handleLogout = () => signOut({ callbackUrl: '/' });
+
+    // Get user initials for avatar fallback
+    const getUserInitials = (name) => {
+        if (!name) return '?';
+        const names = name.split(' ');
+        if (names.length >= 2) {
+            return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+        }
+        return name[0].toUpperCase();
+    };
 
     // Base nav items
     const allNavItems = [
@@ -203,9 +217,118 @@ export function NavSidebar() {
                     </ListItemButton>
                 </Tooltip>
 
-                <Box sx={{ px: collapsed ? 0 : 1.5, py: 1, display: 'flex', justifyContent: 'center' }}>
-                    {/* User */}
-                </Box>
+                {/* User Profile & Logout */}
+                {session?.user && (
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: 1,
+                            py: 1,
+                        }}
+                    >
+                        {collapsed ? (
+                            <>
+                                <Tooltip title={session.user.name || session.user.email || 'User'} placement="right">
+                                    <Avatar
+                                        src={session.user.image}
+                                        alt={session.user.name || 'User'}
+                                        sx={{
+                                            width: 36,
+                                            height: 36,
+                                            bgcolor: 'primary.main',
+                                            fontSize: '0.875rem',
+                                        }}
+                                    >
+                                        {getUserInitials(session.user.name)}
+                                    </Avatar>
+                                </Tooltip>
+                                <Tooltip title="Logout" placement="right">
+                                    <IconButton
+                                        onClick={handleLogout}
+                                        size="small"
+                                        sx={{
+                                            color: 'text.secondary',
+                                            '&:hover': {
+                                                color: 'error.main',
+                                                bgcolor: 'error.lighter',
+                                            },
+                                        }}
+                                    >
+                                        <LogoutIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </>
+                        ) : (
+                            <Box
+                                sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    width: '100%',
+                                    px: 1,
+                                    py: 0.5,
+                                    borderRadius: 1,
+                                }}
+                            >
+                                <Avatar
+                                    src={session.user.image}
+                                    alt={session.user.name || 'User'}
+                                    sx={{
+                                        width: 36,
+                                        height: 36,
+                                        bgcolor: 'primary.main',
+                                        fontSize: '0.875rem',
+                                    }}
+                                >
+                                    {getUserInitials(session.user.name)}
+                                </Avatar>
+                                <Box sx={{ ml: 1.5, flexGrow: 1, minWidth: 0 }}>
+                                    <Typography
+                                        variant="body2"
+                                        sx={{
+                                            fontWeight: 500,
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                        }}
+                                    >
+                                        {session.user.name || 'User'}
+                                    </Typography>
+                                    {session.user.email && (
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            sx={{
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: 'block',
+                                            }}
+                                        >
+                                            {session.user.email}
+                                        </Typography>
+                                    )}
+                                </Box>
+                                <Tooltip title="Logout">
+                                    <IconButton
+                                        onClick={handleLogout}
+                                        size="small"
+                                        sx={{
+                                            color: 'text.secondary',
+                                            '&:hover': {
+                                                color: 'error.main',
+                                                bgcolor: 'action.hover',
+                                            },
+                                        }}
+                                    >
+                                        <LogoutIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </Box>
+                        )}
+                    </Box>
+                )}
             </Box>
         </Box>
     );
