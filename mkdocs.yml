@@ -1,0 +1,49 @@
+site_name: Tractor Docs
+site_url: https://msped.github.io/tractor/
+repo_url: https://github.com/msped/tractor
+repo_name: msped/tractor
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Getting Started: user-guide/getting-started.md
+      - Redacting Documents: user-guide/redaction.md
+  - Developer Guide:
+      - Development Setup: dev/setup.md
+      - Production Deployment: dev/deployment.md
+      - Architecture: dev/architecture.md
