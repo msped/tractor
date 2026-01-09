@@ -18,6 +18,23 @@ export const getDocument = async (docId, accessToken) => {
     }
 };
 
+export const getDocumentForReview = async (caseId, docId, accessToken) => {
+    try {
+        const response = await apiClient.get(`/cases/${caseId}/document/${docId}/review`, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to retrieve document for review: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to retrieve document for review. Please try again.');
+        }
+    }
+};
+
 export const resubmitDocument = async (docId, accessToken) => {
     try {
         const response = await apiClient.post(`/cases/documents/${docId}/resubmit`, {}, {

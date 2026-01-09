@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('training', '0001_initial'),
+        ("training", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='model',
-            name='f1_score',
-            field=models.FloatField(blank=True, help_text='F1 score from evaluation.', null=True),
+            model_name="model",
+            name="f1_score",
+            field=models.FloatField(blank=True, help_text="F1 score from evaluation.", null=True),
         ),
         migrations.AddField(
-            model_name='model',
-            name='precision',
-            field=models.FloatField(blank=True, help_text='Precision score from evaluation.', null=True),
+            model_name="model",
+            name="precision",
+            field=models.FloatField(blank=True, help_text="Precision score from evaluation.", null=True),
         ),
         migrations.AddField(
-            model_name='model',
-            name='recall',
-            field=models.FloatField(blank=True, help_text='Recall score from evaluation.', null=True),
+            model_name="model",
+            name="recall",
+            field=models.FloatField(blank=True, help_text="Recall score from evaluation.", null=True),
         ),
     ]

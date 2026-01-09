@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0002_alter_case_created_by_alter_case_updated_by'),
+        ("cases", "0002_alter_case_created_by_alter_case_updated_by"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='document',
-            name='extracted_text',
+            model_name="document",
+            name="extracted_text",
             field=models.TextField(blank=True, editable=False, null=True),
         ),
         migrations.AlterField(
-            model_name='document',
-            name='filename',
+            model_name="document",
+            name="filename",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
     ]

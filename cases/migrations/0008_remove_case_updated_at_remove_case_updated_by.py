@@ -4,18 +4,17 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0007_document_spacy_model'),
+        ("cases", "0007_document_spacy_model"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='case',
-            name='updated_at',
+            model_name="case",
+            name="updated_at",
         ),
         migrations.RemoveField(
-            model_name='case',
-            name='updated_by',
+            model_name="case",
+            name="updated_by",
         ),
     ]

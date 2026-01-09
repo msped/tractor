@@ -57,6 +57,23 @@ export const deleteCase = async (caseId, accessToken) => {
     }
 }
 
+export const getCases = async (accessToken) => {
+    try {
+        const response = await apiClient.get('/cases', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to retrieve cases: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to retrieve cases. Please try again.');
+        }
+    }
+};
+
 export const createCaseExport = async (caseId, accessToken) => {
     try {
         const response = await apiClient.post(`/cases/${caseId}/export`, {}, {

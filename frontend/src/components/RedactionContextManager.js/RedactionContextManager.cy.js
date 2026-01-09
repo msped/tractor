@@ -1,147 +1,439 @@
 import React from 'react';
 import { RedactionContextManager } from './RedactionContextManager';
-import * as redactionService from '@/services/redactionService';
 
 const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
 
 describe('<RedactionContextManager />', () => {
-  const redactionId = 'test-redaction-id-123';
+    const redactionId = 'test-redaction-id-123';
 
-  it('should not render when isEditing is false', () => {
-    const onCancel = cy.spy().as('onCancel');
-    const onSaveSuccess = cy.spy().as('onSaveSuccess');
+    beforeEach(() => {
+        // Set up default intercepts
+        cy.intercept('POST', `**/cases/document/redaction/${redactionId}/context`, {
+            statusCode: 200,
+            body: { redaction: redactionId, text: 'Updated context' },
+        }).as('updateContext');
 
-    cy.fullMount(
-      <RedactionContextManager
-        redactionId={redactionId}
-        context={{ text: 'Initial context' }}
-        isEditing={false}
-        onCancel={onCancel}
-        onSaveSuccess={onSaveSuccess}
-      />,
-      mountOpts
-    );
+        cy.intercept('DELETE', `**/cases/document/redaction/${redactionId}/context`, {
+            statusCode: 204,
+        }).as('deleteContext');
+    });
 
-    cy.get('body').should('not.contain', 'Context for Disclosure');
-  });
+    context('Rendering', () => {
+        it('should not render when isEditing is false', () => {
+            const onCancel = cy.spy().as('onCancel');
+            const onContextSave = cy.spy().as('onContextSave');
 
-  it('renders with initial context and allows editing', () => {
-    const initialContext = 'This is the initial context.';
-    cy.fullMount(
-      <RedactionContextManager
-        redactionId={redactionId}
-        context={{ text: initialContext }}
-        isEditing={true}
-        onCancel={() => {}}
-        onSaveSuccess={() => {}}
-      />,
-      mountOpts
-    );
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Initial context' }}
+                    isEditing={false}
+                    onCancel={onCancel}
+                    onContextSave={onContextSave}
+                />,
+                mountOpts
+            );
 
-    cy.get('textarea[name="Context for Disclosure"]').should('have.value', initialContext);
-    cy.get('textarea[name="Context for Disclosure"]').type(' More text.');
-    cy.get('textarea[name="Context for Disclosure"]').should('have.value', `${initialContext} More text.`);
-  });
+            cy.get('body').should('not.contain', 'Context for Disclosure');
+        });
 
-  it('calls onCancel and reverts text when Cancel button is clicked', () => {
-    const onCancel = cy.spy().as('onCancel');
-    const initialContext = 'Do not change me.';
+        it('renders the text field when isEditing is true', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Some context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
 
-    cy.fullMount(
-      <RedactionContextManager
-        redactionId={redactionId}
-        context={{ text: initialContext }}
-        isEditing={true}
-        onCancel={onCancel}
-        onSaveSuccess={() => {}}
-      />,
-      mountOpts
-    );
+            cy.get('textarea[name="Context for Disclosure"]').should('be.visible');
+            cy.contains('This text will replace the redaction in the final export.').should('be.visible');
+        });
 
-    cy.get('textarea[name="Context for Disclosure"]').type(' I changed it.');
-    cy.contains('button', 'Cancel').click();
-    cy.get('@onCancel').should('have.been.calledOnce');
-    cy.get('textarea[name="Context for Disclosure"]').should('have.value', initialContext);
-  });
+        it('renders with initial context value', () => {
+            const initialContext = 'This is the initial context.';
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: initialContext }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
 
-  // it('successfully saves new context', () => {
-  //   const onSaveSuccess = cy.spy().as('onSaveSuccess');
-  //   const newContextText = 'This is the updated context.';
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', initialContext);
+        });
 
-  //   cy.stub(redactionService, 'updateRedactionContext')
-  //     .as('updateRedactionContextStub')
-  //     .resolves({
-  //       redaction: redactionId,
-  //       text: newContextText,
-  //     });
+        it('renders empty when no context provided', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={null}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
 
-  //   cy.fullMount(
-  //     <RedactionContextManager
-  //       redactionId={redactionId}
-  //       context={{ text: 'Old context' }}
-  //       isEditing={true}
-  //       onCancel={() => {}}
-  //       onSaveSuccess={onSaveSuccess}
-  //     />,
-  //     mountOpts
-  //   );
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', '');
+        });
 
-  //   cy.get('textarea[name="Context for Disclosure"]').clear().type(newContextText);
-  //   cy.contains('button', 'Save').click();
+        it('renders Save, Cancel, and Delete buttons', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Some context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
 
-  //   cy.get('@updateRedactionContextStub').should(
-  //     'have.been.calledWith',
-  //     redactionId,
-  //     { text: newContextText }
-  //   );
-  //   cy.get('@onSaveSuccess').should('have.been.calledWith', redactionId, newContextText);
-  //   cy.get('body').should('contain', 'Context saved successfully.');
-  // });
+            cy.contains('button', 'Save').should('be.visible');
+            cy.contains('button', 'Cancel').should('be.visible');
+            cy.get('[data-testid="DeleteIcon"]').should('be.visible');
+        });
+    });
 
-  // it('successfully deletes context', () => {
-  //   const onSaveSuccess = cy.spy().as('onSaveSuccess');
+    context('Editing', () => {
+        it('allows editing the context text', () => {
+            const initialContext = 'This is the initial context.';
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: initialContext }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
 
-  //   cy.stub(redactionService, 'deleteRedactionContent')
-  //     .as('deleteRedactionContentStub')
-  //     .resolves();
-  //   cy.fullMount(
-  //     <RedactionContextManager
-  //       redactionId={redactionId}
-  //       context={{ text: 'Some context to delete' }}
-  //       isEditing={true}
-  //       onCancel={() => {}}
-  //       onSaveSuccess={onSaveSuccess}
-  //     />,
-  //     mountOpts
-  //   );
+            cy.get('textarea[name="Context for Disclosure"]').type(' More text.');
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', `${initialContext} More text.`);
+        });
+    });
 
-  //   cy.get('[data-testid="DeleteIcon"]').click();
-  //   cy.get('@deleteRedactionContentStub').should('have.been.calledWith', redactionId);
-  //   cy.get('@onSaveSuccess').should('have.been.calledWith', redactionId, '');
-  //   cy.get('body').should('contain', 'Context deleted successfully.');
-  //   cy.get('textarea[name="Context for Disclosure"]').should('have.value', '');
-  // });
+    context('Cancel', () => {
+        it('calls onCancel when Cancel button is clicked', () => {
+            const onCancel = cy.spy().as('onCancel');
 
-  it('shows an error message when saving fails', () => {
-    cy.stub(redactionService, 'updateRedactionContext')
-      .as('updateRedactionContextStub')
-      .rejects(new Error('API Error'));
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Original text' }}
+                    isEditing={true}
+                    onCancel={onCancel}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
 
-    cy.fullMount(
-       <RedactionContextManager
-        redactionId={redactionId}
-        context={{ text: 'Old context' }}
-        isEditing={true}
-        onCancel={() => {}}
-        onSaveSuccess={() => {}}
-      />,
-      mountOpts
-    );
+            cy.contains('button', 'Cancel').click();
+            cy.get('@onCancel').should('have.been.calledOnce');
+        });
 
-    cy.get('textarea[name="Context for Disclosure"]').clear().type('New text');
-    cy.contains('button', 'Save').click();
+        it('reverts text to initial value when Cancel is clicked', () => {
+            const initialContext = 'Do not change me.';
 
-    cy.get('.MuiAlert-root').should('be.visible');
-    cy.get('.MuiAlert-root').should('contain', 'Failed to save context.');
-  });
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: initialContext }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').type(' I changed it.');
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', `${initialContext} I changed it.`);
+            cy.contains('button', 'Cancel').click();
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', initialContext);
+        });
+    });
+
+    context('Save', () => {
+        it('calls updateRedactionContext API when Save is clicked', () => {
+            const newContextText = 'This is the updated context.';
+
+            cy.intercept('POST', `**/cases/document/redaction/${redactionId}/context`, {
+                statusCode: 200,
+                body: { redaction: redactionId, text: newContextText },
+            }).as('updateContext');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Old context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').clear().type(newContextText);
+            cy.contains('button', 'Save').click();
+
+            cy.wait('@updateContext').its('request.body').should('deep.include', { text: newContextText });
+        });
+
+        it('shows success toast when save succeeds', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Old context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').clear().type('New context');
+            cy.contains('button', 'Save').click();
+
+            cy.wait('@updateContext');
+            cy.contains('Context saved successfully.').should('be.visible');
+        });
+
+        it('calls onContextSave with redactionId and new text when save succeeds', () => {
+            const onContextSave = cy.spy().as('onContextSave');
+            const newText = 'Brand new context';
+
+            cy.intercept('POST', `**/cases/document/redaction/${redactionId}/context`, {
+                statusCode: 200,
+                body: { redaction: redactionId, text: newText },
+            }).as('updateContext');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Old context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={onContextSave}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').clear().type(newText);
+            cy.contains('button', 'Save').click();
+
+            cy.wait('@updateContext');
+            cy.get('@onContextSave').should('have.been.calledWith', redactionId, newText);
+        });
+
+        it('shows error alert when save fails', () => {
+            cy.intercept('POST', `**/cases/document/redaction/${redactionId}/context`, {
+                statusCode: 500,
+                body: { detail: 'Server error' },
+            }).as('updateContextFailed');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Old context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').clear().type('New text');
+            cy.contains('button', 'Save').click();
+
+            cy.wait('@updateContextFailed');
+            cy.get('[role="alert"]').should('be.visible');
+            cy.contains('Failed to save context.').should('be.visible');
+        });
+    });
+
+    context('Delete', () => {
+        it('disables delete button when context is empty', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={null}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').should('be.disabled');
+        });
+
+        it('enables delete button when context has text', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Some context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').should('not.be.disabled');
+        });
+
+        it('calls deleteRedactionContext API when delete button is clicked', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Context to delete' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').click();
+
+            cy.wait('@deleteContext');
+        });
+
+        it('shows success toast when delete succeeds', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Context to delete' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').click();
+
+            cy.wait('@deleteContext');
+            cy.contains('Context deleted successfully.').should('be.visible');
+        });
+
+        it('calls onContextSave with null when delete succeeds', () => {
+            const onContextSave = cy.spy().as('onContextSave');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Context to delete' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={onContextSave}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').click();
+
+            cy.wait('@deleteContext');
+            cy.get('@onContextSave').should('have.been.calledWith', redactionId, null);
+        });
+
+        it('clears the text field after successful delete', () => {
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Context to delete' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', 'Context to delete');
+            cy.get('[data-testid="DeleteIcon"]').parent('button').click();
+
+            cy.wait('@deleteContext');
+            cy.get('textarea[name="Context for Disclosure"]').should('have.value', '');
+        });
+
+        it('shows error alert when delete fails', () => {
+            cy.intercept('DELETE', `**/cases/document/redaction/${redactionId}/context`, {
+                statusCode: 500,
+                body: { detail: 'Server error' },
+            }).as('deleteContextFailed');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Context to delete' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').click();
+
+            cy.wait('@deleteContextFailed');
+            cy.get('[role="alert"]').should('be.visible');
+            cy.contains('Failed to delete context.').should('be.visible');
+        });
+    });
+
+    context('Loading State', () => {
+        it('shows loading spinner while saving', () => {
+            cy.intercept('POST', `**/cases/document/redaction/${redactionId}/context`, {
+                delay: 500,
+                statusCode: 200,
+                body: { redaction: redactionId, text: 'New text' },
+            }).as('updateContextDelayed');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Old context' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('textarea[name="Context for Disclosure"]').clear().type('New text');
+            cy.contains('button', 'Save').click();
+
+            cy.get('[role="progressbar"]').should('be.visible');
+        });
+
+        it('shows loading spinner while deleting', () => {
+            cy.intercept('DELETE', `**/cases/document/redaction/${redactionId}/context`, {
+                delay: 500,
+                statusCode: 204,
+            }).as('deleteContextDelayed');
+
+            cy.fullMount(
+                <RedactionContextManager
+                    redactionId={redactionId}
+                    context={{ text: 'Context to delete' }}
+                    isEditing={true}
+                    onCancel={() => {}}
+                    onContextSave={() => {}}
+                />,
+                mountOpts
+            );
+
+            cy.get('[data-testid="DeleteIcon"]').parent('button').click();
+
+            cy.get('[role="progressbar"]').should('be.visible');
+        });
+    });
 });

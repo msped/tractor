@@ -5,16 +5,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0006_alter_case_export_file'),
-        ('training', '0002_model_f1_score_model_precision_model_recall'),
+        ("cases", "0006_alter_case_export_file"),
+        ("training", "0002_model_f1_score_model_precision_model_recall"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='document',
-            name='spacy_model',
-            field=models.ForeignKey(blank=True, help_text='A link to the spaCy model used for processing.', null=True, on_delete=django.db.models.deletion.SET_NULL, to='training.model'),
+            model_name="document",
+            name="spacy_model",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="A link to the spaCy model used for processing.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                to="training.model",
+            ),
         ),
     ]

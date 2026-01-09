@@ -1,6 +1,8 @@
 # nlp/loader.py
-import spacy
 from threading import Lock
+
+import spacy
+
 from training.models import Model as SpacyModel
 
 
@@ -24,8 +26,7 @@ class SpacyModelManager:
     def load_model(self, path, name=None):
         self.model = spacy.load(path)
         self.model_name = name or path
-        self.model_entry = SpacyModel.objects.filter(
-            name=self.model_name).first()
+        self.model_entry = SpacyModel.objects.filter(name=self.model_name).first()
 
     def load_active_model(self):
         active_model = SpacyModel.objects.filter(is_active=True).first()
@@ -48,4 +49,4 @@ class SpacyModelManager:
         # Set as active
         if not model_entry.is_active:
             model_entry.is_active = True
-            model_entry.save(update_fields=['is_active'])
+            model_entry.save(update_fields=["is_active"])

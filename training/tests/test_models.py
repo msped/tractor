@@ -1,9 +1,13 @@
 import shutil
 import tempfile
-from django.test import TestCase, override_settings
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from cases.models import Case, Document as CaseDocument
+from django.test import TestCase, override_settings
+
+from cases.models import Case
+from cases.models import Document as CaseDocument
+
 from ..models import (
     Model,
     TrainingDocument,
@@ -21,25 +25,17 @@ MEDIA_ROOT = tempfile.mkdtemp()
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class ModelModelTests(NetworkBlockerMixin, TestCase):
     def test_model_str(self):
-        model_active = Model.objects.create(
-            name="active_model", path="/path/to/active", is_active=True
-        )
+        model_active = Model.objects.create(name="active_model", path="/path/to/active", is_active=True)
         self.assertEqual(str(model_active), "active_model (Active)")
 
-        model_inactive = Model.objects.create(
-            name="inactive_model", path="/path/to/inactive", is_active=False
-        )
+        model_inactive = Model.objects.create(name="inactive_model", path="/path/to/inactive", is_active=False)
         self.assertEqual(str(model_inactive), "inactive_model (Inactive)")
 
     def test_single_active_model_constraint(self):
-        model1 = Model.objects.create(
-            name="model1", path="/path/to/model1", is_active=True
-        )
+        model1 = Model.objects.create(name="model1", path="/path/to/model1", is_active=True)
         self.assertTrue(model1.is_active)
 
-        model2 = Model.objects.create(
-            name="model2", path="/path/to/model2", is_active=True
-        )
+        model2 = Model.objects.create(name="model2", path="/path/to/model2", is_active=True)
         self.assertTrue(model2.is_active)
 
         model1.refresh_from_db()
@@ -50,8 +46,7 @@ class ModelModelTests(NetworkBlockerMixin, TestCase):
         model1.refresh_from_db()
         self.assertFalse(model1.is_active)
 
-        Model.objects.create(
-            name="model3", path="/path/to/model3", is_active=False)
+        Model.objects.create(name="model3", path="/path/to/model3", is_active=False)
         model2.refresh_from_db()
         self.assertTrue(model2.is_active)
 
@@ -59,8 +54,7 @@ class ModelModelTests(NetworkBlockerMixin, TestCase):
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingDocumentModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="testuser", password="password")
+        self.user = User.objects.create_user(username="testuser", password="password")
 
     def tearDown(self):
         shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
@@ -87,8 +81,7 @@ class TrainingDocumentModelTests(NetworkBlockerMixin, TestCase):
 
 class TrainingEntityModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        user = User.objects.create_user(
-            username="testuser", password="password")
+        user = User.objects.create_user(username="testuser", password="password")
         self.doc = TrainingDocument.objects.create(
             name="DocForEntities",
             original_file=SimpleUploadedFile("entities.docx", b"content"),
@@ -108,15 +101,12 @@ class TrainingEntityModelTests(NetworkBlockerMixin, TestCase):
 
 class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        self.model = Model.objects.create(
-            name="run_model", path="/path/to/run_model")
+        self.model = Model.objects.create(name="run_model", path="/path/to/run_model")
         self.case = Case.objects.create(case_reference="C01")
         self.case_doc = CaseDocument.objects.create(
-            case=self.case, original_file=SimpleUploadedFile(
-                "case.txt", b"content")
+            case=self.case, original_file=SimpleUploadedFile("case.txt", b"content")
         )
-        user = User.objects.create_user(
-            username="testuser", password="password")
+        user = User.objects.create_user(username="testuser", password="password")
         self.training_doc = TrainingDocument.objects.create(
             name="Training Doc for Run",
             original_file=SimpleUploadedFile("training.docx", b"content"),
@@ -124,11 +114,8 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
         )
 
     def test_training_run_str(self):
-        run = TrainingRun.objects.create(
-            model=self.model, source="redactions"
-        )
-        self.assertEqual(
-            str(run), f"TrainingRun {run.id} -> {self.model.name}")
+        run = TrainingRun.objects.create(model=self.model, source="redactions")
+        self.assertEqual(str(run), f"TrainingRun {run.id} -> {self.model.name}")
 
     def test_training_run_creation(self):
         run = TrainingRun.objects.create(model=self.model, source="both")
@@ -136,20 +123,15 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(run.source, "both")
 
     def test_training_run_training_doc_link(self):
-        run = TrainingRun.objects.create(
-            model=self.model, source="training_docs")
-        link = TrainingRunTrainingDoc.objects.create(
-            training_run=run, document=self.training_doc
-        )
+        run = TrainingRun.objects.create(model=self.model, source="training_docs")
+        link = TrainingRunTrainingDoc.objects.create(training_run=run, document=self.training_doc)
         self.assertEqual(link.training_run, run)
         self.assertEqual(link.document, self.training_doc)
         self.assertEqual(run.trainingruntrainingdoc_set.count(), 1)
 
     def test_training_run_case_doc_link(self):
         run = TrainingRun.objects.create(model=self.model, source="redactions")
-        link = TrainingRunCaseDoc.objects.create(
-            training_run=run, document=self.case_doc
-        )
+        link = TrainingRunCaseDoc.objects.create(training_run=run, document=self.case_doc)
         self.assertEqual(link.training_run, run)
         self.assertEqual(link.document, self.case_doc)
         self.assertEqual(run.trainingruncasedoc_set.count(), 1)

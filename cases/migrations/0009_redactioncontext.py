@@ -5,17 +5,25 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0008_remove_case_updated_at_remove_case_updated_by'),
+        ("cases", "0008_remove_case_updated_at_remove_case_updated_by"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='RedactionContext',
+            name="RedactionContext",
             fields=[
-                ('redaction', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, primary_key=True, related_name='context', serialize=False, to='cases.redaction')),
-                ('text', models.TextField(help_text='User-provided context for the redaction.')),
+                (
+                    "redaction",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        primary_key=True,
+                        related_name="context",
+                        serialize=False,
+                        to="cases.redaction",
+                    ),
+                ),
+                ("text", models.TextField(help_text="User-provided context for the redaction.")),
             ],
         ),
     ]

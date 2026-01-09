@@ -4,20 +4,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0003_alter_document_extracted_text_and_more'),
+        ("cases", "0003_alter_document_extracted_text_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='redaction',
-            name='justification',
-            field=models.TextField(blank=True, help_text='Reason for a manual redaction or for rejecting a suggestion.', null=True),
+            model_name="redaction",
+            name="justification",
+            field=models.TextField(
+                blank=True, help_text="Reason for a manual redaction or for rejecting a suggestion.", null=True
+            ),
         ),
         migrations.AlterField(
-            model_name='redaction',
-            name='redaction_type',
-            field=models.CharField(choices=[('OP_DATA', 'Operational Data'), ('PII', 'Third-Party PII'), ('DS_INFO', 'Data Subject Information')], max_length=10),
+            model_name="redaction",
+            name="redaction_type",
+            field=models.CharField(
+                choices=[
+                    ("OP_DATA", "Operational Data"),
+                    ("PII", "Third-Party PII"),
+                    ("DS_INFO", "Data Subject Information"),
+                ],
+                max_length=10,
+            ),
         ),
     ]
