@@ -75,6 +75,9 @@ npm run cy:open     # Interactive
 npm run cy:test     # With coverage (80% threshold)
 ```
 
+!!! note
+    The pages directory is required by Cypress to stop the following error: ```Error:   x   Using `export * from '...'` in a page is disallowed. Please use `export { default } from '...'` instead.```
+
 ## WeasyPrint (macOS)
 
 If PDF export fails with library errors:
