@@ -34,11 +34,6 @@ describe('<DataTable />', () => {
         cy.contains('01/01/2024').should('be.visible');
     });
 
-    it('navigates to new case page when "New Case" is clicked', () => {
-        cy.fullMount(<DataTable rows={mockRows} />, mountOpts);
-
-        cy.contains('a', 'New Case').should('have.attr', 'href', '/cases/new');
-    });
 
     context('Toolbar Filtering', () => {
         beforeEach(() => {

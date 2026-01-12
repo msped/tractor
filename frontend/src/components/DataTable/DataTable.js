@@ -24,7 +24,6 @@ import {
     gridFilterModelSelector,
 } from '@mui/x-data-grid';
 import { Box } from '@mui/system';
-import AddIcon from '@mui/icons-material/Add';
 
 const openInProgressValues = ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW'];
 const completedClosedValues = ['COMPLETED', 'CLOSED'];
@@ -141,17 +140,6 @@ function CustomToolbar() {
                 Withdrawn
             </Button>
             <Box sx={{ flexGrow: 1 }} />
-            <Button
-                size="small"
-                variant="contained"
-                startIcon={<AddIcon />}
-                component={NextLink}
-                href="/cases/new"
-                passHref
-                sx={{ marginRight: 1 }}
-            >
-                New Case
-            </Button>
             <StyledQuickFilter defaultExpanded>
                 <QuickFilterTrigger
                     render={(triggerProps, state) => (
