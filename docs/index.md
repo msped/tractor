@@ -6,7 +6,7 @@ Tractor is a document redaction application with ML-powered Named Entity Recogni
 
 ## Key Features
 
-- **Document Upload**: Support for PDF, Word, PowerPoint, and Excel files
+- **Document Upload**: Support for PDF and docx files.
 - **Automatic Redaction**: ML-powered Named Entity Recognition identifies sensitive information
 - **Review Workflow**: Accept or reject suggested redactions
 - **Model Training**: Train custom models from accepted redactions
