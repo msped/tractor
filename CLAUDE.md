@@ -102,7 +102,15 @@ tractor/
 
 ### Frontend
 
-- Component tests as `{Component}.cy.js` alongside component files
+- Components live in their own directory with an `index.js` re-export:
+  ```
+  components/
+  └── ComponentName/
+      ├── ComponentName.js      # Component implementation
+      ├── ComponentName.cy.js   # Cypress component test
+      └── index.js              # Re-exports: export * from './ComponentName';
+  ```
+- Import components via the directory: `import { ComponentName } from "@/components/ComponentName"`
 - Uses Cypress component testing (not E2E)
 - Coverage threshold: 80%
 
