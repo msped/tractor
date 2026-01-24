@@ -34,4 +34,5 @@ urlpatterns = [
         name="schedule-detail",
     ),
     path("training-runs", TrainingRunViewSet.as_view({"get": "list"}), name="training-run-list"),
+    path("training-runs/<uuid:pk>", TrainingRunViewSet.as_view({"get": "retrieve"}), name="training-run-detail"),
 ]
