@@ -34,37 +34,48 @@ const SIGN_IN_HANDLERS = {
 
 const SIGN_IN_PROVIDERS = Object.keys(SIGN_IN_HANDLERS);
 
+const providers = [
+    Credentials({
+        credentials: {
+            username: { label: "Username", text: "text" },
+            password: { label: "Password", type: "password" },
+        },
+        async authorize(credentials, req) {
+            try {
+                const response = await apiClient.post(
+                    '/auth/login',
+                    credentials,
+                );
+                const data = response.data;
+                if (data) return data;
+            } catch (error) {
+                console.error(error);
+            }
+            return null;
+        },
+    }),
+];
+
+if (
+    process.env.AUTH_MICROSOFT_ENTRA_ID_ID &&
+    process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET &&
+    process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER
+) {
+    providers.push(
+        MicrosoftEntraID({
+            clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
+            clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET,
+            issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
+        })
+    );
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
     session: {
         strategy: "jwt",
         maxAge: BACKEND_REFRESH_TOKEN_LIFETIME,
     },
-    providers: [
-        Credentials({
-            credentials: {
-                username: { label: "Username", text: "text" },
-                password: { label: "Password", type: "password" },
-            },
-            async authorize(credentials, req) {
-                try {
-                    const response = await apiClient.post(
-                        '/auth/login',
-                        credentials,
-                    );
-                    const data = response.data;
-                    if (data) return data;
-                } catch (error) {
-                    console.error(error);
-                }
-                return null;
-            },
-        }),
-        MicrosoftEntraID({
-            clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
-            clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET,
-            issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
-        }),
-    ],
+    providers,
     callbacks: {
         async signIn({user, account, profile, email, credentials}) {
             if (!SIGN_IN_PROVIDERS.includes(account.provider)) return false;
