@@ -121,10 +121,14 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_docling_doc = MagicMock()
         mock_docling_doc.iterate_items.return_value = [(mock_table, 0)]
 
+        # Create mock DocLayout wrapper with .doc property pointing to docling doc
+        mock_doc_layout = MagicMock()
+        mock_doc_layout.doc = mock_docling_doc
+
         mock_layout_instance = MagicMock()
         mock_layout_doc = MagicMock()
         mock_layout_doc.text = "Document with a table:"
-        mock_layout_doc._.layout = mock_docling_doc
+        mock_layout_doc._.layout = mock_doc_layout
         mock_layout_instance.return_value = mock_layout_doc
         mock_spacy_layout.return_value = mock_layout_instance
 
