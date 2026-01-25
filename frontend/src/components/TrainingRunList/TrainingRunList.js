@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import {
     Paper,
     Table,
@@ -32,7 +33,13 @@ const scoreExplanation = (
 );
 
 export const TrainingRunList = ({ runs }) => {
-    return (
+    const router = useRouter();
+
+    const handleRowClick = (runId) => {
+        router.push(`/training/runs/${runId}`);
+    };
+
+    return(
         <Paper sx={{ p: 3, mt: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">Training Run History</Typography>
@@ -62,7 +69,12 @@ export const TrainingRunList = ({ runs }) => {
                     </TableHead>
                     <TableBody>
                         {runs.map((run) => (
-                            <TableRow key={run.id} hover>
+                            <TableRow 
+                                key={run.id} 
+                                hover 
+                                onClick={() => handleRowClick(run.id)}
+                                sx={{ cursor: 'pointer' }}
+                            >
                                 <TableCell>{new Date(run.created_at).toLocaleString()}</TableCell>
                                 <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{run.model_name}</TableCell>
                                 <TableCell>{run.source.replace('_', ' ')}</TableCell>
