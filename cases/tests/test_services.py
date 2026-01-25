@@ -57,17 +57,18 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     @patch("cases.services.SpacyModelManager")
     def test_process_document_and_create_redactions_success(self, mock_spacy_manager, mock_extract_entities):
         """Test successful processing of a document and
-        creation of redactions."""
+        creation of redactions with correct redaction types from entity labels."""
         # Mock the SpacyModelManager
         mock_manager_instance = MagicMock()
         mock_manager_instance.get_model_entry.return_value = self.spacy_model
         mock_spacy_manager.get_instance.return_value = mock_manager_instance
 
-        # Mock the entity extraction
-        extracted_text = "This text contains PII like a name."
+        # Mock the entity extraction with different entity labels
+        extracted_text = "This text contains PII like a name and operational data."
         suggestions = [
-            {"start_char": 21, "end_char": 24, "text": "PII"},
-            {"start_char": 31, "end_char": 35, "text": "name"},
+            {"start_char": 18, "end_char": 21, "text": "PII", "label": "THIRD_PARTY"},
+            {"start_char": 29, "end_char": 33, "text": "name", "label": "DS_INFORMATION"},
+            {"start_char": 38, "end_char": 54, "text": "operational data", "label": "OPERATIONAL"},
         ]
         mock_extract_entities.return_value = (extracted_text, suggestions)
 
@@ -77,14 +78,47 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(self.document.status, Document.Status.READY_FOR_REVIEW)
         self.assertEqual(self.document.extracted_text, extracted_text)
         self.assertEqual(self.document.spacy_model, self.spacy_model)
-        self.assertEqual(self.document.redactions.count(), 2)
+        self.assertEqual(self.document.redactions.count(), 3)
 
-        first_redaction = self.document.redactions.first()
-        self.assertEqual(first_redaction.text, "PII")
-        self.assertTrue(first_redaction.is_suggestion)
-        self.assertFalse(first_redaction.is_accepted)
+        redactions = list(self.document.redactions.order_by("start_char"))
+
+        # First redaction: THIRD_PARTY -> THIRD_PARTY_PII
+        self.assertEqual(redactions[0].text, "PII")
+        self.assertEqual(redactions[0].redaction_type, Redaction.RedactionType.THIRD_PARTY_PII)
+        self.assertTrue(redactions[0].is_suggestion)
+        self.assertFalse(redactions[0].is_accepted)
+
+        # Second redaction: DS_INFORMATION -> DS_INFORMATION
+        self.assertEqual(redactions[1].text, "name")
+        self.assertEqual(redactions[1].redaction_type, Redaction.RedactionType.DS_INFORMATION)
+
+        # Third redaction: OPERATIONAL -> OPERATIONAL_DATA
+        self.assertEqual(redactions[2].text, "operational data")
+        self.assertEqual(redactions[2].redaction_type, Redaction.RedactionType.OPERATIONAL_DATA)
 
         mock_extract_entities.assert_called_once_with(self.document.original_file.path)
+
+    @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpacyModelManager")
+    def test_process_document_unknown_label_uses_fallback(self, mock_spacy_manager, mock_extract_entities):
+        """Test that unknown entity labels fall back to THIRD_PARTY_PII."""
+        mock_manager_instance = MagicMock()
+        mock_manager_instance.get_model_entry.return_value = self.spacy_model
+        mock_spacy_manager.get_instance.return_value = mock_manager_instance
+
+        extracted_text = "This has an unknown entity."
+        suggestions = [
+            {"start_char": 12, "end_char": 19, "text": "unknown", "label": "UNKNOWN_TYPE"},
+        ]
+        mock_extract_entities.return_value = (extracted_text, suggestions)
+
+        process_document_and_create_redactions(self.document.id)
+
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.redactions.count(), 1)
+
+        redaction = self.document.redactions.first()
+        self.assertEqual(redaction.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII)
 
     @patch("cases.services.SpacyModelManager")
     @patch("cases.services.extract_entities_from_text")

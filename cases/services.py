@@ -18,6 +18,13 @@ from .models import Case, Document, Redaction
 
 logger = logging.getLogger(__name__)
 
+# Mapping from spaCy entity labels to Redaction types
+ENTITY_LABEL_TO_REDACTION_TYPE = {
+    "DS_INFORMATION": Redaction.RedactionType.DS_INFORMATION,
+    "THIRD_PARTY": Redaction.RedactionType.THIRD_PARTY_PII,
+    "OPERATIONAL": Redaction.RedactionType.OPERATIONAL_DATA,
+}
+
 
 def process_document_and_create_redactions(document_id):
     """
@@ -52,8 +59,10 @@ def process_document_and_create_redactions(document_id):
 
     with transaction.atomic():
         for suggestion in ai_suggestions:
-            # In production, map entity labels to redaction types
-            redaction_type = Redaction.RedactionType.THIRD_PARTY_PII
+            redaction_type = ENTITY_LABEL_TO_REDACTION_TYPE.get(
+                suggestion["label"],
+                Redaction.RedactionType.THIRD_PARTY_PII  # fallback default
+            )
             Redaction.objects.create(
                 document=document,
                 start_char=suggestion["start_char"],
