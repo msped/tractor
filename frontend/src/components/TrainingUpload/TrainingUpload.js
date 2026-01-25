@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Box, Button, Typography, Paper } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { uploadTrainingDoc, runManualTraining } from '@/services/trainingService';
@@ -8,6 +9,7 @@ import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast';
 
 export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
+    const router = useRouter();
     const { data: session } = useSession();
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef(null);
@@ -56,7 +58,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
         try {
             const response = await runManualTraining(session?.access_token);
             toast.success(`Training started on ${response.documents} documents.`, { id: toastId });
-            if (onUpload) onUpload();
+            router.push('/training');
         } catch (error) {
             toast.error(error.message, { id: toastId });
         }

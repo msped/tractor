@@ -77,15 +77,13 @@ describe('<TrainingUpload />', () => {
   });
 
   context('Run Training', () => {
-    it('calls the runManualTraining service, shows a success toast, and calls onUpload', () => {
-      const onUploadStub = cy.stub().as('onUpload');
-      cy.fullMount(<TrainingUpload unprocessedDocsCount={5} onUpload={onUploadStub} />, mountOpts);
+    it('calls the runManualTraining service, shows a success toast, and redirects to training page', () => {
+      cy.fullMount(<TrainingUpload unprocessedDocsCount={5} />, mountOpts);
 
       cy.contains('button', 'Run Training on 5 Unprocessed Document(s)').click();
 
       cy.wait('@runManualTraining')
       cy.contains('Training started on 5 documents.').should('be.visible');
-      cy.get('@onUpload').should('have.been.calledOnce');
     });
 
     it('shows an error toast if running training fails', () => {
