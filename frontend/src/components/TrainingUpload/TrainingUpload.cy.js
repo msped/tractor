@@ -22,8 +22,9 @@ describe('<TrainingUpload />', () => {
   });
 
   context('File Upload', () => {
-    it('uploads a .docx file successfully via click', () => {
-      cy.fullMount(<TrainingUpload unprocessedDocsCount={0} />, mountOpts);
+    it('uploads a .docx file successfully via click and calls onUpload', () => {
+      const onUploadStub = cy.stub().as('onUpload');
+      cy.fullMount(<TrainingUpload unprocessedDocsCount={0} onUpload={onUploadStub} />, mountOpts);
 
       // Use .selectFile on the hidden input to simulate a user clicking and choosing a file
       cy.get('input[type="file"]').selectFile({
@@ -34,6 +35,7 @@ describe('<TrainingUpload />', () => {
 
       cy.wait('@uploadTrainingDoc');
       cy.contains('1 document(s) uploaded successfully.').should('be.visible');
+      cy.get('@onUpload').should('have.been.calledOnce');
     });
 
     it('uploads multiple .docx files successfully via drag and drop', () => {
@@ -75,13 +77,15 @@ describe('<TrainingUpload />', () => {
   });
 
   context('Run Training', () => {
-    it('calls the runManualTraining service and shows a success toast', () => {
-      cy.fullMount(<TrainingUpload unprocessedDocsCount={5} />, mountOpts);
+    it('calls the runManualTraining service, shows a success toast, and calls onUpload', () => {
+      const onUploadStub = cy.stub().as('onUpload');
+      cy.fullMount(<TrainingUpload unprocessedDocsCount={5} onUpload={onUploadStub} />, mountOpts);
 
       cy.contains('button', 'Run Training on 5 Unprocessed Document(s)').click();
 
       cy.wait('@runManualTraining')
       cy.contains('Training started on 5 documents.').should('be.visible');
+      cy.get('@onUpload').should('have.been.calledOnce');
     });
 
     it('shows an error toast if running training fails', () => {

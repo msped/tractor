@@ -2,6 +2,7 @@ import tempfile
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from docling_core.types.doc import TableItem
 
 from ..services import extract_entities_from_text
 from .base import NetworkBlockerMixin
@@ -49,6 +50,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_layout_instance = MagicMock()
         mock_layout_doc = MagicMock()
         mock_layout_doc.text = "Hello, I'm John Doe and I live in London."
+        # Mock the layout attribute with no tables
+        mock_layout_doc._.layout = None
         mock_layout_instance.return_value = mock_layout_doc
         mock_spacy_layout.return_value = mock_layout_instance
 
@@ -89,8 +92,45 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_layout_instance = MagicMock()
         mock_layout_doc = MagicMock()
         mock_layout_doc.text = ""
+        mock_layout_doc._.layout = None
         mock_layout_instance.return_value = mock_layout_doc
         mock_spacy_layout.return_value = mock_layout_instance
 
         with self.assertRaisesMessage(ValueError, "No text found in the document."):
             extract_entities_from_text(self.file_path)
+
+    @patch("training.services.spaCyLayout")
+    @patch("training.services.SpacyModelManager")
+    def test_extract_entities_includes_tables(self, mock_model_manager, mock_spacy_layout):
+        """
+        Test that tables are extracted and included in the text.
+        """
+        mock_nlp = MagicMock()
+        mock_doc_with_ents = MagicMock()
+        mock_doc_with_ents.ents = []
+        mock_nlp.return_value = mock_doc_with_ents
+
+        mock_manager_instance = mock_model_manager.get_instance.return_value
+        mock_manager_instance.get_model.return_value = mock_nlp
+
+        # Create a mock table item
+        mock_table = MagicMock(spec=TableItem)
+        mock_table.export_to_markdown.return_value = "| Name | Age |\n|------|-----|\n| John | 30 |"
+
+        # Create a mock docling document with tables
+        mock_docling_doc = MagicMock()
+        mock_docling_doc.iterate_items.return_value = [(mock_table, 0)]
+
+        mock_layout_instance = MagicMock()
+        mock_layout_doc = MagicMock()
+        mock_layout_doc.text = "Document with a table:"
+        mock_layout_doc._.layout = mock_docling_doc
+        mock_layout_instance.return_value = mock_layout_doc
+        mock_spacy_layout.return_value = mock_layout_instance
+
+        extracted_text, results = extract_entities_from_text(self.file_path)
+
+        self.assertIn("Document with a table:", extracted_text)
+        self.assertIn("| Name | Age |", extracted_text)
+        self.assertIn("| John | 30 |", extracted_text)
+        mock_table.export_to_markdown.assert_called_once()
