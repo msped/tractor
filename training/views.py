@@ -53,7 +53,7 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAdminUser]
-    queryset = TrainingDocument.objects.all().order_by("-created_at")
+    queryset = TrainingDocument.objects.filter(processed=False).order_by("-created_at")
     serializer_class = TrainingDocumentSerializer
 
     def perform_create(self, serializer):

@@ -24,7 +24,7 @@ import { deleteTrainingDoc as deleteTrainingDocService } from '@/services/traini
 import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
-export const TrainingDocList = ({ docs, deleteTrainingDoc = deleteTrainingDocService }) => {
+export const TrainingDocList = ({ docs, refreshDocs, deleteTrainingDoc = deleteTrainingDocService }) => {
     const { data: session } = useSession();
     
     const handleDelete = async (docId, docName) => {
@@ -32,6 +32,7 @@ export const TrainingDocList = ({ docs, deleteTrainingDoc = deleteTrainingDocSer
         try {
             await deleteTrainingDoc(docId, session?.access_token);
             toast.success("Document deleted successfully.", { id: toastId });
+            if (refreshDocs) refreshDocs();
         } catch (error) {
             toast.error(error.message, { id: toastId });
         } finally {

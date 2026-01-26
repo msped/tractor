@@ -27,14 +27,29 @@ from .base import NetworkBlockerMixin
 User = get_user_model()
 
 
-def create_test_docx(path, highlights):
-    """Helper to create a docx file with highlighted text."""
+def create_test_docx(path, highlights, multi_paragraph=False):
+    """Helper to create a docx file with highlighted text.
+
+    Args:
+        path: Path to save the docx file
+        highlights: List of (text, color) tuples or list of lists for multi-paragraph
+        multi_paragraph: If True, highlights is a list of paragraphs, each containing
+                        a list of (text, color) tuples
+    """
     doc = DocxDocument()
-    p = doc.add_paragraph()
-    for text, color in highlights:
-        run = p.add_run(text)
-        if color:
-            run.font.highlight_color = color
+    if multi_paragraph:
+        for para_highlights in highlights:
+            p = doc.add_paragraph()
+            for text, color in para_highlights:
+                run = p.add_run(text)
+                if color:
+                    run.font.highlight_color = color
+    else:
+        p = doc.add_paragraph()
+        for text, color in highlights:
+            run = p.add_run(text)
+            if color:
+                run.font.highlight_color = color
     doc.save(path)
 
 
@@ -137,6 +152,140 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(train_data), 2)
         self.assertEqual(len(t_docs), 1)
         self.assertEqual(len(c_docs), 1)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_merge"))
+class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
+    """Tests for merging adjacent highlighted runs."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("testuser2", password="password")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def test_adjacent_runs_same_color_are_merged(self):
+        """Test that adjacent runs with the same highlight color are merged into one entity."""
+        docx_path = Path(settings.MEDIA_ROOT) / "merge_test.docx"
+        # Simulate Word splitting "Cheshire Police" into multiple runs
+        create_test_docx(
+            docx_path,
+            [
+                ("Cheshire ", WD_COLOR_INDEX.BRIGHT_GREEN),
+                ("Police", WD_COLOR_INDEX.BRIGHT_GREEN),
+                (" is here.", None),
+            ],
+        )
+        with open(docx_path, "rb") as f:
+            TrainingDocument.objects.create(
+                name="Merge Test",
+                original_file=SimpleUploadedFile("merge_test.docx", f.read()),
+                created_by=self.user,
+                processed=False,
+            )
+
+        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+        # Should be ONE entity for "Cheshire Police", not two separate ones
+        self.assertEqual(len(annotations["entities"]), 1)
+        start, end, label = annotations["entities"][0]
+        self.assertEqual(text[start:end], "Cheshire Police")
+        self.assertEqual(label, "THIRD_PARTY_PII")
+
+    def test_entity_boundaries_trimmed_of_whitespace(self):
+        """Test that entity boundaries are trimmed to exclude leading/trailing whitespace."""
+        docx_path = Path(settings.MEDIA_ROOT) / "trim_test.docx"
+        # Simulate highlighted text with surrounding whitespace
+        create_test_docx(
+            docx_path,
+            [
+                ("Text ", None),
+                # whitespace on both sides
+                (" Jones ", WD_COLOR_INDEX.BRIGHT_GREEN),
+                (" more.", None),
+            ],
+        )
+        with open(docx_path, "rb") as f:
+            TrainingDocument.objects.create(
+                name="Trim Test",
+                original_file=SimpleUploadedFile("trim_test.docx", f.read()),
+                created_by=self.user,
+                processed=False,
+            )
+
+        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+        self.assertEqual(len(annotations["entities"]), 1)
+        start, end, label = annotations["entities"][0]
+        # Entity should be trimmed to just "Jones" without surrounding whitespace
+        self.assertEqual(text[start:end], "Jones")
+
+    def test_separate_highlights_remain_separate(self):
+        """Test that highlights separated by non-highlighted text remain separate entities."""
+        docx_path = Path(settings.MEDIA_ROOT) / "separate_test.docx"
+        create_test_docx(
+            docx_path,
+            [
+                ("Name: ", None),
+                ("John", WD_COLOR_INDEX.BRIGHT_GREEN),
+                (" and ", None),
+                ("Jane", WD_COLOR_INDEX.BRIGHT_GREEN),
+                (" are here.", None),
+            ],
+        )
+        with open(docx_path, "rb") as f:
+            TrainingDocument.objects.create(
+                name="Separate Test",
+                original_file=SimpleUploadedFile("separate_test.docx", f.read()),
+                created_by=self.user,
+                processed=False,
+            )
+
+        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+        # Should be TWO separate entities
+        self.assertEqual(len(annotations["entities"]), 2)
+        entity_texts = [text[start:end] for start, end, label in annotations["entities"]]
+        self.assertIn("John", entity_texts)
+        self.assertIn("Jane", entity_texts)
+
+    def test_whitespace_only_highlights_are_ignored(self):
+        """Test that highlights containing only whitespace are not included as entities."""
+        docx_path = Path(settings.MEDIA_ROOT) / "whitespace_test.docx"
+        create_test_docx(
+            docx_path,
+            [
+                ("Text ", None),
+                # whitespace-only highlight
+                ("   ", WD_COLOR_INDEX.BRIGHT_GREEN),
+                (" more text ", None),
+                ("Valid", WD_COLOR_INDEX.TURQUOISE),
+            ],
+        )
+        with open(docx_path, "rb") as f:
+            TrainingDocument.objects.create(
+                name="Whitespace Test",
+                original_file=SimpleUploadedFile("whitespace_test.docx", f.read()),
+                created_by=self.user,
+                processed=False,
+            )
+
+        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+        # Should be ONE entity (the whitespace-only one should be ignored)
+        self.assertEqual(len(annotations["entities"]), 1)
+        start, end, label = annotations["entities"][0]
+        self.assertEqual(text[start:end], "Valid")
 
 
 class ExportSpacyDataTests(NetworkBlockerMixin, TestCase):

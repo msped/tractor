@@ -68,8 +68,9 @@ describe('<TrainingDocList />', () => {
 
         it('successfully deletes a document after confirmation', () => {
             const deleteStub = cy.stub().as('deleteTrainingDoc').resolves();
+            const refreshDocsStub = cy.stub().as('refreshDocs');
             cy.fullMount(
-                <TrainingDocList docs={mockDocs} deleteTrainingDoc={deleteStub} />,
+                <TrainingDocList docs={mockDocs} deleteTrainingDoc={deleteStub} refreshDocs={refreshDocsStub} />,
                 mountOptions
             );
 
@@ -77,6 +78,7 @@ describe('<TrainingDocList />', () => {
             cy.get('[role="dialog"]').contains('button', 'Delete').click();
             cy.contains('Document deleted successfully.').should('be.visible');
             cy.get('@deleteTrainingDoc').should('have.been.calledOnceWith', 'doc-1');
+            cy.get('@refreshDocs').should('have.been.calledOnce');
             cy.get('[role="dialog"]').should('not.exist');
         });
 

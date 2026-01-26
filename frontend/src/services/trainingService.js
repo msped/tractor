@@ -99,6 +99,20 @@ export const getTrainingRuns = async (accessToken) => {
     }
 };
 
+export const getTrainingRunDetail = async (id, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
+
+    try {
+        const response = await apiClient.get(`/training-runs/${id}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch training run detail:", error.response?.data || error.message);
+        throw new Error("Failed to fetch training run details.");
+    }
+};
+
 export const deleteTrainingDoc = async (docId, accessToken) => {
     if (!accessToken) throw new Error("Not authenticated");
 

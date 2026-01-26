@@ -149,7 +149,7 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
 
         sortedMarks.forEach((mark, index) => {
             const markStart = mark.start_char;
-            const markEndExclusive = mark.end_char + 1;
+            const markEndExclusive = mark.end_char;
 
             if (markStart > lastIndex) {
                 parts.push(
@@ -196,7 +196,7 @@ export const DocumentViewer = ({ text, redactions, pendingRedaction, hoveredSugg
         <Paper
             elevation={0}
             sx={{
-                p: 4, lineHeight: 2, fontSize: '1.1rem', whiteSpace: 'pre-wrap',
+                p: 4, lineHeight: 1.5, fontSize: '1.1rem', whiteSpace: 'pre-wrap',
                 flexGrow: 1, overflowY: 'auto', height: '100%'
             }}
             ref={viewerRef}

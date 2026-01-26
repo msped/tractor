@@ -8,3 +8,6 @@ discussion.md
 .coverage
 htmlcov/
 .DS_Store
+nlp_models/
+dev.spacy
+train.spacy
