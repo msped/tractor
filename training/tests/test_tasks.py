@@ -115,7 +115,8 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
 
     def test_collect_from_training_docs(self):
         """Test collecting data only from TrainingDocuments."""
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs")
 
         self.assertEqual(len(train_data), 1)
         self.assertEqual(len(t_docs), 1)
@@ -131,7 +132,8 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
 
     def test_collect_from_redactions(self):
         """Test collecting data only from CaseDocument redactions."""
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="redactions")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="redactions")
 
         self.assertEqual(len(train_data), 1)
         self.assertEqual(len(t_docs), 0)
@@ -148,7 +150,8 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
 
     def test_collect_from_both(self):
         """Test collecting data from both sources."""
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="both")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="both")
         self.assertEqual(len(train_data), 2)
         self.assertEqual(len(t_docs), 1)
         self.assertEqual(len(c_docs), 1)
@@ -186,7 +189,8 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs")
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
@@ -204,7 +208,8 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
             docx_path,
             [
                 ("Text ", None),
-                (" Jones ", WD_COLOR_INDEX.BRIGHT_GREEN),  # whitespace on both sides
+                # whitespace on both sides
+                (" Jones ", WD_COLOR_INDEX.BRIGHT_GREEN),
                 (" more.", None),
             ],
         )
@@ -216,7 +221,8 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs")
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
@@ -241,18 +247,21 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         with open(docx_path, "rb") as f:
             training_doc = TrainingDocument.objects.create(
                 name="Separate Test",
-                original_file=SimpleUploadedFile("separate_test.docx", f.read()),
+                original_file=SimpleUploadedFile(
+                    "separate_test.docx", f.read()),
                 created_by=self.user,
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs")
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
         # Should be TWO separate entities
         self.assertEqual(len(annotations["entities"]), 2)
-        entity_texts = [text[start:end] for start, end, label in annotations["entities"]]
+        entity_texts = [text[start:end]
+                        for start, end, label in annotations["entities"]]
         self.assertIn("John", entity_texts)
         self.assertIn("Jane", entity_texts)
 
@@ -263,7 +272,8 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
             docx_path,
             [
                 ("Text ", None),
-                ("   ", WD_COLOR_INDEX.BRIGHT_GREEN),  # whitespace-only highlight
+                # whitespace-only highlight
+                ("   ", WD_COLOR_INDEX.BRIGHT_GREEN),
                 (" more text ", None),
                 ("Valid", WD_COLOR_INDEX.TURQUOISE),
             ],
@@ -271,12 +281,14 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         with open(docx_path, "rb") as f:
             training_doc = TrainingDocument.objects.create(
                 name="Whitespace Test",
-                original_file=SimpleUploadedFile("whitespace_test.docx", f.read()),
+                original_file=SimpleUploadedFile(
+                    "whitespace_test.docx", f.read()),
                 created_by=self.user,
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs")
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
@@ -301,19 +313,22 @@ class ExportSpacyDataTests(NetworkBlockerMixin, TestCase):
 
     def test_export_creates_training_file_only(self):
         """Test that only a training file is created when split is 1.0."""
-        export_spacy_data(self.train_data, self.train_path, self.dev_path, split=1.0)
+        export_spacy_data(self.train_data, self.train_path,
+                          self.dev_path, split=1.0)
         self.assertTrue(self.train_path.exists())
         self.assertFalse(self.dev_path.exists())
 
     def test_export_creates_dev_file_only(self):
         """Test that only a dev file is created when split is 0.0."""
-        export_spacy_data(self.train_data, self.train_path, self.dev_path, split=0.0)
+        export_spacy_data(self.train_data, self.train_path,
+                          self.dev_path, split=0.0)
         self.assertFalse(self.train_path.exists())
         self.assertTrue(self.dev_path.exists())
 
     def test_export_data_integrity(self):
         """Test that the data in the created DocBin is correct."""
-        export_spacy_data(self.train_data, self.train_path, self.dev_path, split=1.0)
+        export_spacy_data(self.train_data, self.train_path,
+                          self.dev_path, split=1.0)
 
         nlp = spacy.blank("en")
         db = DocBin().from_disk(self.train_path)
@@ -346,24 +361,29 @@ class ExportSpacyDataTests(NetworkBlockerMixin, TestCase):
 )
 class TrainModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        self.user = User.objects.create_user("testuser", password="password", first_name="Test", last_name="User")
-        self.mock_train_data = [(f"text {i}", {"entities": [(0, 4, "LABEL")]}) for i in range(25)]
+        self.user = User.objects.create_user(
+            "testuser", password="password", first_name="Test", last_name="User")
+        self.mock_train_data = [
+            (f"text {i}", {"entities": [(0, 4, "LABEL")]}) for i in range(25)]
         # Use real TrainingDocument objects. The ORM needs them to create
         # related TrainingRunTrainingDoc objects.
         self.used_tdocs = []
         for i in range(2):
-            self.used_tdocs.append(TrainingDocument.objects.create(name=f"tdoc-{i}", created_by=self.user))
+            self.used_tdocs.append(TrainingDocument.objects.create(
+                name=f"tdoc-{i}", created_by=self.user))
 
         # Use real CaseDocument objects for the same reason.
         self.used_cdocs = []
         case = Case.objects.create(case_reference="C-TEST")
         for i in range(2):
             self.used_cdocs.append(
-                CaseDocument.objects.create(case=case, original_file=SimpleUploadedFile(f"cdoc-{i}.txt", b"content"))
+                CaseDocument.objects.create(
+                    case=case, original_file=SimpleUploadedFile(f"cdoc-{i}.txt", b"content"))
             )
 
         # Mock dependencies
-        self.collect_patcher = patch("training.tasks.collect_training_data_detailed")
+        self.collect_patcher = patch(
+            "training.tasks.collect_training_data_detailed")
         self.mock_collect = self.collect_patcher.start()
         self.mock_collect.return_value = (
             self.mock_train_data,
@@ -380,7 +400,8 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         self.spacy_load_patcher = patch("training.tasks.spacy.load")
         self.mock_spacy_load = self.spacy_load_patcher.start()
         mock_nlp = MagicMock()
-        mock_nlp.evaluate.return_value = {"ents_p": 0.9, "ents_r": 0.85, "ents_f": 0.875}
+        mock_nlp.evaluate.return_value = {
+            "ents_p": 0.9, "ents_r": 0.85, "ents_f": 0.875}
         # This is needed for the nlp.evaluate() call.
         real_nlp = spacy.blank("en")
         mock_nlp.make_doc.side_effect = real_nlp.make_doc
@@ -414,7 +435,8 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
     def test_train_model_successful_run(self):
         """Test a full, successful training run with mocks."""
-        Model.objects.create(name="active_model", path="/fake/path", is_active=True)
+        Model.objects.create(name="active_model",
+                             path="/fake/path", is_active=True)
 
         train_model(source="both", user=self.user)
 
@@ -454,12 +476,16 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         # Check if the specific log call we care about was made,
         # ignoring other automatic logs from auditlog.
         expected_call_found = any(
-            call.kwargs.get("force_log") is True and "training" in call.kwargs.get("changes", {})
+            call.kwargs.get("force_log") is True and "training" in call.kwargs.get(
+                "changes", {})
             for call in self.mock_log.call_args_list
         )
-        self.assertTrue(expected_call_found, "Expected explicit training log was not created.")
+        self.assertTrue(expected_call_found,
+                        "Expected explicit training log was not created.")
 
         self.mock_log.reset_mock()
         train_model(source="redactions", user=self.user)
-        expected_call_found = any("training" in call.kwargs.get("changes", {}) for call in self.mock_log.call_args_list)
-        self.assertFalse(expected_call_found, "A training log was created for 'redactions' source.")
+        expected_call_found = any("training" in call.kwargs.get(
+            "changes", {}) for call in self.mock_log.call_args_list)
+        self.assertFalse(expected_call_found,
+                         "A training log was created for 'redactions' source.")

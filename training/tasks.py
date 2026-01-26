@@ -59,8 +59,10 @@ def collect_training_data_detailed(source="both"):
                         if stripped_text:
                             # Adjust boundaries to exclude leading/trailing whitespace
                             # This ensures alignment with spaCy token boundaries
-                            leading_ws = len(entity_text) - len(entity_text.lstrip())
-                            trailing_ws = len(entity_text) - len(entity_text.rstrip())
+                            leading_ws = len(entity_text) - \
+                                len(entity_text.lstrip())
+                            trailing_ws = len(entity_text) - \
+                                len(entity_text.rstrip())
                             adjusted_start = current_entity_start + leading_ws
                             adjusted_end = current_entity_end - trailing_ws
                             entities.append(
@@ -187,7 +189,7 @@ def train_model(source="redactions", user=None):
     train_data, used_training_docs, used_case_docs = collect_training_data_detailed(
         source)
 
-    if len(train_data) < 9:
+    if len(train_data) < 25:
         print(
             f"Not enough training data ({len(train_data)} \
                 examples). Aborting."
