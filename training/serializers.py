@@ -2,6 +2,7 @@ from django_q.models import Schedule
 from rest_framework import serializers
 
 from cases.models import Document
+
 from .models import Model, TrainingDocument, TrainingRun, TrainingRunCaseDoc, TrainingRunTrainingDoc
 
 
@@ -55,7 +56,17 @@ class TrainingRunSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TrainingRun
-        fields = ["id", "model_name", "source", "created_at", "f1_score", "precision", "recall", "training_documents", "case_documents"]
+        fields = [
+            "id",
+            "model_name",
+            "source",
+            "created_at",
+            "f1_score",
+            "precision",
+            "recall",
+            "training_documents",
+            "case_documents",
+        ]
 
     def get_training_documents(self, obj):
         training_doc_links = TrainingRunTrainingDoc.objects.filter(training_run=obj).select_related("document")
@@ -63,6 +74,8 @@ class TrainingRunSerializer(serializers.ModelSerializer):
         return TrainingRunTrainingDocSerializer(documents, many=True).data
 
     def get_case_documents(self, obj):
-        case_doc_links = TrainingRunCaseDoc.objects.filter(training_run=obj).select_related("document", "document__case")
+        case_doc_links = TrainingRunCaseDoc.objects.filter(training_run=obj).select_related(
+            "document", "document__case"
+        )
         documents = [link.document for link in case_doc_links]
         return TrainingRunCaseDocSerializer(documents, many=True).data

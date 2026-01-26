@@ -182,7 +182,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
             ],
         )
         with open(docx_path, "rb") as f:
-            training_doc = TrainingDocument.objects.create(
+            TrainingDocument.objects.create(
                 name="Merge Test",
                 original_file=SimpleUploadedFile("merge_test.docx", f.read()),
                 created_by=self.user,
@@ -214,7 +214,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
             ],
         )
         with open(docx_path, "rb") as f:
-            training_doc = TrainingDocument.objects.create(
+            TrainingDocument.objects.create(
                 name="Trim Test",
                 original_file=SimpleUploadedFile("trim_test.docx", f.read()),
                 created_by=self.user,
@@ -245,7 +245,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
             ],
         )
         with open(docx_path, "rb") as f:
-            training_doc = TrainingDocument.objects.create(
+            TrainingDocument.objects.create(
                 name="Separate Test",
                 original_file=SimpleUploadedFile(
                     "separate_test.docx", f.read()),
@@ -279,7 +279,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
             ],
         )
         with open(docx_path, "rb") as f:
-            training_doc = TrainingDocument.objects.create(
+            TrainingDocument.objects.create(
                 name="Whitespace Test",
                 original_file=SimpleUploadedFile(
                     "whitespace_test.docx", f.read()),

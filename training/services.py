@@ -45,7 +45,7 @@ def extract_entities_from_text(path):
 
     # Normalize whitespace: collapse 3+ consecutive newlines into double newlines (one blank line)
     # This preserves intentional paragraph breaks while removing excessive spacing
-    extracted_text = re.sub(r'\n{3,}', '\n\n', extracted_text)
+    extracted_text = re.sub(r"\n{3,}", "\n\n", extracted_text)
 
     if not extracted_text.strip():
         raise ValueError("No text found in the document.")

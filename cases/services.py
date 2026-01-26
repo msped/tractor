@@ -61,7 +61,7 @@ def process_document_and_create_redactions(document_id):
         for suggestion in ai_suggestions:
             redaction_type = ENTITY_LABEL_TO_REDACTION_TYPE.get(
                 suggestion["label"],
-                Redaction.RedactionType.THIRD_PARTY_PII  # fallback default
+                Redaction.RedactionType.THIRD_PARTY_PII,  # fallback default
             )
             Redaction.objects.create(
                 document=document,

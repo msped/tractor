@@ -49,24 +49,21 @@ def collect_training_data_detailed(source="both"):
                 current_entity_end = None
                 current_entity_label = None
 
-                def close_current_entity():
+                def close_current_entity(entities_list, text):
                     """Close the current entity if one is open and has content."""
                     nonlocal current_entity_start, current_entity_end, current_entity_label
                     if current_entity_start is not None and current_entity_label is not None:
                         # Check if the entity text has actual content (not just whitespace)
-                        entity_text = full_text[current_entity_start:current_entity_end]
+                        entity_text = text[current_entity_start:current_entity_end]
                         stripped_text = entity_text.strip()
                         if stripped_text:
                             # Adjust boundaries to exclude leading/trailing whitespace
                             # This ensures alignment with spaCy token boundaries
-                            leading_ws = len(entity_text) - \
-                                len(entity_text.lstrip())
-                            trailing_ws = len(entity_text) - \
-                                len(entity_text.rstrip())
+                            leading_ws = len(entity_text) - len(entity_text.lstrip())
+                            trailing_ws = len(entity_text) - len(entity_text.rstrip())
                             adjusted_start = current_entity_start + leading_ws
                             adjusted_end = current_entity_end - trailing_ws
-                            entities.append(
-                                (adjusted_start, adjusted_end, current_entity_label))
+                            entities_list.append((adjusted_start, adjusted_end, current_entity_label))
                     current_entity_start = None
                     current_entity_end = None
                     current_entity_label = None
@@ -82,8 +79,7 @@ def collect_training_data_detailed(source="both"):
                         if run.font.highlight_color:
                             color_enum_member = run.font.highlight_color
                             color_name = color_enum_member.name if color_enum_member else None
-                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(
-                                color_name)
+                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(color_name)
 
                         if run_label:
                             # This run is highlighted with a recognized color
@@ -92,37 +88,35 @@ def collect_training_data_detailed(source="both"):
                                 current_entity_end = end_char
                             else:
                                 # Different label - close current and start new
-                                close_current_entity()
+                                close_current_entity(entities, full_text)
                                 current_entity_start = start_char
                                 current_entity_end = end_char
                                 current_entity_label = run_label
                         else:
                             # No highlight or unrecognized color - close current entity
-                            close_current_entity()
+                            close_current_entity(entities, full_text)
 
                         full_text += run_text
                         current_pos = end_char
 
                     # Close entity at end of paragraph (entities don't span paragraphs)
-                    close_current_entity()
+                    close_current_entity(entities, full_text)
                     full_text += "\n"
                     current_pos += 1
 
                 # Close any remaining entity
-                close_current_entity()
+                close_current_entity(entities, full_text)
 
                 if entities:
                     tdoc.extracted_text = full_text.strip()
                     tdoc.save(update_fields=["extracted_text"])
-                    train_data.append(
-                        (tdoc.extracted_text, {"entities": entities}))
+                    train_data.append((tdoc.extracted_text, {"entities": entities}))
                     training_docs_used.append(tdoc)
             except Exception as e:
                 print(f"Could not process training doc {tdoc.name}: {e}")
 
     if source in ("redactions", "both"):
-        completed_docs = Document.objects.filter(
-            status=Document.Status.COMPLETED)
+        completed_docs = Document.objects.filter(status=Document.Status.COMPLETED)
         for doc in completed_docs:
             text = doc.extracted_text
             if not text:
@@ -186,8 +180,7 @@ def train_model(source="redactions", user=None):
     """
     Train a new spaCy model using the config-driven pipeline.
     """
-    train_data, used_training_docs, used_case_docs = collect_training_data_detailed(
-        source)
+    train_data, used_training_docs, used_case_docs = collect_training_data_detailed(source)
 
     if len(train_data) < 25:
         print(
@@ -234,8 +227,7 @@ def train_model(source="redactions", user=None):
 
     # Load best model for evaluation scores
     nlp = spacy.load(output_dir / "model-best")
-    scores = nlp.evaluate([Example.from_dict(nlp.make_doc(t), ann)
-                          for t, ann in train_data])
+    scores = nlp.evaluate([Example.from_dict(nlp.make_doc(t), ann) for t, ann in train_data])
 
     # Register in DB
     new_model = Model.objects.create(
@@ -251,19 +243,16 @@ def train_model(source="redactions", user=None):
     training_run = TrainingRun.objects.create(model=new_model, source=source)
 
     # Find the corresponding training data for each document to get the text
-    tdoc_texts = {tdoc: data[0] for tdoc, data in zip(
-        used_training_docs, train_data, strict=False)}
+    tdoc_texts = {tdoc: data[0] for tdoc, data in zip(used_training_docs, train_data, strict=False)}
 
     for tdoc, text in tdoc_texts.items():
-        TrainingRunTrainingDoc.objects.create(
-            training_run=training_run, document=tdoc)
+        TrainingRunTrainingDoc.objects.create(training_run=training_run, document=tdoc)
         tdoc.extracted_text = text
         tdoc.processed = True
         tdoc.save(update_fields=["extracted_text", "processed"])
 
     for cdoc in used_case_docs:
-        TrainingRunCaseDoc.objects.create(
-            training_run=training_run, document=cdoc)
+        TrainingRunCaseDoc.objects.create(training_run=training_run, document=cdoc)
 
     if source == "training_docs":
         actor_info = "scheduled run"
