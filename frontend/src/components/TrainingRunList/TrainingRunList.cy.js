@@ -25,7 +25,7 @@ describe('<TrainingRunList />', () => {
 
     context('When runs are provided', () => {
         beforeEach(() => {
-            cy.mount(<TrainingRunList runs={mockRuns} />);
+            cy.fullMount(<TrainingRunList runs={mockRuns} />);
         });
 
         it('renders the table with training run data', () => {
@@ -62,7 +62,7 @@ describe('<TrainingRunList />', () => {
 
     context('When no runs are provided', () => {
         it('renders a message indicating no training runs were found', () => {
-            cy.mount(<TrainingRunList runs={[]} />);
+            cy.fullMount(<TrainingRunList runs={[]} />);
 
             cy.get('tbody tr').should('have.length', 1);
             cy.contains('td', 'No training runs found.').should('be.visible');
