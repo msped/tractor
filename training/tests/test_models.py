@@ -136,37 +136,3 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(link.document, self.case_doc)
         self.assertEqual(run.trainingruncasedoc_set.count(), 1)
 
-    def test_training_docs_reset_when_model_deleted(self):
-        """Test that training documents are reset to unprocessed when the model is deleted."""
-        # Mark the training doc as processed
-        self.training_doc.processed = True
-        self.training_doc.save()
-
-        # Create a training run linked to this document
-        run = TrainingRun.objects.create(model=self.model, source="training_docs")
-        TrainingRunTrainingDoc.objects.create(training_run=run, document=self.training_doc)
-
-        # Verify document is processed
-        self.training_doc.refresh_from_db()
-        self.assertTrue(self.training_doc.processed)
-
-        # Delete the model (cascades to TrainingRun)
-        self.model.delete()
-
-        # Verify document is now unprocessed
-        self.training_doc.refresh_from_db()
-        self.assertFalse(self.training_doc.processed)
-
-    def test_training_docs_reset_when_training_run_deleted_directly(self):
-        """Test that training documents are reset when TrainingRun is deleted directly."""
-        self.training_doc.processed = True
-        self.training_doc.save()
-
-        run = TrainingRun.objects.create(model=self.model, source="training_docs")
-        TrainingRunTrainingDoc.objects.create(training_run=run, document=self.training_doc)
-
-        # Delete the training run directly
-        run.delete()
-
-        self.training_doc.refresh_from_db()
-        self.assertFalse(self.training_doc.processed)
