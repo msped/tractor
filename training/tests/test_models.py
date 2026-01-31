@@ -135,4 +135,3 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(link.training_run, run)
         self.assertEqual(link.document, self.case_doc)
         self.assertEqual(run.trainingruncasedoc_set.count(), 1)
-
