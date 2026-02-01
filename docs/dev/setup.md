@@ -56,6 +56,23 @@ npm run dev
 
 The application will be available at `http://localhost:3000`.
 
+## Linting
+
+### Backend
+
+```bash
+ruff check .          # Run linter
+ruff format --check . # Check formatting
+ruff format .         # Auto-format code
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run lint          # Run ESLint
+```
+
 ## Running Tests
 
 ### Backend
