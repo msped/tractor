@@ -388,9 +388,6 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         mock_nlp.make_doc.side_effect = real_nlp.make_doc
         self.mock_spacy_load.return_value = mock_nlp
 
-        self.log_patcher = patch("training.tasks.LogEntryManager.log_create")
-        self.mock_log = self.log_patcher.start()
-
         self.timezone_patcher = patch("training.tasks.timezone.now")
         mock_now = self.timezone_patcher.start()
         mock_now.return_value = timezone.datetime(2024, 1, 1, 12, 0, 0)
@@ -405,7 +402,6 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         self.export_patcher.stop()
         self.subprocess_patcher.stop()
         self.spacy_load_patcher.stop()
-        self.log_patcher.stop()
         self.timezone_patcher.stop()
 
     def test_train_model_aborts_if_not_enough_data(self):
@@ -445,23 +441,3 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         train_model(source="redactions")
         cmd_args = self.mock_subprocess.call_args[0][0]
         self.assertIn("en_core_web_lg", cmd_args)
-
-    def test_train_model_logs_on_training_docs_source(self):
-        """Test that a log entry is created for 'training_docs' source."""
-        # Reset mock for this specific test
-        self.mock_log.reset_mock()
-
-        train_model(source="training_docs", user=self.user)
-
-        # Check if the specific log call we care about was made,
-        # ignoring other automatic logs from auditlog.
-        expected_call_found = any(
-            call.kwargs.get("force_log") is True and "training" in call.kwargs.get("changes", {})
-            for call in self.mock_log.call_args_list
-        )
-        self.assertTrue(expected_call_found, "Expected explicit training log was not created.")
-
-        self.mock_log.reset_mock()
-        train_model(source="redactions", user=self.user)
-        expected_call_found = any("training" in call.kwargs.get("changes", {}) for call in self.mock_log.call_args_list)
-        self.assertFalse(expected_call_found, "A training log was created for 'redactions' source.")

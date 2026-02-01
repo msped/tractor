@@ -1,11 +1,12 @@
 import random
+import shutil
 import subprocess
 from pathlib import Path
 
 import spacy
-from auditlog.models import LogEntryManager
 from django.conf import settings
 from django.utils import timezone
+from django_q.models import Task
 from docx import Document as DocxDocument
 from spacy.tokens import DocBin
 from spacy.training import Example
@@ -36,7 +37,8 @@ def collect_training_data_detailed(source="both"):
     case_docs_used = []
 
     if source in ("training_docs", "both"):
-        training_docs = TrainingDocument.objects.filter(processed=False)
+        # Get ALL training documents for cumulative training
+        training_docs = TrainingDocument.objects.all()
         for tdoc in training_docs:
             try:
                 doc = DocxDocument(tdoc.original_file.path)
@@ -180,6 +182,19 @@ def train_model(source="redactions", user=None):
     """
     Train a new spaCy model using the config-driven pipeline.
     """
+    # Check if another training task is already running
+    # Tasks with success=None are still in progress
+    running_tasks = Task.objects.filter(
+        func="training.tasks.train_model",
+        success__isnull=True,
+    ).count()
+
+    # If there's already a running task (not counting this one which hasn't started yet),
+    # abort to prevent concurrent training
+    if running_tasks > 0:
+        print("Another training task is already in progress. Aborting.")
+        return
+
     train_data, used_training_docs, used_case_docs = collect_training_data_detailed(source)
 
     if len(train_data) < 25:
@@ -199,11 +214,13 @@ def train_model(source="redactions", user=None):
     # Prepare output dir
     model_name = f"model_{source}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir = Path(settings.BASE_DIR, "nlp_models", model_name)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         active_model = Model.objects.get(is_active=True)
         base_model_path = active_model.path
     except Model.DoesNotExist:
+        active_model = None
         base_model_path = "en_core_web_lg"
 
     # Run spaCy train with subprocess
@@ -223,7 +240,14 @@ def train_model(source="redactions", user=None):
         "--initialize.vectors",
         base_model_path,
     ]
-    subprocess.run(cmd, check=True)
+
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        # Clean up the output directory if training failed
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        raise
 
     # Load best model for evaluation scores
     nlp = spacy.load(output_dir / "model-best")
@@ -253,17 +277,6 @@ def train_model(source="redactions", user=None):
 
     for cdoc in used_case_docs:
         TrainingRunCaseDoc.objects.create(training_run=training_run, document=cdoc)
-
-    if source == "training_docs":
-        actor_info = "scheduled run"
-        if user is not None:
-            actor_info = f"by {user.first_name} {user.last_name}"
-        LogEntryManager.log_create(
-            instance=new_model,
-            force_log=True,
-            actor=user,
-            changes={"training": f"Training started - {actor_info}"},
-        )
 
     print(
         f"Model trained and stored at {output_dir}, \

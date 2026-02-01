@@ -75,7 +75,7 @@ export const TrainingRunList = ({ runs }) => {
                                 onClick={() => handleRowClick(run.id)}
                                 sx={{ cursor: 'pointer' }}
                             >
-                                <TableCell>{new Date(run.created_at).toLocaleString()}</TableCell>
+                                <TableCell suppressHydrationWarning>{new Date(run.created_at).toLocaleString()}</TableCell>
                                 <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{run.model_name}</TableCell>
                                 <TableCell>{run.source.replace('_', ' ')}</TableCell>
                                 <TableCell align="right">{formatScore(run.f1_score)}</TableCell>
