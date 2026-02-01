@@ -105,3 +105,7 @@ class TrainingRunCaseDoc(models.Model):
 
 auditlog.register(TrainingDocument)
 auditlog.register(TrainingRun)
+auditlog.register(Model)
+auditlog.register(TrainingEntity)
+auditlog.register(TrainingRunTrainingDoc)
+auditlog.register(TrainingRunCaseDoc)
