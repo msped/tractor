@@ -130,7 +130,9 @@ class DocumentResubmitView(APIView):
 
     def post(self, request, document_id, *args, **kwargs):
         document = get_object_or_404(Document, id=document_id)
-        if document.status in [Document.Status.ERROR]:
+        if document.status in [Document.Status.ERROR, Document.Status.READY_FOR_REVIEW]:
+            # Delete existing redactions to avoid duplicates
+            document.redactions.all().delete()
             document.status = Document.Status.PROCESSING
             document.save(update_fields=["status"])
             async_task("cases.services.process_document_and_create_redactions", document.id)
