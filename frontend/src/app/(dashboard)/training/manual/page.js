@@ -13,6 +13,7 @@ export default function TrainingPage() {
     const [docs, setDocs] = useState([]);
 
     const fetchDocs = useCallback(async () => {
+        if (!session?.access_token) return;
         try {
             const data = await getTrainingDocs(session?.access_token);
             setDocs(data);
