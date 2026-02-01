@@ -339,9 +339,25 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         )
 
     @patch("cases.views.async_task")
-    def test_resubmit_document_wrong_status(self, mock_async_task):
-        """Test resubmitting a document not in ERROR status fails."""
+    def test_resubmit_document_ready_status_success(self, mock_async_task):
+        """Test resubmitting a document in READY status succeeds."""
         self.document.status = Document.Status.READY_FOR_REVIEW
+        self.document.save()
+
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, Document.Status.PROCESSING)
+        mock_async_task.assert_called_once_with(
+            "cases.services.process_document_and_create_redactions", self.document.id
+        )
+
+    @patch("cases.views.async_task")
+    def test_resubmit_document_wrong_status(self, mock_async_task):
+        """Test resubmitting a document in COMPLETED status fails."""
+        self.document.status = Document.Status.COMPLETED
         self.document.save()
 
         url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
@@ -349,8 +365,24 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.document.refresh_from_db()
-        self.assertEqual(self.document.status, Document.Status.READY_FOR_REVIEW)
+        self.assertEqual(self.document.status, Document.Status.COMPLETED)
         mock_async_task.assert_not_called()
+
+    @patch("cases.views.async_task")
+    def test_resubmit_document_deletes_redactions(self, mock_async_task):
+        """Test that resubmitting a document deletes existing redactions."""
+        self.document.status = Document.Status.READY_FOR_REVIEW
+        self.document.save()
+
+        # Verify redaction exists before resubmit
+        self.assertEqual(self.document.redactions.count(), 1)
+
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Verify redactions are deleted
+        self.assertEqual(self.document.redactions.count(), 0)
 
     def test_resubmit_document_not_found(self):
         """Test resubmitting a non-existent document returns 404."""

@@ -1,13 +1,14 @@
 "use client"
 
 import React, { useState, useCallback } from 'react';
-import { Box, Typography, Button, Container, Tooltip, CircularProgress } from '@mui/material';
+import { Box, Typography, Button, Container, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, IconButton } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import NextLink from 'next/link';
 import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { DocumentViewer } from '@/components/DocumentViewer';
-import { markAsComplete } from '@/services/documentService'
+import { markAsComplete, resubmitDocument } from '@/services/documentService'
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -36,6 +37,10 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
     // State to trigger scroll-to-view in the sidebar
     const [scrollToId, setScrollToId] = useState(null);
+
+    // State for resubmit confirmation dialog
+    const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
+    const [isResubmitting, setIsResubmitting] = useState(false);
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         try {
@@ -200,6 +205,20 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [ currentDocument.id, currentDocument.case, session?.access_token, router]);
 
+    const handleResubmit = useCallback(async () => {
+        setIsResubmitting(true);
+        try {
+            await resubmitDocument(currentDocument.id, session?.access_token);
+            toast.success("Document resubmitted for processing.");
+            router.push(`/cases/${currentDocument.case}`);
+        } catch (error) {
+            toast.error("Failed to resubmit document. Please try again.");
+        } finally {
+            setIsResubmitting(false);
+            setResubmitDialogOpen(false);
+        }
+    }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
+
 
     const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
     const manualRedactions = redactions.filter(r => !r.is_suggestion);
@@ -226,27 +245,33 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     <Box>
                         <Typography variant="h5" component="h1">{currentDocument?.filename}</Typography>
                     </Box>
-                    <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                         {currentDocument.status !== 'Completed' ? (
-                            <Tooltip title={pendingSuggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
-                                <span>
-                                    <Button
-                                        variant="contained"
-                                        color="info"
-                                        disabled={pendingSuggestions.length > 0 || isLoading}
-                                        onClick={handleMarkAsComplete}
-                                        sx={{
-                                            minWidth: 180,
-                                            '&.Mui-disabled': {
-                                                backgroundColor: 'rgba(255, 255, 255, 0.12)',
-                                                color: 'rgba(255, 255, 255, 0.5)',
-                                            },
-                                        }}
+                            <>
+                                <Tooltip title="Resubmit for processing">
+                                    <IconButton
+                                        aria-label="Resubmit for processing"
+                                        color="warning"
+                                        onClick={() => setResubmitDialogOpen(true)}
+                                        disabled={isResubmitting}
                                     >
-                                        {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
-                                    </Button>
-                                </span>
-                            </Tooltip>
+                                        <RefreshIcon />
+                                    </IconButton>
+                                </Tooltip>
+                                <Tooltip title={pendingSuggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                                    <span>
+                                        <Button
+                                            variant="contained"
+                                            color="info"
+                                            disabled={pendingSuggestions.length > 0 || isLoading}
+                                            onClick={handleMarkAsComplete}
+                                            sx={{ minWidth: 180 }}
+                                        >
+                                            {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
+                                        </Button>
+                                    </span>
+                                </Tooltip>
+                            </>
                         ) : (
                             <Button
                                 variant="contained"
@@ -296,6 +321,31 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     redaction={rejectionTarget}
                 />
             )}
+
+            <Dialog
+                open={resubmitDialogOpen}
+                onClose={() => setResubmitDialogOpen(false)}
+            >
+                <DialogTitle>Resubmit Document?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        This will delete all current redactions (including any manual redactions you have made) and reprocess the document with the current AI model. This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setResubmitDialogOpen(false)} disabled={isResubmitting}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleResubmit}
+                        color="warning"
+                        variant="contained"
+                        disabled={isResubmitting}
+                    >
+                        {isResubmitting ? <CircularProgress size={24} color="inherit" /> : 'Resubmit'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

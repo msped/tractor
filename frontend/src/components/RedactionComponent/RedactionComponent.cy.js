@@ -269,6 +269,67 @@ describe('<RedactionComponent />', () => {
         });
     });
 
+    context('Resubmit Document', () => {
+        beforeEach(() => {
+            cy.intercept('POST', '**/cases/documents/doc-1/resubmit', { statusCode: 200 }).as('resubmitDocument');
+        });
+
+        it('shows resubmit icon when document is not completed', () => {
+            mountRedactionComponent();
+
+            cy.get('button[aria-label="Resubmit for processing"]').should('be.visible');
+        });
+
+        it('hides resubmit icon when document is completed', () => {
+            const completedDocument = { ...mockDocument, status: 'Completed' };
+            mountRedactionComponent(completedDocument, []);
+
+            cy.get('button[aria-label="Resubmit for processing"]').should('not.exist');
+        });
+
+        it('opens confirmation dialog when resubmit icon is clicked', () => {
+            mountRedactionComponent();
+
+            cy.get('button[aria-label="Resubmit for processing"]').click();
+
+            cy.get('[role="dialog"]').should('be.visible');
+            cy.contains('Resubmit Document?').should('be.visible');
+            cy.contains('This will delete all current redactions').should('be.visible');
+        });
+
+        it('closes dialog when cancel is clicked', () => {
+            mountRedactionComponent();
+
+            cy.get('button[aria-label="Resubmit for processing"]').click();
+            cy.get('[role="dialog"]').should('be.visible');
+
+            cy.get('[role="dialog"]').contains('button', 'Cancel').click();
+
+            cy.get('[role="dialog"]').should('not.exist');
+        });
+
+        it('calls resubmit API and shows success toast', () => {
+            mountRedactionComponent();
+
+            cy.get('button[aria-label="Resubmit for processing"]').click();
+            cy.get('[role="dialog"]').contains('button', 'Resubmit').click();
+
+            cy.wait('@resubmitDocument');
+            cy.contains('Document resubmitted for processing.').should('be.visible');
+        });
+
+        it('shows error toast when resubmit fails', () => {
+            cy.intercept('POST', '**/cases/documents/doc-1/resubmit', { statusCode: 500 }).as('failedResubmit');
+            mountRedactionComponent();
+
+            cy.get('button[aria-label="Resubmit for processing"]').click();
+            cy.get('[role="dialog"]').contains('button', 'Resubmit').click();
+
+            cy.wait('@failedResubmit');
+            cy.contains('Failed to resubmit document. Please try again.').should('be.visible');
+        });
+    });
+
     context('Error Handling', () => {
         it('shows error toast when accept fails', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedUpdate');
