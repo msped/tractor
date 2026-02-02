@@ -11,7 +11,7 @@ Tractor is a document redaction application with ML-powered Named Entity Recogni
 ### Backend (Django)
 
 ```bash
-source .venv/bin/activate           # Activate virtual environment (required first)
+source env/bin/activate             # Activate virtual environment (required first)
 python manage.py runserver          # Start dev server
 python manage.py qcluster           # Start django-q task queue (required for async tasks)
 python manage.py test               # Run all tests
