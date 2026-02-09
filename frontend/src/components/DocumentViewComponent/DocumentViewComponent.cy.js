@@ -48,6 +48,42 @@ describe('<DocumentViewComponent />', () => {
             .and('have.css', 'color', 'rgb(0, 0, 0)');
     });
 
+    it('renders font size increase and decrease buttons', () => {
+        cy.get('button[aria-label="Decrease font size"]').should('be.visible');
+        cy.get('button[aria-label="Increase font size"]').should('be.visible');
+    });
+
+    it('increases font size when A+ is clicked', () => {
+        cy.get('.MuiPaper-root').should('have.css', 'font-size', '16px');
+
+        cy.get('button[aria-label="Increase font size"]').click();
+
+        cy.get('.MuiPaper-root').should('have.css', 'font-size').and('not.eq', '16px');
+    });
+
+    it('decreases font size when A- is clicked', () => {
+        cy.get('.MuiPaper-root').should('have.css', 'font-size', '16px');
+
+        cy.get('button[aria-label="Decrease font size"]').click();
+
+        cy.get('.MuiPaper-root').should('have.css', 'font-size').and('not.eq', '16px');
+    });
+
+    it('disables decrease button at minimum font size', () => {
+        cy.get('button[aria-label="Decrease font size"]').click();
+        cy.get('button[aria-label="Decrease font size"]').click();
+
+        cy.get('button[aria-label="Decrease font size"]').should('be.disabled');
+    });
+
+    it('disables increase button at maximum font size', () => {
+        cy.get('button[aria-label="Increase font size"]').click();
+        cy.get('button[aria-label="Increase font size"]').click();
+        cy.get('button[aria-label="Increase font size"]').click();
+
+        cy.get('button[aria-label="Increase font size"]').should('be.disabled');
+    });
+
     it('toggles to color-coded view and back', () => {
         cy.contains('span', 'sensitive information').should('have.css', 'background-color', 'rgb(0, 0, 0)');
         cy.contains('span', 'op data').should('have.css', 'background-color', 'rgb(0, 0, 0)');

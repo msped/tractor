@@ -147,6 +147,120 @@ describe('<DocumentViewer />', () => {
         });
     });
 
+    context('Table Border Rendering', () => {
+        const structureWithTable = [
+            { type: 'paragraph', text: 'Before table', start: 0, end: 12 },
+            { type: 'table', table_id: 0, start: 13, end: 30 },
+        ];
+
+        it('renders table borders when hasBorders is true', () => {
+            const tablesWithBorders = [{
+                id: 0,
+                hasBorders: true,
+                cells: [
+                    { row: 0, col: 0, text: 'Cell A', start: 13, end: 19, style: 'border: 1px solid #000; padding: 6px 8px;', bgColor: null, runs: [] },
+                    { row: 0, col: 1, text: 'Cell B', start: 20, end: 26, style: 'border: 1px solid #000; padding: 6px 8px;', bgColor: null, runs: [] },
+                ],
+                ner_start: 13,
+                ner_end: 30,
+            }];
+
+            cy.mount(
+                <DocumentViewer
+                    text="Before table\nCell A\tCell B"
+                    tables={tablesWithBorders}
+                    structure={structureWithTable}
+                    redactions={[]}
+                />
+            );
+
+            cy.get('td').first().should('have.css', 'border-style', 'solid');
+        });
+
+        it('renders table without borders when hasBorders is false', () => {
+            const tablesWithoutBorders = [{
+                id: 0,
+                hasBorders: false,
+                cells: [
+                    { row: 0, col: 0, text: 'Cell A', start: 13, end: 19, style: 'padding: 6px 8px;', bgColor: null, runs: [] },
+                    { row: 0, col: 1, text: 'Cell B', start: 20, end: 26, style: 'padding: 6px 8px;', bgColor: null, runs: [] },
+                ],
+                ner_start: 13,
+                ner_end: 30,
+            }];
+
+            cy.mount(
+                <DocumentViewer
+                    text="Before table\nCell A\tCell B"
+                    tables={tablesWithoutBorders}
+                    structure={structureWithTable}
+                    redactions={[]}
+                />
+            );
+
+            cy.get('td').first().should('have.css', 'border-style', 'none');
+        });
+
+        it('defaults to showing borders when hasBorders is undefined', () => {
+            const tablesNoBorderProp = [{
+                id: 0,
+                cells: [
+                    { row: 0, col: 0, text: 'Cell A', start: 13, end: 19, style: 'border: 1px solid #000; padding: 6px 8px;', bgColor: null, runs: [] },
+                ],
+                ner_start: 13,
+                ner_end: 30,
+            }];
+
+            cy.mount(
+                <DocumentViewer
+                    text="Before table\nCell A"
+                    tables={tablesNoBorderProp}
+                    structure={structureWithTable}
+                    redactions={[]}
+                />
+            );
+
+            cy.get('td').first().should('have.css', 'border-style', 'solid');
+        });
+    });
+
+    context('Font Size Scaling', () => {
+        it('applies default font size of 1rem', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={[]}
+                />
+            );
+
+            cy.get('.MuiPaper-root').should('have.css', 'font-size', '16px');
+        });
+
+        it('scales font size when baseFontSize is increased', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={[]}
+                    baseFontSize={1.5}
+                />
+            );
+
+            cy.get('.MuiPaper-root').should('have.css', 'font-size', '24px');
+        });
+
+        it('scales font size when baseFontSize is decreased', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={[]}
+                    baseFontSize={0.75}
+                />
+            );
+
+            cy.get('.MuiPaper-root').should('have.css', 'font-size', '12px');
+        });
+    });
+
     context('Color-Coded Mode', () => {
         it('renders accepted redactions with solid colors and hides suggestions', () => {
             cy.mount(
