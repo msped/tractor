@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, IconButton } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -51,6 +51,46 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     const baseFontSize = FONT_SIZE_STEPS[fontSizeIndex];
     const handleFontDecrease = useCallback(() => setFontSizeIndex(prev => Math.max(0, prev - 1)), []);
     const handleFontIncrease = useCallback(() => setFontSizeIndex(prev => Math.min(FONT_SIZE_STEPS.length - 1, prev + 1)), []);
+
+    // Sidebar resize controls
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('sidebarWidth');
+            return saved ? parseInt(saved, 10) : 450;
+        }
+        return 450;
+    });
+    const isResizing = useRef(false);
+
+    const handleResizeStart = useCallback((e) => {
+        e.preventDefault();
+        isResizing.current = true;
+        const doc = e.target.ownerDocument;
+
+        const handleResize = (e) => {
+            if (!isResizing.current) return;
+            const newWidth = doc.defaultView.innerWidth - e.clientX;
+            const maxWidth = doc.defaultView.innerWidth * 0.6;
+            const clamped = Math.min(maxWidth, Math.max(250, newWidth));
+            setSidebarWidth(clamped);
+            localStorage.setItem('sidebarWidth', String(Math.round(clamped)));
+        };
+
+        const handleResizeEnd = () => {
+            isResizing.current = false;
+            doc.removeEventListener('mousemove', handleResize);
+            doc.removeEventListener('mouseup', handleResizeEnd);
+        };
+
+        doc.addEventListener('mousemove', handleResize);
+        doc.addEventListener('mouseup', handleResizeEnd);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            isResizing.current = false;
+        };
+    }, []);
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         try {
@@ -333,18 +373,31 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 />
             </Container>
 
-            <RedactionSidebar
-                redactions={sortedRedactions}
-                onAccept={handleAcceptSuggestion}
-                onReject={handleOpenRejectDialog}
-                onRemove={handleRemoveRedaction}
-                onChangeTypeAndAccept={handleChangeTypeAndAccept}
-                onSuggestionMouseEnter={handleSuggestionMouseEnter}
-                onSuggestionMouseLeave={handleSuggestionMouseLeave}
-                scrollToId={scrollToId}
-                removeScrollId={handleRemoveScrollId}
-                onContextSave={handleOnContextSave}
+            <Box
+                data-testid="resize-handle"
+                onMouseDown={handleResizeStart}
+                sx={{
+                    width: '6px',
+                    cursor: 'col-resize',
+                    backgroundColor: 'divider',
+                    '&:hover': { backgroundColor: 'primary.main' },
+                    flexShrink: 0,
+                }}
             />
+            <Box sx={{ width: sidebarWidth, flexShrink: 0 }}>
+                <RedactionSidebar
+                    redactions={sortedRedactions}
+                    onAccept={handleAcceptSuggestion}
+                    onReject={handleOpenRejectDialog}
+                    onRemove={handleRemoveRedaction}
+                    onChangeTypeAndAccept={handleChangeTypeAndAccept}
+                    onSuggestionMouseEnter={handleSuggestionMouseEnter}
+                    onSuggestionMouseLeave={handleSuggestionMouseLeave}
+                    scrollToId={scrollToId}
+                    removeScrollId={handleRemoveScrollId}
+                    onContextSave={handleOnContextSave}
+                />
+            </Box>
 
             <ManualRedactionPopover
                 anchorEl={manualRedactionAnchor}
