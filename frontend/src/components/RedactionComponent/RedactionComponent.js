@@ -2,6 +2,8 @@
 
 import React, { useState, useCallback } from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, IconButton } from '@mui/material';
+import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
+import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import NextLink from 'next/link';
 import { RedactionSidebar } from '@/components/RedactionSidebar';
@@ -13,6 +15,8 @@ import { createRedaction, updateRedaction, deleteRedaction } from '@/services/re
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+
+const FONT_SIZE_STEPS = [0.75, 0.85, 1, 1.15, 1.3, 1.5];
 
 export const RedactionComponent = ({ document, initialRedactions }) => {
     const { data: session } = useSession();
@@ -41,6 +45,12 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // State for resubmit confirmation dialog
     const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
     const [isResubmitting, setIsResubmitting] = useState(false);
+
+    // Font size controls
+    const [fontSizeIndex, setFontSizeIndex] = useState(2);
+    const baseFontSize = FONT_SIZE_STEPS[fontSizeIndex];
+    const handleFontDecrease = useCallback(() => setFontSizeIndex(prev => Math.max(0, prev - 1)), []);
+    const handleFontIncrease = useCallback(() => setFontSizeIndex(prev => Math.min(FONT_SIZE_STEPS.length - 1, prev + 1)), []);
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         try {
@@ -234,8 +244,8 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }
 
     return (
-        <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
-            <Container maxWidth={false} sx={{ my: 4, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+        <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
+            <Container maxWidth={false} sx={{ my: 0, display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
                     <Box>
                         <Button component={NextLink} href={`/cases/${currentDocument.case || currentDocument.id}`} variant="contained" color="primary">
@@ -243,9 +253,35 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                         </Button>
                     </Box>
                     <Box>
-                        <Typography variant="h5" component="h1">{currentDocument?.filename}</Typography>
+                        <Typography variant="body1" component="h1">{currentDocument?.filename}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                        <Tooltip title="Decrease font size">
+                            <span>
+                                <IconButton
+                                    aria-label="Decrease font size"
+                                    onClick={handleFontDecrease}
+                                    disabled={fontSizeIndex === 0}
+                                    size="small"
+                                    sx={{ fontSize: '0.85rem', fontWeight: 'bold' }}
+                                >
+                                    <TextDecreaseIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Increase font size">
+                            <span>
+                                <IconButton
+                                    aria-label="Increase font size"
+                                    onClick={handleFontIncrease}
+                                    disabled={fontSizeIndex === FONT_SIZE_STEPS.length - 1}
+                                    size="small"
+                                    sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}
+                                >
+                                    <TextIncreaseIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                         {currentDocument.status !== 'Completed' ? (
                             <>
                                 <Tooltip title="Resubmit for processing">
@@ -285,12 +321,15 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 </Box>
                 <DocumentViewer
                     text={currentDocument?.extracted_text}
+                    tables={currentDocument?.extracted_tables}
+                    structure={currentDocument?.extracted_structure}
                     redactions={redactions}
                     pendingRedaction={pendingRedaction}
                     hoveredSuggestionId={hoveredSuggestionId}
                     onTextSelect={handleTextSelect}
                     onHighlightClick={handleHighlightClick}
                     reviewComplete={pendingSuggestions.length === 0}
+                    baseFontSize={baseFontSize}
                 />
             </Container>
 
@@ -326,7 +365,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 open={resubmitDialogOpen}
                 onClose={() => setResubmitDialogOpen(false)}
             >
-                <DialogTitle>Resubmit Document?</DialogTitle>
+                <DialogTitle>Resubmit Document</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
                         This will delete all current redactions (including any manual redactions you have made) and reprocess the document with the current AI model. This action cannot be undone.
