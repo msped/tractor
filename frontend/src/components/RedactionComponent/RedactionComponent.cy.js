@@ -374,6 +374,36 @@ describe('<RedactionComponent />', () => {
         });
     });
 
+    context('Sidebar Resize Handle', () => {
+        beforeEach(() => {
+            mountRedactionComponent();
+        });
+
+        it('renders the resize handle', () => {
+            cy.get('[data-testid="resize-handle"]').should('be.visible');
+        });
+
+        it('changes sidebar width when dragging the resize handle', () => {
+            cy.get('[data-testid="resize-handle"]').then(($handle) => {
+                const handle = $handle[0];
+                const handleRect = handle.getBoundingClientRect();
+                const startX = handleRect.left + handleRect.width / 2;
+                const startY = handleRect.top + handleRect.height / 2;
+                const doc = handle.ownerDocument;
+
+                // Trigger mousedown on the handle element
+                handle.dispatchEvent(new MouseEvent('mousedown', { clientX: startX, clientY: startY, bubbles: true }));
+
+                // Trigger mousemove on the document to simulate dragging left (widening sidebar)
+                doc.dispatchEvent(new MouseEvent('mousemove', { clientX: startX - 100, clientY: startY, bubbles: true }));
+                doc.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+            });
+
+            // Sidebar wrapper should have a different width than the default 450px
+            cy.get('[data-testid="resize-handle"]').next().invoke('outerWidth').should('not.eq', 450);
+        });
+    });
+
     context('Error Handling', () => {
         it('shows error toast when accept fails', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedUpdate');
