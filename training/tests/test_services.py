@@ -171,15 +171,15 @@ def _make_tbl_xml(border_values=None, include_tbl_pr=True, include_tbl_borders=T
         {"top": "single", "bottom": "none"}
     """
     nsmap = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-    tbl = etree.Element(f'{{{nsmap["w"]}}}tbl', nsmap=nsmap)
+    tbl = etree.Element(f"{{{nsmap['w']}}}tbl", nsmap=nsmap)
 
     if include_tbl_pr:
-        tbl_pr = etree.SubElement(tbl, f'{{{nsmap["w"]}}}tblPr')
+        tbl_pr = etree.SubElement(tbl, f"{{{nsmap['w']}}}tblPr")
         if include_tbl_borders and border_values is not None:
-            tbl_borders = etree.SubElement(tbl_pr, f'{{{nsmap["w"]}}}tblBorders')
+            tbl_borders = etree.SubElement(tbl_pr, f"{{{nsmap['w']}}}tblBorders")
             for name, val in border_values.items():
-                border_el = etree.SubElement(tbl_borders, f'{{{nsmap["w"]}}}{name}')
-                border_el.set(f'{{{nsmap["w"]}}}val', val)
+                border_el = etree.SubElement(tbl_borders, f"{{{nsmap['w']}}}{name}")
+                border_el.set(f"{{{nsmap['w']}}}val", val)
 
     return tbl
 
@@ -199,11 +199,15 @@ class TableHasBordersTests(TestCase):
         self.assertTrue(_table_has_borders(self._make_mock_table(tbl)))
 
     def test_all_none_borders_returns_false(self):
-        tbl = _make_tbl_xml({"top": "none", "bottom": "none", "left": "none", "right": "none", "insideH": "none", "insideV": "none"})
+        tbl = _make_tbl_xml(
+            {"top": "none", "bottom": "none", "left": "none", "right": "none", "insideH": "none", "insideV": "none"}
+        )
         self.assertFalse(_table_has_borders(self._make_mock_table(tbl)))
 
     def test_all_nil_borders_returns_false(self):
-        tbl = _make_tbl_xml({"top": "nil", "bottom": "nil", "left": "nil", "right": "nil", "insideH": "nil", "insideV": "nil"})
+        tbl = _make_tbl_xml(
+            {"top": "nil", "bottom": "nil", "left": "nil", "right": "nil", "insideH": "nil", "insideV": "nil"}
+        )
         self.assertFalse(_table_has_borders(self._make_mock_table(tbl)))
 
     def test_missing_tbl_borders_returns_true(self):
@@ -259,4 +263,4 @@ class ExtractTableWithStylingBorderTests(TestCase):
         html, cells = extract_table_with_styling(table, 0, has_borders=False)
         self.assertNotIn("border", cells[0]["style"])
         # The <td> style should not contain border (border-collapse on the <table> is fine)
-        self.assertNotIn('border: 1px solid #000', html)
+        self.assertNotIn("border: 1px solid #000", html)

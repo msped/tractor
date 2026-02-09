@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0010_document_extracted_tables'),
+        ("cases", "0010_document_extracted_tables"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='document',
-            name='extracted_structure',
+            model_name="document",
+            name="extracted_structure",
             field=models.JSONField(blank=True, null=True),
         ),
     ]
