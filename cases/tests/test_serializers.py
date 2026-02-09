@@ -208,6 +208,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(data["case"], self.case.pk)
         self.assertEqual(data["filename"], self.document.filename)
         self.assertEqual(data["extracted_text"], self.document.extracted_text)
+        self.assertIn("extracted_tables", data)
         self.assertIn("redactions", data)
         self.assertEqual(len(data["redactions"]), 2)
 

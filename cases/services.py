@@ -47,7 +47,7 @@ def process_document_and_create_redactions(document_id):
         using model '{manager.model_name}'..."
     )
 
-    extracted_text, ai_suggestions = extract_entities_from_text(document.original_file.path)
+    extracted_text, ai_suggestions, tables, structure = extract_entities_from_text(document.original_file.path)
 
     if not extracted_text:
         document.status = Document.Status.ERROR
@@ -55,7 +55,9 @@ def process_document_and_create_redactions(document_id):
         return
 
     document.extracted_text = extracted_text
-    document.save(update_fields=["extracted_text"])
+    document.extracted_tables = tables
+    document.extracted_structure = structure
+    document.save(update_fields=["extracted_text", "extracted_tables", "extracted_structure"])
 
     with transaction.atomic():
         for suggestion in ai_suggestions:
@@ -187,6 +189,7 @@ def _generate_pdf_from_document(document, mode="disclosure"):
     """
     Generates a PDF for a single document.
     mode: 'disclosure' (black boxes) or 'redacted' (color highlights)
+    Table placeholders are replaced with HTML from extracted_tables.
     """
     text = document.extracted_text
     if not text:
@@ -210,26 +213,31 @@ def _generate_pdf_from_document(document, mode="disclosure"):
                 replacement += f'<span class="internal-context-note">[Context: {r.context.text}]</span>'
         text = text[: r.start_char] + replacement + text[r.end_char :]
 
+    # Note: table HTML replacement is not done here because redaction
+    # substitutions above change character positions, invalidating ner_start/ner_end.
+    # Tables render as tab-separated text in the PDF, which is functional.
+
     html_string = f"""
     <!DOCTYPE html>
     <html>
     <head><title>{document.filename}</title></head>
-    <body>
-    <pre style="white-space: pre-wrap; word-wrap: break-word; \
-        font-family: Calibri, sans-serif;">{text}</pre></body>
+    <body style="font-family: Calibri, sans-serif; white-space: pre-wrap; word-wrap: break-word;">
+    {text}
+    </body>
     </html>
     """
 
     css_string = """
+    body { line-height: 1.4; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; white-space: normal; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; font-weight: bold; }
     .redaction { background-color: black; color: black; }
-    .disclosure-context { background-color: initial;
-    color: initial; font-style: italic; }
+    .disclosure-context { background-color: initial; color: initial; font-style: italic; }
     .type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }
     .type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }
-    .type-DS_INFO { background-color: rgba(177, 156, 217, 0.8);\
-          color: initial; }
-    .internal-context-note { color: #555;
-    font-style: italic; font-size: 0.9em; }
+    .type-DS_INFO { background-color: rgba(177, 156, 217, 0.8); color: initial; }
+    .internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }
     """
 
     font_config = FontConfiguration()

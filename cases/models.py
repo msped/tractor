@@ -143,6 +143,8 @@ class Document(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
 
     extracted_text = models.TextField(blank=True, null=True, editable=False)
+    extracted_tables = models.JSONField(default=list, blank=True)
+    extracted_structure = models.JSONField(null=True, blank=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
     spacy_model = models.ForeignKey(

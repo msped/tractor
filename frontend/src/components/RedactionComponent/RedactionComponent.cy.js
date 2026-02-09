@@ -293,7 +293,7 @@ describe('<RedactionComponent />', () => {
             cy.get('button[aria-label="Resubmit for processing"]').click();
 
             cy.get('[role="dialog"]').should('be.visible');
-            cy.contains('Resubmit Document?').should('be.visible');
+            cy.contains('Resubmit Document').should('be.visible');
             cy.contains('This will delete all current redactions').should('be.visible');
         });
 
@@ -327,6 +327,50 @@ describe('<RedactionComponent />', () => {
 
             cy.wait('@failedResubmit');
             cy.contains('Failed to resubmit document. Please try again.').should('be.visible');
+        });
+    });
+
+    context('Font Size Controls', () => {
+        beforeEach(() => {
+            mountRedactionComponent();
+        });
+
+        it('renders font size increase and decrease buttons', () => {
+            cy.get('button[aria-label="Decrease font size"]').should('be.visible');
+            cy.get('button[aria-label="Increase font size"]').should('be.visible');
+        });
+
+        it('increases font size when A+ is clicked', () => {
+            cy.get('.MuiPaper-root').should('have.css', 'font-size', '16px');
+
+            cy.get('button[aria-label="Increase font size"]').click();
+
+            cy.get('.MuiPaper-root').should('have.css', 'font-size').and('not.eq', '16px');
+        });
+
+        it('decreases font size when A- is clicked', () => {
+            cy.get('.MuiPaper-root').should('have.css', 'font-size', '16px');
+
+            cy.get('button[aria-label="Decrease font size"]').click();
+
+            cy.get('.MuiPaper-root').should('have.css', 'font-size').and('not.eq', '16px');
+        });
+
+        it('disables decrease button at minimum font size', () => {
+            // Click decrease until minimum
+            cy.get('button[aria-label="Decrease font size"]').click();
+            cy.get('button[aria-label="Decrease font size"]').click();
+
+            cy.get('button[aria-label="Decrease font size"]').should('be.disabled');
+        });
+
+        it('disables increase button at maximum font size', () => {
+            // Click increase until maximum
+            cy.get('button[aria-label="Increase font size"]').click();
+            cy.get('button[aria-label="Increase font size"]').click();
+            cy.get('button[aria-label="Increase font size"]').click();
+
+            cy.get('button[aria-label="Increase font size"]').should('be.disabled');
         });
     });
 

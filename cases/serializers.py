@@ -48,10 +48,20 @@ class DocumentSerializer(serializers.ModelSerializer):
             "status",
             "new_status",
             "extracted_text",
+            "extracted_tables",
+            "extracted_structure",
             "uploaded_at",
             "redactions",
         ]
-        read_only_fields = ["id", "extracted_text", "uploaded_at", "filename", "file_type"]
+        read_only_fields = [
+            "id",
+            "extracted_text",
+            "extracted_tables",
+            "extracted_structure",
+            "uploaded_at",
+            "filename",
+            "file_type",
+        ]
 
     def create(self, validated_data):
         """
@@ -114,5 +124,22 @@ class DocumentReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ["id", "case", "filename", "file_type", "extracted_text", "redactions"]
-        read_only_fields = ["id", "case", "extracted_text", "filename", "file_type"]
+        fields = [
+            "id",
+            "case",
+            "filename",
+            "file_type",
+            "extracted_text",
+            "extracted_tables",
+            "extracted_structure",
+            "redactions",
+        ]
+        read_only_fields = [
+            "id",
+            "case",
+            "extracted_text",
+            "extracted_tables",
+            "extracted_structure",
+            "filename",
+            "file_type",
+        ]

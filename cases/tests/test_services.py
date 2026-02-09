@@ -70,13 +70,14 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             {"start_char": 29, "end_char": 33, "text": "name", "label": "DS_INFORMATION"},
             {"start_char": 38, "end_char": 54, "text": "operational data", "label": "OPERATIONAL"},
         ]
-        mock_extract_entities.return_value = (extracted_text, suggestions)
+        mock_extract_entities.return_value = (extracted_text, suggestions, [], None)
 
         process_document_and_create_redactions(self.document.id)
 
         self.document.refresh_from_db()
         self.assertEqual(self.document.status, Document.Status.READY_FOR_REVIEW)
         self.assertEqual(self.document.extracted_text, extracted_text)
+        self.assertEqual(self.document.extracted_tables, [])
         self.assertEqual(self.document.spacy_model, self.spacy_model)
         self.assertEqual(self.document.redactions.count(), 3)
 
@@ -110,7 +111,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         suggestions = [
             {"start_char": 12, "end_char": 19, "text": "unknown", "label": "UNKNOWN_TYPE"},
         ]
-        mock_extract_entities.return_value = (extracted_text, suggestions)
+        mock_extract_entities.return_value = (extracted_text, suggestions, [], None)
 
         process_document_and_create_redactions(self.document.id)
 
@@ -124,7 +125,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     @patch("cases.services.extract_entities_from_text")
     def test_process_document_extraction_fails(self, mock_extract_entities, mock_spacy_manager):
         """Test document processing when text extraction returns nothing."""
-        mock_extract_entities.return_value = (None, [])
+        mock_extract_entities.return_value = (None, [], [], None)
         # Mock the SpacyModelManager to prevent it from trying to load a model
         mock_manager_instance = MagicMock()
         mock_manager_instance.get_model_entry.return_value = self.spacy_model
