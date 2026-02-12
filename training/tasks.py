@@ -29,6 +29,13 @@ HIGHLIGHT_COLOR_TO_LABEL = {
 REDACTION_TYPE_TO_ENTITY_LABEL = {
     "PII": "THIRD_PARTY",
     "OP_DATA": "OPERATIONAL",
+    "BRIGHT_GREEN": "THIRD_PARTY",
+    "TURQUOISE": "OPERATIONAL",
+}
+
+REDACTION_TYPE_TO_ENTITY_LABEL = {
+    "PII": "THIRD_PARTY",
+    "OP_DATA": "OPERATIONAL",
 }
 
 
@@ -66,11 +73,14 @@ def collect_training_data_detailed(source="both"):
                         if stripped_text:
                             # Adjust boundaries to exclude leading/trailing whitespace
                             # This ensures alignment with spaCy token boundaries
-                            leading_ws = len(entity_text) - len(entity_text.lstrip())
-                            trailing_ws = len(entity_text) - len(entity_text.rstrip())
+                            leading_ws = len(entity_text) - \
+                                len(entity_text.lstrip())
+                            trailing_ws = len(entity_text) - \
+                                len(entity_text.rstrip())
                             adjusted_start = current_entity_start + leading_ws
                             adjusted_end = current_entity_end - trailing_ws
-                            entities_list.append((adjusted_start, adjusted_end, current_entity_label))
+                            entities_list.append(
+                                (adjusted_start, adjusted_end, current_entity_label))
                     current_entity_start = None
                     current_entity_end = None
                     current_entity_label = None
@@ -86,7 +96,8 @@ def collect_training_data_detailed(source="both"):
                         if run.font.highlight_color:
                             color_enum_member = run.font.highlight_color
                             color_name = color_enum_member.name if color_enum_member else None
-                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(color_name)
+                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(
+                                color_name)
 
                         if run_label:
                             # This run is highlighted with a recognized color
@@ -117,13 +128,15 @@ def collect_training_data_detailed(source="both"):
                 if entities:
                     tdoc.extracted_text = full_text.strip()
                     tdoc.save(update_fields=["extracted_text"])
-                    train_data.append((tdoc.extracted_text, {"entities": entities}))
+                    train_data.append(
+                        (tdoc.extracted_text, {"entities": entities}))
                     training_docs_used.append(tdoc)
             except Exception as e:
                 print(f"Could not process training doc {tdoc.name}: {e}")
 
     if source in ("redactions", "both"):
-        completed_docs = Document.objects.filter(status=Document.Status.COMPLETED)
+        completed_docs = Document.objects.filter(
+            status=Document.Status.COMPLETED)
         for doc in completed_docs:
             text = doc.extracted_text
             if not text:
@@ -133,7 +146,18 @@ def collect_training_data_detailed(source="both"):
             for redaction in doc.redactions.filter(is_accepted=True).exclude(
                 redaction_type=Redaction.RedactionType.DS_INFORMATION
             ):
-                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(redaction.redaction_type)
+                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(
+                    redaction.redaction_type)
+                if label:
+                    entities.append(
+                        (
+                            redaction.start_char,
+                            redaction.end_char,
+                            label,
+                        )
+                    )
+                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(
+                    redaction.redaction_type)
                 if label:
                     entities.append(
                         (
@@ -162,17 +186,29 @@ def export_spacy_data(train_data, train_path, dev_path, split=0.8):
     total_entities = 0
     dropped_entities = 0
 
+    total_entities = 0
+    dropped_entities = 0
+
     for text, annotations in train_set:
         doc = nlp.make_doc(text)
         ents = []
         for start, end, label in annotations["entities"]:
             total_entities += 1
-            span = doc.char_span(start, end, label=label, alignment_mode="contract")
+            span = doc.char_span(start, end, label=label,
+                                 alignment_mode="contract")
+            total_entities += 1
+            span = doc.char_span(start, end, label=label,
+                                 alignment_mode="contract")
             if span:
                 ents.append(span)
             else:
                 dropped_entities += 1
-                print(f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
+                print(
+                    f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
+            else:
+                dropped_entities += 1
+                print(
+                    f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
         doc.ents = ents
         db_train.add(doc)
 
@@ -181,17 +217,28 @@ def export_spacy_data(train_data, train_path, dev_path, split=0.8):
         ents = []
         for start, end, label in annotations["entities"]:
             total_entities += 1
-            span = doc.char_span(start, end, label=label, alignment_mode="contract")
+            span = doc.char_span(start, end, label=label,
+                                 alignment_mode="contract")
+            total_entities += 1
+            span = doc.char_span(start, end, label=label,
+                                 alignment_mode="contract")
             if span:
                 ents.append(span)
             else:
                 dropped_entities += 1
-                print(f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
+                print(
+                    f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
+            else:
+                dropped_entities += 1
+                print(
+                    f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
         doc.ents = ents
         db_dev.add(doc)
 
     if total_entities > 0:
-        print(f"Entity alignment: {total_entities - dropped_entities}/{total_entities} kept, {dropped_entities} dropped")
+        print(
+            f"Entity alignment: {total_entities - dropped_entities}/{total_entities} kept, {dropped_entities} dropped"
+        )
 
     if train_set:
         db_train.to_disk(train_path)
@@ -216,7 +263,8 @@ def train_model(source="redactions", user=None):
         print("Another training task is already in progress. Aborting.")
         return
 
-    train_data, used_training_docs, used_case_docs = collect_training_data_detailed(source)
+    train_data, used_training_docs, used_case_docs = collect_training_data_detailed(
+        source)
 
     if len(train_data) < 25:
         print(
@@ -272,7 +320,8 @@ def train_model(source="redactions", user=None):
 
     # Load best model for evaluation scores
     nlp = spacy.load(output_dir / "model-best")
-    scores = nlp.evaluate([Example.from_dict(nlp.make_doc(t), ann) for t, ann in train_data])
+    scores = nlp.evaluate([Example.from_dict(nlp.make_doc(t), ann)
+                          for t, ann in train_data])
 
     # Register in DB
     new_model = Model.objects.create(
@@ -288,16 +337,19 @@ def train_model(source="redactions", user=None):
     training_run = TrainingRun.objects.create(model=new_model, source=source)
 
     # Find the corresponding training data for each document to get the text
-    tdoc_texts = {tdoc: data[0] for tdoc, data in zip(used_training_docs, train_data, strict=False)}
+    tdoc_texts = {tdoc: data[0] for tdoc, data in zip(
+        used_training_docs, train_data, strict=False)}
 
     for tdoc, text in tdoc_texts.items():
-        TrainingRunTrainingDoc.objects.create(training_run=training_run, document=tdoc)
+        TrainingRunTrainingDoc.objects.create(
+            training_run=training_run, document=tdoc)
         tdoc.extracted_text = text
         tdoc.processed = True
         tdoc.save(update_fields=["extracted_text", "processed"])
 
     for cdoc in used_case_docs:
-        TrainingRunCaseDoc.objects.create(training_run=training_run, document=cdoc)
+        TrainingRunCaseDoc.objects.create(
+            training_run=training_run, document=cdoc)
 
     print(
         f"Model trained and stored at {output_dir}, \
