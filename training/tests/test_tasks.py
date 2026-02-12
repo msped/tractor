@@ -126,8 +126,8 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         self.assertIn("Third Party", text)
         self.assertIn("Operational", text)
         self.assertEqual(len(annotations["entities"]), 2)
-        self.assertEqual(annotations["entities"][0][2], "THIRD_PARTY_PII")
-        self.assertEqual(annotations["entities"][1][2], "OPERATIONAL_DATA")
+        self.assertEqual(annotations["entities"][0][2], "THIRD_PARTY")
+        self.assertEqual(annotations["entities"][1][2], "OPERATIONAL")
 
     def test_collect_from_redactions(self):
         """Test collecting data only from CaseDocument redactions."""
@@ -144,7 +144,7 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         start, end, label = annotations["entities"][0]
         self.assertEqual(start, 15)
         self.assertEqual(end, 23)
-        self.assertEqual(label, Redaction.RedactionType.THIRD_PARTY_PII)
+        self.assertEqual(label, "THIRD_PARTY")
 
     def test_collect_from_both(self):
         """Test collecting data from both sources."""
@@ -194,7 +194,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(annotations["entities"]), 1)
         start, end, label = annotations["entities"][0]
         self.assertEqual(text[start:end], "Cheshire Police")
-        self.assertEqual(label, "THIRD_PARTY_PII")
+        self.assertEqual(label, "THIRD_PARTY")
 
     def test_entity_boundaries_trimmed_of_whitespace(self):
         """Test that entity boundaries are trimmed to exclude leading/trailing whitespace."""
@@ -342,8 +342,8 @@ class ExportSpacyDataTests(NetworkBlockerMixin, TestCase):
     # To prevent HIGHLIGHT_COLOR_TO_LABEL from being empty
     # due to it being defined at module level in tasks.py
     HIGHLIGHT_COLOR_TO_LABEL={
-        "BRIGHT_GREEN": "THIRD_PARTY_PII",
-        "TURQUOISE": "OPERATIONAL_DATA",
+        "BRIGHT_GREEN": "THIRD_PARTY",
+        "TURQUOISE": "OPERATIONAL",
     },
 )
 class TrainModelTests(NetworkBlockerMixin, TestCase):

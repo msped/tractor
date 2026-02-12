@@ -22,8 +22,13 @@ from .models import (
 )
 
 HIGHLIGHT_COLOR_TO_LABEL = {
-    "BRIGHT_GREEN": "THIRD_PARTY_PII",
-    "TURQUOISE": "OPERATIONAL_DATA",
+    "BRIGHT_GREEN": "THIRD_PARTY",
+    "TURQUOISE": "OPERATIONAL",
+}
+
+REDACTION_TYPE_TO_ENTITY_LABEL = {
+    "PII": "THIRD_PARTY",
+    "OP_DATA": "OPERATIONAL",
 }
 
 
@@ -128,13 +133,15 @@ def collect_training_data_detailed(source="both"):
             for redaction in doc.redactions.filter(is_accepted=True).exclude(
                 redaction_type=Redaction.RedactionType.DS_INFORMATION
             ):
-                entities.append(
-                    (
-                        redaction.start_char,
-                        redaction.end_char,
-                        redaction.redaction_type,
+                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(redaction.redaction_type)
+                if label:
+                    entities.append(
+                        (
+                            redaction.start_char,
+                            redaction.end_char,
+                            label,
+                        )
                     )
-                )
             if entities:
                 train_data.append((text, {"entities": entities}))
                 case_docs_used.append(doc)
@@ -152,13 +159,20 @@ def export_spacy_data(train_data, train_path, dev_path, split=0.8):
     db_train = DocBin()
     db_dev = DocBin()
 
+    total_entities = 0
+    dropped_entities = 0
+
     for text, annotations in train_set:
         doc = nlp.make_doc(text)
         ents = []
         for start, end, label in annotations["entities"]:
-            span = doc.char_span(start, end, label=label)
+            total_entities += 1
+            span = doc.char_span(start, end, label=label, alignment_mode="contract")
             if span:
                 ents.append(span)
+            else:
+                dropped_entities += 1
+                print(f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
         doc.ents = ents
         db_train.add(doc)
 
@@ -166,11 +180,18 @@ def export_spacy_data(train_data, train_path, dev_path, split=0.8):
         doc = nlp.make_doc(text)
         ents = []
         for start, end, label in annotations["entities"]:
-            span = doc.char_span(start, end, label=label)
+            total_entities += 1
+            span = doc.char_span(start, end, label=label, alignment_mode="contract")
             if span:
                 ents.append(span)
+            else:
+                dropped_entities += 1
+                print(f"Dropped entity: '{text[start:end]}' ({label}) at [{start}:{end}]")
         doc.ents = ents
         db_dev.add(doc)
+
+    if total_entities > 0:
+        print(f"Entity alignment: {total_entities - dropped_entities}/{total_entities} kept, {dropped_entities} dropped")
 
     if train_set:
         db_train.to_disk(train_path)
