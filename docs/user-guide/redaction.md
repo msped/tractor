@@ -4,10 +4,21 @@ This guide covers the document redaction workflow in Tractor.
 
 ## Understanding Redaction Suggestions
 
-When a document is uploaded, Tractor uses a Named Entity Recognition (NER) model to automatically identify potentially sensitive information. These suggestions appear in the Redaction Sidebar for you to review.
+When a document is uploaded, Tractor automatically identifies potentially sensitive information using two models:
+
+- A **built-in NER model** that recognises common entities like names, organisations, locations, and dates — these appear as **Third-Party PII** suggestions.
+- A **custom trained model** that identifies operational patterns like reference numbers and internal codes — these appear as **Operational Data** suggestions.
+
+Suggestions appear in the Redaction Sidebar for you to review.
 
 !!! info
-    The accuracy of suggestions depends on the trained model. As more redactions are accepted and the model is retrained, suggestions should improve over time.
+    The accuracy of operational data suggestions depends on the trained model. As more redactions are accepted and the model is retrained, suggestions should improve over time. Third-party PII detection works out of the box.
+
+### Data Subject Filtering
+
+Tractor automatically excludes the **data subject's own name and date of birth** from redaction suggestions. Since the data subject's information should remain visible in disclosure documents, it will not appear as a suggested redaction.
+
+If you need to mark the data subject's information for redaction, you can still create manual redactions using the **Data Subject Information** type. These will automatically propagate to matching text across all documents in the case.
 
 ## Reviewing Redactions
 
