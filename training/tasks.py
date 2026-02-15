@@ -1,6 +1,5 @@
 import random
 import shutil
-import subprocess
 from pathlib import Path
 
 import spacy
@@ -8,8 +7,8 @@ from django.conf import settings
 from django.utils import timezone
 from django_q.models import Task
 from docx import Document as DocxDocument
-from spacy.tokens import DocBin
 from spacy.training import Example
+from spacy.util import compounding, minibatch
 
 from cases.models import Document, Redaction
 
@@ -22,9 +21,16 @@ from .models import (
 )
 
 HIGHLIGHT_COLOR_TO_LABEL = {
-    "BRIGHT_GREEN": "THIRD_PARTY_PII",
-    "TURQUOISE": "OPERATIONAL_DATA",
+    "BRIGHT_GREEN": "THIRD_PARTY",
+    "TURQUOISE": "OPERATIONAL",
 }
+
+REDACTION_TYPE_TO_ENTITY_LABEL = {
+    "PII": "THIRD_PARTY",
+    "OP_DATA": "OPERATIONAL",
+}
+
+CUSTOM_NER_LABELS = ["THIRD_PARTY", "OPERATIONAL"]
 
 
 def collect_training_data_detailed(source="both"):
@@ -128,13 +134,15 @@ def collect_training_data_detailed(source="both"):
             for redaction in doc.redactions.filter(is_accepted=True).exclude(
                 redaction_type=Redaction.RedactionType.DS_INFORMATION
             ):
-                entities.append(
-                    (
-                        redaction.start_char,
-                        redaction.end_char,
-                        redaction.redaction_type,
+                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(redaction.redaction_type)
+                if label:
+                    entities.append(
+                        (
+                            redaction.start_char,
+                            redaction.end_char,
+                            label,
+                        )
                     )
-                )
             if entities:
                 train_data.append((text, {"entities": entities}))
                 case_docs_used.append(doc)
@@ -142,55 +150,149 @@ def collect_training_data_detailed(source="both"):
     return train_data, training_docs_used, case_docs_used
 
 
-def export_spacy_data(train_data, train_path, dev_path, split=0.8):
-    """Export Django-collected data into spaCy DocBin format."""
-    random.shuffle(train_data)
-    split_point = int(len(train_data) * split)
-    train_set, dev_set = train_data[:split_point], train_data[split_point:]
+def _build_spancat_pipeline():
+    """
+    Build a SpanCat pipeline using en_core_web_lg's pretrained tok2vec.
 
-    nlp = spacy.blank("en")
-    db_train = DocBin()
-    db_dev = DocBin()
+    Loads the base model, strips all pipes except tok2vec, then adds a
+    spancat component configured with an ngram suggester and a
+    Tok2VecListener that reuses the frozen pretrained embeddings.
+    """
+    nlp = spacy.load("en_core_web_lg")
 
-    for text, annotations in train_set:
+    # Remove all pipes except tok2vec
+    for pipe_name in list(nlp.pipe_names):
+        if pipe_name != "tok2vec":
+            nlp.remove_pipe(pipe_name)
+
+    # Get tok2vec output width dynamically
+    tok2vec_width = nlp.get_pipe("tok2vec").model.get_dim("nO")
+
+    # Configure spancat with ngram suggester and tok2vec listener
+    spancat_config = {
+        "suggester": {
+            "@misc": "spacy.ngram_suggester.v1",
+            "sizes": list(range(1, 51)),
+        },
+        "model": {
+            "@architectures": "spacy.SpanCategorizer.v1",
+            "scorer": {"@layers": "spacy.LinearLogistic.v1", "nO": None, "nI": None},
+            "reducer": {
+                "@layers": "spacy.mean_max_reducer.v1",
+                "hidden_size": 128,
+            },
+            "tok2vec": {
+                "@architectures": "spacy.Tok2VecListener.v1",
+                "width": tok2vec_width,
+                "upstream": "tok2vec",
+            },
+        },
+    }
+
+    spancat = nlp.add_pipe("spancat", config=spancat_config)
+    for label in CUSTOM_NER_LABELS:
+        spancat.add_label(label)
+
+    return nlp
+
+
+def _prepare_examples(nlp, train_data):
+    """
+    Convert (text, {"entities": [...]}) tuples to spaCy Example objects
+    with entities set as doc.spans["sc"] for SpanCat training.
+    """
+    examples = []
+    total_entities = 0
+    dropped_entities = 0
+
+    for text, annotations in train_data:
         doc = nlp.make_doc(text)
-        ents = []
+        ref = doc.copy()
+        spans = []
         for start, end, label in annotations["entities"]:
-            span = doc.char_span(start, end, label=label)
+            total_entities += 1
+            span = ref.char_span(start, end, label=label, alignment_mode="contract")
             if span:
-                ents.append(span)
-        doc.ents = ents
-        db_train.add(doc)
+                spans.append(span)
+            else:
+                dropped_entities += 1
+        ref.spans["sc"] = spans
+        examples.append(Example(doc, ref))
 
-    for text, annotations in dev_set:
-        doc = nlp.make_doc(text)
-        ents = []
-        for start, end, label in annotations["entities"]:
-            span = doc.char_span(start, end, label=label)
-            if span:
-                ents.append(span)
-        doc.ents = ents
-        db_dev.add(doc)
+    if total_entities > 0:
+        print(
+            f"Entity alignment: {total_entities - dropped_entities}/{total_entities} kept, {dropped_entities} dropped"
+        )
 
-    if train_set:
-        db_train.to_disk(train_path)
-    if dev_set:
-        db_dev.to_disk(dev_path)
+    return examples
+
+
+def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
+    """
+    Train the SpanCat model with early stopping.
+
+    Returns the best scores dict from evaluation.
+    """
+    max_epochs = 30
+    patience = 10
+    best_f1 = 0.0
+    epochs_without_improvement = 0
+    best_scores = {}
+
+    optimizer = nlp.resume_training()
+    optimizer.learn_rate = 0.001
+
+    for epoch in range(max_epochs):
+        random.shuffle(train_examples)
+        losses = {}
+
+        batches = minibatch(train_examples, size=compounding(4.0, 32.0, 1.001))
+        for batch in batches:
+            nlp.update(batch, sgd=optimizer, drop=0.2, losses=losses)
+
+        # Evaluate on dev set
+        scores = nlp.evaluate(dev_examples)
+        dev_f1 = scores.get("spans_sc_f", 0.0)
+        dev_p = scores.get("spans_sc_p", 0.0)
+        dev_r = scores.get("spans_sc_r", 0.0)
+
+        print(
+            f"Epoch {epoch + 1}/{max_epochs} - "
+            f"Loss: {losses.get('spancat', 0.0):.4f} - "
+            f"Dev F1: {dev_f1:.4f} P: {dev_p:.4f} R: {dev_r:.4f}"
+        )
+
+        if dev_f1 > best_f1:
+            best_f1 = dev_f1
+            best_scores = scores
+            epochs_without_improvement = 0
+            nlp.to_disk(output_dir)
+        else:
+            epochs_without_improvement += 1
+
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping at epoch {epoch + 1} (no improvement for {patience} epochs)")
+            break
+
+    # If no improvement was ever saved (all F1=0), save final state
+    if best_f1 == 0.0:
+        nlp.to_disk(output_dir)
+        best_scores = scores
+
+    return best_scores
 
 
 def train_model(source="redactions", user=None):
     """
-    Train a new spaCy model using the config-driven pipeline.
+    Train a SpanCat model using en_core_web_lg's pretrained tok2vec
+    with transfer learning.
     """
     # Check if another training task is already running
-    # Tasks with success=None are still in progress
     running_tasks = Task.objects.filter(
         func="training.tasks.train_model",
         success__isnull=True,
     ).count()
 
-    # If there's already a running task (not counting this one which hasn't started yet),
-    # abort to prevent concurrent training
     if running_tasks > 0:
         print("Another training task is already in progress. Aborting.")
         return
@@ -204,63 +306,46 @@ def train_model(source="redactions", user=None):
         )
         return
 
-    # Export to corpora
-    corpora_dir = Path(settings.BASE_DIR, "corpora")
-    corpora_dir.mkdir(exist_ok=True)
-    train_file = corpora_dir / "train.spacy"
-    dev_file = corpora_dir / "dev.spacy"
-    export_spacy_data(train_data, train_file, dev_file)
-
     # Prepare output dir
     model_name = f"model_{source}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir = Path(settings.BASE_DIR, "nlp_models", model_name)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        active_model = Model.objects.get(is_active=True)
-        base_model_path = active_model.path
-    except Model.DoesNotExist:
-        active_model = None
-        base_model_path = "en_core_web_lg"
+        # Build SpanCat pipeline (always from en_core_web_lg for transfer learning)
+        nlp = _build_spancat_pipeline()
 
-    # Run spaCy train with subprocess
-    config_path = Path(settings.BASE_DIR, "training", "config.cfg")
-    cmd = [
-        "python",
-        "-m",
-        "spacy",
-        "train",
-        str(config_path),
-        "--output",
-        str(output_dir),
-        "--paths.train",
-        str(train_file),
-        "--paths.dev",
-        str(dev_file),
-        "--initialize.vectors",
-        base_model_path,
-    ]
+        # Initialize the pipeline with example data
+        def get_examples():
+            return _prepare_examples(nlp, train_data[:10])
 
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError:
-        # Clean up the output directory if training failed
+        nlp.initialize(get_examples)
+
+        # Prepare all examples
+        all_examples = _prepare_examples(nlp, train_data)
+
+        # Split 80/20 train/dev
+        random.shuffle(all_examples)
+        split_point = int(len(all_examples) * 0.8)
+        train_examples = all_examples[:split_point]
+        dev_examples = all_examples[split_point:]
+
+        # Train and save best model
+        best_scores = _run_training_loop(nlp, train_examples, dev_examples, output_dir)
+
+    except Exception:
         if output_dir.exists():
             shutil.rmtree(output_dir)
         raise
 
-    # Load best model for evaluation scores
-    nlp = spacy.load(output_dir / "model-best")
-    scores = nlp.evaluate([Example.from_dict(nlp.make_doc(t), ann) for t, ann in train_data])
-
     # Register in DB
     new_model = Model.objects.create(
         name=model_name,
-        path=str(output_dir / "model-best"),
+        path=str(output_dir),
         is_active=False,
-        precision=scores.get("ents_p"),
-        recall=scores.get("ents_r"),
-        f1_score=scores.get("ents_f"),
+        precision=best_scores.get("spans_sc_p"),
+        recall=best_scores.get("spans_sc_r"),
+        f1_score=best_scores.get("spans_sc_f"),
     )
 
     # Create TrainingRun

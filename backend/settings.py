@@ -183,8 +183,8 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 Q_CLUSTER = {
     "name": "DjangORM",
     "workers": 4,
-    "timeout": 90,
-    "retry": 120,
+    "timeout": 1800,
+    "retry": 2100,
     "queue_limit": 50,
     "bulk": 10,
     "orm": "default",

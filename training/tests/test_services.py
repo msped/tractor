@@ -5,6 +5,8 @@ from django.test import TestCase
 from lxml import etree
 
 from ..services import (
+    _deduplicate_entities,
+    _extract_ner_entities,
     _table_has_borders,
     extract_entities_from_text,
     extract_table_with_styling,
@@ -14,6 +16,16 @@ from .base import NetworkBlockerMixin
 
 class MockSpan:
     """A simple mock for a spaCy Span object."""
+
+    def __init__(self, text, label_, start_char, end_char):
+        self.text = text
+        self.label_ = label_
+        self.start_char = start_char
+        self.end_char = end_char
+
+
+class MockEnt:
+    """A simple mock for a spaCy Entity object (from doc.ents)."""
 
     def __init__(self, text, label_, start_char, end_char):
         self.text = text
@@ -38,18 +50,27 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     @patch("training.services.SpacyModelManager")
     def test_extract_entities_from_text_success(self, mock_model_manager, mock_spacy_layout):
         """
-        Test successful entity extraction.
+        Test successful entity extraction with hybrid NER + SpanCat.
+        SpanCat returns OPERATIONAL spans; base NER returns PERSON/GPE mapped to THIRD_PARTY.
         """
+        # Mock the custom SpanCat model
         mock_nlp = MagicMock()
-        mock_doc_with_ents = MagicMock()
-        mock_doc_with_ents.ents = [
-            MockSpan("John Doe", "PERSON", 12, 20),
-            MockSpan("London", "GPE", 35, 41),
+        mock_spancat_doc = MagicMock()
+        mock_spancat_doc.spans = {"sc": [MockSpan("ref-12345", "OPERATIONAL", 0, 9)]}
+        mock_nlp.return_value = mock_spancat_doc
+
+        # Mock the base NER model
+        mock_base_nlp = MagicMock()
+        mock_base_doc = MagicMock()
+        mock_base_doc.ents = [
+            MockEnt("John Doe", "PERSON", 12, 20),
+            MockEnt("London", "GPE", 35, 41),
         ]
-        mock_nlp.return_value = mock_doc_with_ents
+        mock_base_nlp.return_value = mock_base_doc
 
         mock_manager_instance = mock_model_manager.get_instance.return_value
         mock_manager_instance.get_model.return_value = mock_nlp
+        mock_manager_instance.get_base_model.return_value = mock_base_nlp
 
         mock_layout_instance = MagicMock()
         mock_layout_doc = MagicMock()
@@ -60,19 +81,18 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         extracted_text, results, tables, structure = extract_entities_from_text(self.file_path)
 
         self.assertEqual(extracted_text, "Hello, I'm John Doe and I live in London.")
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0]["text"], "John Doe")
-        self.assertEqual(results[0]["label"], "PERSON")
-        self.assertEqual(results[1]["text"], "London")
-        self.assertEqual(results[1]["label"], "GPE")
+        # 1 SpanCat + 2 NER entities = 3 total
+        self.assertEqual(len(results), 3)
+        # SpanCat result comes first
+        self.assertEqual(results[0]["text"], "ref-12345")
+        self.assertEqual(results[0]["label"], "OPERATIONAL")
+        # NER results mapped to THIRD_PARTY
+        self.assertEqual(results[1]["text"], "John Doe")
+        self.assertEqual(results[1]["label"], "THIRD_PARTY")
+        self.assertEqual(results[2]["text"], "London")
+        self.assertEqual(results[2]["label"], "THIRD_PARTY")
         self.assertEqual(tables, [])
-        # Structure is None for non-DOCX files (fallback to spaCyLayout)
         self.assertIsNone(structure)
-
-        mock_model_manager.get_instance.assert_called_once()
-        mock_manager_instance.get_model.assert_called_once()
-        mock_layout_instance.assert_called_once_with(self.file_path)
-        mock_nlp.assert_called_once_with("Hello, I'm John Doe and I live in London.")
 
     @patch("training.services.SpacyModelManager")
     def test_extract_entities_no_model_found(self, mock_model_manager):
@@ -91,7 +111,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         Test that a ValueError is raised if the document contains no text.
         """
         mock_nlp = MagicMock()
-        mock_model_manager.get_instance.return_value.get_model.return_value = mock_nlp
+        mock_manager_instance = mock_model_manager.get_instance.return_value
+        mock_manager_instance.get_model.return_value = mock_nlp
 
         mock_layout_instance = MagicMock()
         mock_layout_doc = MagicMock()
@@ -110,12 +131,19 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         via the display_table callback.
         """
         mock_nlp = MagicMock()
-        mock_doc_with_ents = MagicMock()
-        mock_doc_with_ents.ents = []
-        mock_nlp.return_value = mock_doc_with_ents
+        mock_spancat_doc = MagicMock()
+        mock_spancat_doc.spans = {"sc": []}
+        mock_nlp.return_value = mock_spancat_doc
+
+        # Mock the base NER model (returns no entities for this test)
+        mock_base_nlp = MagicMock()
+        mock_base_doc = MagicMock()
+        mock_base_doc.ents = []
+        mock_base_nlp.return_value = mock_base_doc
 
         mock_manager_instance = mock_model_manager.get_instance.return_value
         mock_manager_instance.get_model.return_value = mock_nlp
+        mock_manager_instance.get_base_model.return_value = mock_base_nlp
 
         # Mock spaCyLayout to capture and invoke the display_table callback
         def fake_spacy_layout(nlp, display_table=None):
@@ -264,3 +292,60 @@ class ExtractTableWithStylingBorderTests(TestCase):
         self.assertNotIn("border", cells[0]["style"])
         # The <td> style should not contain border (border-collapse on the <table> is fine)
         self.assertNotIn("border: 1px solid #000", html)
+
+
+class ExtractNerEntitiesTests(TestCase):
+    def test_extracts_matching_labels(self):
+        mock_nlp = MagicMock()
+        mock_doc = MagicMock()
+        mock_doc.ents = [
+            MockEnt("John", "PERSON", 0, 4),
+            MockEnt("London", "GPE", 10, 16),
+            MockEnt("$500", "MONEY", 20, 24),  # Not in NER_LABELS_TO_THIRD_PARTY
+        ]
+        mock_nlp.return_value = mock_doc
+
+        results = _extract_ner_entities(mock_nlp, "John lives London earns $500")
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["text"], "John")
+        self.assertEqual(results[0]["label"], "THIRD_PARTY")
+        self.assertEqual(results[1]["text"], "London")
+        self.assertEqual(results[1]["label"], "THIRD_PARTY")
+
+    def test_returns_empty_for_no_matching_labels(self):
+        mock_nlp = MagicMock()
+        mock_doc = MagicMock()
+        mock_doc.ents = [MockEnt("$500", "MONEY", 0, 4)]
+        mock_nlp.return_value = mock_doc
+
+        results = _extract_ner_entities(mock_nlp, "$500")
+        self.assertEqual(results, [])
+
+
+class DeduplicateEntitiesTests(TestCase):
+    def test_no_overlap_keeps_all(self):
+        spancat = [{"text": "ref-123", "label": "OPERATIONAL", "start_char": 0, "end_char": 7}]
+        ner = [{"text": "John", "label": "THIRD_PARTY", "start_char": 10, "end_char": 14}]
+        result = _deduplicate_entities(spancat, ner)
+        self.assertEqual(len(result), 2)
+
+    def test_overlap_removes_ner_entity(self):
+        spancat = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
+        ner = [{"text": "John", "label": "THIRD_PARTY", "start_char": 0, "end_char": 4}]
+        result = _deduplicate_entities(spancat, ner)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "John Doe")
+
+    def test_partial_overlap_removes_ner_entity(self):
+        spancat = [{"text": "John Doe ref", "label": "OPERATIONAL", "start_char": 0, "end_char": 12}]
+        ner = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
+        result = _deduplicate_entities(spancat, ner)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["label"], "OPERATIONAL")
+
+    def test_empty_inputs(self):
+        self.assertEqual(_deduplicate_entities([], []), [])
+        spancat = [{"text": "a", "label": "OPERATIONAL", "start_char": 0, "end_char": 1}]
+        self.assertEqual(len(_deduplicate_entities(spancat, [])), 1)
+        ner = [{"text": "b", "label": "THIRD_PARTY", "start_char": 5, "end_char": 6}]
+        self.assertEqual(len(_deduplicate_entities([], ner)), 1)

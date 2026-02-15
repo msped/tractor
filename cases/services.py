@@ -25,6 +25,54 @@ ENTITY_LABEL_TO_REDACTION_TYPE = {
     "OPERATIONAL": Redaction.RedactionType.OPERATIONAL_DATA,
 }
 
+# Common date formats for matching data subject DOB
+_DOB_FORMATS = [
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%d/%m/%y",
+    "%d-%m-%y",
+    "%Y-%m-%d",
+    "%d %B %Y",
+    "%d %b %Y",
+    "%-d %B %Y",
+    "%-d %b %Y",
+]
+
+
+def _matches_data_subject(text, case):
+    """
+    Check if entity text matches the case's data subject name or DOB.
+    Returns True if the text should be excluded from THIRD_PARTY suggestions.
+    """
+    text_lower = text.strip().lower()
+    if not text_lower:
+        return False
+
+    # Check against data subject name
+    ds_name = getattr(case, "data_subject_name", None)
+    if ds_name:
+        ds_name_lower = ds_name.strip().lower()
+        # Full name match (case-insensitive)
+        if text_lower == ds_name_lower or ds_name_lower in text_lower:
+            return True
+        # Individual name parts match (ignore single-char parts like initials)
+        name_parts = [p for p in ds_name_lower.split() if len(p) > 1]
+        if text_lower in name_parts:
+            return True
+
+    # Check against data subject DOB
+    ds_dob = getattr(case, "data_subject_dob", None)
+    if ds_dob:
+        for fmt in _DOB_FORMATS:
+            try:
+                formatted = ds_dob.strftime(fmt)
+                if text_lower == formatted.lower():
+                    return True
+            except ValueError:
+                continue
+
+    return False
+
 
 def process_document_and_create_redactions(document_id):
     """
@@ -59,8 +107,14 @@ def process_document_and_create_redactions(document_id):
     document.extracted_structure = structure
     document.save(update_fields=["extracted_text", "extracted_tables", "extracted_structure"])
 
+    case = document.case
+
     with transaction.atomic():
         for suggestion in ai_suggestions:
+            # Filter out entities matching the data subject's name/DOB
+            if _matches_data_subject(suggestion["text"], case):
+                continue
+
             redaction_type = ENTITY_LABEL_TO_REDACTION_TYPE.get(
                 suggestion["label"],
                 Redaction.RedactionType.THIRD_PARTY_PII,  # fallback default

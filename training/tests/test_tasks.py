@@ -11,7 +11,6 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from docx import Document as DocxDocument
 from docx.enum.text import WD_COLOR_INDEX
-from spacy.tokens import DocBin
 
 from cases.models import Case, Redaction
 from cases.models import Document as CaseDocument
@@ -19,7 +18,6 @@ from cases.models import Document as CaseDocument
 from ..models import Model, TrainingDocument, TrainingRun
 from ..tasks import (
     collect_training_data_detailed,
-    export_spacy_data,
     train_model,
 )
 from .base import NetworkBlockerMixin
@@ -126,8 +124,8 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         self.assertIn("Third Party", text)
         self.assertIn("Operational", text)
         self.assertEqual(len(annotations["entities"]), 2)
-        self.assertEqual(annotations["entities"][0][2], "THIRD_PARTY_PII")
-        self.assertEqual(annotations["entities"][1][2], "OPERATIONAL_DATA")
+        self.assertEqual(annotations["entities"][0][2], "THIRD_PARTY")
+        self.assertEqual(annotations["entities"][1][2], "OPERATIONAL")
 
     def test_collect_from_redactions(self):
         """Test collecting data only from CaseDocument redactions."""
@@ -144,7 +142,7 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         start, end, label = annotations["entities"][0]
         self.assertEqual(start, 15)
         self.assertEqual(end, 23)
-        self.assertEqual(label, Redaction.RedactionType.THIRD_PARTY_PII)
+        self.assertEqual(label, "THIRD_PARTY")
 
     def test_collect_from_both(self):
         """Test collecting data from both sources."""
@@ -194,7 +192,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(annotations["entities"]), 1)
         start, end, label = annotations["entities"][0]
         self.assertEqual(text[start:end], "Cheshire Police")
-        self.assertEqual(label, "THIRD_PARTY_PII")
+        self.assertEqual(label, "THIRD_PARTY")
 
     def test_entity_boundaries_trimmed_of_whitespace(self):
         """Test that entity boundaries are trimmed to exclude leading/trailing whitespace."""
@@ -288,62 +286,11 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(text[start:end], "Valid")
 
 
-class ExportSpacyDataTests(NetworkBlockerMixin, TestCase):
-    def setUp(self):
-        self.train_data = [
-            ("Who is John Smith?", {"entities": [(7, 17, "PERSON")]}),
-            ("I like London.", {"entities": [(7, 13, "GPE")]}),
-        ]
-        self.temp_dir = tempfile.mkdtemp()
-        self.train_path = Path(self.temp_dir) / "train.spacy"
-        self.dev_path = Path(self.temp_dir) / "dev.spacy"
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_export_creates_training_file_only(self):
-        """Test that only a training file is created when split is 1.0."""
-        export_spacy_data(self.train_data, self.train_path, self.dev_path, split=1.0)
-        self.assertTrue(self.train_path.exists())
-        self.assertFalse(self.dev_path.exists())
-
-    def test_export_creates_dev_file_only(self):
-        """Test that only a dev file is created when split is 0.0."""
-        export_spacy_data(self.train_data, self.train_path, self.dev_path, split=0.0)
-        self.assertFalse(self.train_path.exists())
-        self.assertTrue(self.dev_path.exists())
-
-    def test_export_data_integrity(self):
-        """Test that the data in the created DocBin is correct."""
-        export_spacy_data(self.train_data, self.train_path, self.dev_path, split=1.0)
-
-        nlp = spacy.blank("en")
-        db = DocBin().from_disk(self.train_path)
-        docs = list(db.get_docs(nlp.vocab))
-
-        self.assertEqual(len(docs), 2)
-        # Order is shuffled, so we check content
-        texts = {doc.text for doc in docs}
-        self.assertEqual(texts, {"Who is John Smith?", "I like London."})
-
-        for doc in docs:
-            if "John Smith" in doc.text:
-                self.assertEqual(len(doc.ents), 1)
-                self.assertEqual(doc.ents[0].text, "John Smith")
-                self.assertEqual(doc.ents[0].label_, "PERSON")
-            elif "London" in doc.text:
-                self.assertEqual(len(doc.ents), 1)
-                self.assertEqual(doc.ents[0].text, "London")
-                self.assertEqual(doc.ents[0].label_, "GPE")
-
-
 @override_settings(
     BASE_DIR=Path(tempfile.mkdtemp(prefix="test_base_train")),
-    # To prevent HIGHLIGHT_COLOR_TO_LABEL from being empty
-    # due to it being defined at module level in tasks.py
     HIGHLIGHT_COLOR_TO_LABEL={
-        "BRIGHT_GREEN": "THIRD_PARTY_PII",
-        "TURQUOISE": "OPERATIONAL_DATA",
+        "BRIGHT_GREEN": "THIRD_PARTY",
+        "TURQUOISE": "OPERATIONAL",
     },
 )
 class TrainModelTests(NetworkBlockerMixin, TestCase):
@@ -373,20 +320,26 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
             self.used_cdocs,
         )
 
-        self.export_patcher = patch("training.tasks.export_spacy_data")
-        self.mock_export = self.export_patcher.start()
+        self.build_pipeline_patcher = patch("training.tasks._build_spancat_pipeline")
+        self.mock_build_pipeline = self.build_pipeline_patcher.start()
 
-        self.subprocess_patcher = patch("training.tasks.subprocess.run")
-        self.mock_subprocess = self.subprocess_patcher.start()
-
-        self.spacy_load_patcher = patch("training.tasks.spacy.load")
-        self.mock_spacy_load = self.spacy_load_patcher.start()
-        mock_nlp = MagicMock()
-        mock_nlp.evaluate.return_value = {"ents_p": 0.9, "ents_r": 0.85, "ents_f": 0.875}
-        # This is needed for the nlp.evaluate() call.
+        # Create a mock NLP object that behaves like a SpanCat pipeline
+        self.mock_nlp = MagicMock()
         real_nlp = spacy.blank("en")
-        mock_nlp.make_doc.side_effect = real_nlp.make_doc
-        self.mock_spacy_load.return_value = mock_nlp
+        self.mock_nlp.make_doc.side_effect = real_nlp.make_doc
+        self.mock_nlp.evaluate.return_value = {
+            "spans_sc_f": 0.875,
+            "spans_sc_p": 0.9,
+            "spans_sc_r": 0.85,
+        }
+        mock_optimizer = MagicMock()
+        self.mock_nlp.resume_training.return_value = mock_optimizer
+        self.mock_build_pipeline.return_value = self.mock_nlp
+
+        self.prepare_examples_patcher = patch("training.tasks._prepare_examples")
+        self.mock_prepare_examples = self.prepare_examples_patcher.start()
+        # Return mock Example objects (one per training data item)
+        self.mock_prepare_examples.return_value = [MagicMock() for _ in range(25)]
 
         self.timezone_patcher = patch("training.tasks.timezone.now")
         mock_now = self.timezone_patcher.start()
@@ -399,9 +352,8 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
     def tearDown(self):
         self.collect_patcher.stop()
-        self.export_patcher.stop()
-        self.subprocess_patcher.stop()
-        self.spacy_load_patcher.stop()
+        self.build_pipeline_patcher.stop()
+        self.prepare_examples_patcher.stop()
         self.timezone_patcher.stop()
 
     def test_train_model_aborts_if_not_enough_data(self):
@@ -415,6 +367,18 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         Model.objects.create(name="active_model", path="/fake/path", is_active=True)
 
         train_model(source="both", user=self.user)
+
+        # Verify _build_spancat_pipeline was called
+        self.mock_build_pipeline.assert_called_once()
+
+        # Verify nlp.initialize was called
+        self.mock_nlp.initialize.assert_called_once()
+
+        # Verify training loop ran (nlp.update was called)
+        self.assertTrue(self.mock_nlp.update.called)
+
+        # Verify model was saved to disk
+        self.assertTrue(self.mock_nlp.to_disk.called)
 
         self.assertEqual(Model.objects.count(), 3)  # Default + active + new
         new_model = Model.objects.get(name__startswith="model_both_")
@@ -436,8 +400,59 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
             tdoc.refresh_from_db()
             self.assertTrue(tdoc.processed)
 
-    def test_train_model_uses_fallback_base_model(self):
-        """Test that it uses 'en_core_web_lg' if no active model exists."""
+    def test_train_model_always_uses_en_core_web_lg(self):
+        """Test that _build_spancat_pipeline is always called (uses en_core_web_lg internally)."""
+        # No active model exists
         train_model(source="redactions")
-        cmd_args = self.mock_subprocess.call_args[0][0]
-        self.assertIn("en_core_web_lg", cmd_args)
+        self.mock_build_pipeline.assert_called_once()
+
+    def test_train_model_calls_update(self):
+        """Test that nlp.update is called during training."""
+        train_model(source="redactions")
+        self.assertTrue(self.mock_nlp.update.called)
+
+    def test_train_model_adds_custom_labels(self):
+        """Test that THIRD_PARTY and OPERATIONAL labels are added via _build_spancat_pipeline."""
+        # Stop the class-level mock so we can test the real function
+        self.build_pipeline_patcher.stop()
+
+        try:
+            with patch("spacy.load") as mock_load:
+                mock_base_nlp = MagicMock()
+                # pipe_names needs to be a real list so list() iteration works
+                pipe_names_list = ["tok2vec", "tagger", "parser", "ner"]
+                type(mock_base_nlp).pipe_names = property(lambda self: list(pipe_names_list))
+
+                def mock_remove_pipe(name):
+                    pipe_names_list.remove(name)
+
+                mock_base_nlp.remove_pipe.side_effect = mock_remove_pipe
+
+                mock_tok2vec = MagicMock()
+                mock_tok2vec.model.get_dim.return_value = 96
+                mock_base_nlp.get_pipe.return_value = mock_tok2vec
+
+                mock_spancat = MagicMock()
+                mock_base_nlp.add_pipe.return_value = mock_spancat
+
+                mock_load.return_value = mock_base_nlp
+
+                from ..tasks import _build_spancat_pipeline
+
+                _build_spancat_pipeline()
+
+                # Verify en_core_web_lg was loaded
+                mock_load.assert_called_once_with("en_core_web_lg")
+
+                # Verify non-tok2vec pipes were removed
+                self.assertEqual(mock_base_nlp.remove_pipe.call_count, 3)
+
+                # Verify labels were added
+                mock_spancat.add_label.assert_any_call("THIRD_PARTY")
+                mock_spancat.add_label.assert_any_call("OPERATIONAL")
+                self.assertEqual(mock_spancat.add_label.call_count, 2)
+        finally:
+            # Restart the patcher for tearDown
+            self.build_pipeline_patcher = patch("training.tasks._build_spancat_pipeline")
+            self.mock_build_pipeline = self.build_pipeline_patcher.start()
+            self.mock_build_pipeline.return_value = self.mock_nlp
