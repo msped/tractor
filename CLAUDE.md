@@ -51,7 +51,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 - **Frontend**: Next.js 15 (React 19), Material-UI v7, NextAuth v5 for auth
 - **Backend**: Django 5.2, Django REST Framework, django-q2 for async tasks
 - **Database**: PostgreSQL 15
-- **NLP**: spaCy 3.8 with PyTorch backend, custom trained models stored in `nlp_models/`
+- **NLP**: spaCy 3.8 with PyTorch backend, `en_core_web_lg` (built-in NER) + custom SpanCat model stored in `nlp_models/`
 
 ### Project Structure
 
@@ -85,9 +85,9 @@ tractor/
 
 ### Data Flow
 
-1. Document uploaded → docling extracts text → spaCy NER identifies entities
+1. Document uploaded → text extracted → hybrid NER: SpanCat (OPERATIONAL) + en_core_web_lg (THIRD_PARTY) → deduplicated → data subject name/DOB filtered out
 2. Redaction suggestions shown to user → user accepts/rejects
-3. Completed documents feed into training pipeline
+3. Completed documents feed into SpanCat training pipeline
 4. Async tasks (export, training) handled by django-q2
 
 ### Model Status
