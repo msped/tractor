@@ -14,6 +14,7 @@ class SpacyModelManager:
         self.model = None
         self.model_name = None
         self.model_entry = None
+        self._base_model = None
         self.load_active_model()
 
     @classmethod
@@ -38,6 +39,12 @@ class SpacyModelManager:
         if self.model is None:
             self.load_active_model()
         return self.model
+
+    def get_base_model(self):
+        """Load and cache en_core_web_lg for built-in NER."""
+        if self._base_model is None:
+            self._base_model = spacy.load("en_core_web_lg")
+        return self._base_model
 
     def get_model_entry(self):
         return self.model_entry

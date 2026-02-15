@@ -20,6 +20,7 @@ from training.tests.base import NetworkBlockerMixin
 from ..models import Case, Document, Redaction, RedactionContext
 from ..services import (
     _generate_pdf_from_document,
+    _matches_data_subject,
     delete_cases_past_retention_date,
     export_case_documents,
     find_and_flag_matching_text_in_case,
@@ -362,6 +363,82 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         redactions = doc2.redactions.order_by("start_char")
         self.assertEqual(redactions[0].text, "party")
         self.assertEqual(redactions[1].text, "parties")
+
+    @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpacyModelManager")
+    def test_process_document_filters_data_subject_entities(self, mock_spacy_manager, mock_extract_entities):
+        """Test that entities matching the data subject name/DOB are excluded."""
+        mock_manager_instance = MagicMock()
+        mock_manager_instance.get_model_entry.return_value = self.spacy_model
+        mock_spacy_manager.get_instance.return_value = mock_manager_instance
+
+        extracted_text = "John Doe lives in London. DOB: 01/01/1990."
+        suggestions = [
+            {"start_char": 0, "end_char": 8, "text": "John Doe", "label": "THIRD_PARTY"},
+            {"start_char": 18, "end_char": 24, "text": "London", "label": "THIRD_PARTY"},
+            {"start_char": 31, "end_char": 41, "text": "01/01/1990", "label": "THIRD_PARTY"},
+        ]
+        mock_extract_entities.return_value = (extracted_text, suggestions, [], None)
+
+        process_document_and_create_redactions(self.document.id)
+
+        self.document.refresh_from_db()
+        # "John Doe" (full name match) and "01/01/1990" (DOB match) should be filtered out
+        self.assertEqual(self.document.redactions.count(), 1)
+        redaction = self.document.redactions.first()
+        self.assertEqual(redaction.text, "London")
+
+    def test_matches_data_subject_full_name(self):
+        """Test full name matching (case-insensitive, bidirectional)."""
+        self.assertTrue(_matches_data_subject("John Doe", self.case))
+        self.assertTrue(_matches_data_subject("john doe", self.case))
+        self.assertTrue(_matches_data_subject("JOHN DOE", self.case))
+
+    def test_matches_data_subject_name_parts(self):
+        """Test individual name parts match."""
+        self.assertTrue(_matches_data_subject("John", self.case))
+        self.assertTrue(_matches_data_subject("Doe", self.case))
+
+    def test_matches_data_subject_no_match(self):
+        """Test non-matching text."""
+        self.assertFalse(_matches_data_subject("Jane Smith", self.case))
+        self.assertFalse(_matches_data_subject("London", self.case))
+
+    def test_matches_data_subject_dob_formats(self):
+        """Test DOB matching across various date formats."""
+        self.assertTrue(_matches_data_subject("01/01/1990", self.case))
+        self.assertTrue(_matches_data_subject("01-01-1990", self.case))
+        self.assertTrue(_matches_data_subject("1990-01-01", self.case))
+        self.assertTrue(_matches_data_subject("1 January 1990", self.case))
+        self.assertTrue(_matches_data_subject("01 January 1990", self.case))
+        self.assertTrue(_matches_data_subject("1 Jan 1990", self.case))
+
+    def test_matches_data_subject_no_dob(self):
+        """Test with a case that has no DOB."""
+        case_no_dob = Case.objects.create(
+            case_reference="250002",
+            data_subject_name="Alice Test",
+            created_by=self.user,
+        )
+        self.assertTrue(_matches_data_subject("Alice", case_no_dob))
+        self.assertFalse(_matches_data_subject("01/01/1990", case_no_dob))
+
+    def test_matches_data_subject_empty_text(self):
+        """Test with empty/whitespace text."""
+        self.assertFalse(_matches_data_subject("", self.case))
+        self.assertFalse(_matches_data_subject("   ", self.case))
+
+    def test_matches_data_subject_single_char_name_part_ignored(self):
+        """Test that single-character name parts are not matched."""
+        case = Case.objects.create(
+            case_reference="250003",
+            data_subject_name="A Smith",
+            created_by=self.user,
+        )
+        # "A" is a single char, should not match
+        self.assertFalse(_matches_data_subject("A", case))
+        # "Smith" should match
+        self.assertTrue(_matches_data_subject("Smith", case))
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)

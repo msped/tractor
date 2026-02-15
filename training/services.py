@@ -6,6 +6,45 @@ from spacy_layout import spaCyLayout
 
 from .loader import SpacyModelManager
 
+# NER labels from en_core_web_lg that map to THIRD_PARTY
+NER_LABELS_TO_THIRD_PARTY = {"PERSON", "ORG", "GPE", "DATE", "FAC", "LOC", "NORP"}
+
+
+def _extract_ner_entities(base_nlp, text):
+    """
+    Run en_core_web_lg NER on text and return entities mapped to THIRD_PARTY.
+    """
+    doc = base_nlp(text)
+    results = []
+    for ent in doc.ents:
+        if ent.label_ in NER_LABELS_TO_THIRD_PARTY:
+            results.append(
+                {
+                    "text": ent.text,
+                    "label": "THIRD_PARTY",
+                    "start_char": ent.start_char,
+                    "end_char": ent.end_char,
+                }
+            )
+    return results
+
+
+def _deduplicate_entities(spancat_entities, ner_entities):
+    """
+    Combine SpanCat and NER results, with SpanCat taking priority.
+    NER entities that overlap with any SpanCat span are skipped.
+    """
+    combined = list(spancat_entities)
+    for ner_ent in ner_entities:
+        overlaps = False
+        for sc_ent in spancat_entities:
+            if ner_ent["start_char"] < sc_ent["end_char"] and ner_ent["end_char"] > sc_ent["start_char"]:
+                overlaps = True
+                break
+        if not overlaps:
+            combined.append(ner_ent)
+    return combined
+
 
 def _table_has_borders(table):
     """
@@ -251,16 +290,21 @@ def extract_entities_from_text(path):
 
         ner_doc = nlp(ner_text)
 
-        results = []
-        for ent in ner_doc.ents:
-            results.append(
+        spancat_results = []
+        for span in ner_doc.spans.get("sc", []):
+            spancat_results.append(
                 {
-                    "text": ent.text,
-                    "label": ent.label_,
-                    "start_char": ent.start_char,
-                    "end_char": ent.end_char,
+                    "text": span.text,
+                    "label": span.label_,
+                    "start_char": span.start_char,
+                    "end_char": span.end_char,
                 }
             )
+
+        # Run base NER model for THIRD_PARTY entities
+        base_nlp = SpacyModelManager.get_instance().get_base_model()
+        ner_results = _extract_ner_entities(base_nlp, ner_text)
+        results = _deduplicate_entities(spancat_results, ner_results)
 
         return ner_text, results, tables, structure
 
@@ -303,16 +347,21 @@ def extract_entities_from_text(path):
 
     ner_doc = nlp(ner_text)
 
-    results = []
-    for ent in ner_doc.ents:
-        results.append(
+    spancat_results = []
+    for span in ner_doc.spans.get("sc", []):
+        spancat_results.append(
             {
-                "text": ent.text,
-                "label": ent.label_,
-                "start_char": ent.start_char,
-                "end_char": ent.end_char,
+                "text": span.text,
+                "label": span.label_,
+                "start_char": span.start_char,
+                "end_char": span.end_char,
             }
         )
+
+    # Run base NER model for THIRD_PARTY entities
+    base_nlp = SpacyModelManager.get_instance().get_base_model()
+    ner_results = _extract_ner_entities(base_nlp, ner_text)
+    results = _deduplicate_entities(spancat_results, ner_results)
 
     # For non-DOCX files, structure is None (fallback to plain text rendering)
     return ner_text, results, tables, None
