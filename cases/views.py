@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django_q.models import OrmQ
 from django_q.tasks import async_task
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView, RetrieveUpdateDestroyAPIView
@@ -130,7 +131,7 @@ class DocumentResubmitView(APIView):
 
     def post(self, request, document_id, *args, **kwargs):
         document = get_object_or_404(Document, id=document_id)
-        if document.status in [Document.Status.ERROR, Document.Status.READY_FOR_REVIEW]:
+        if document.status in [Document.Status.ERROR, Document.Status.READY_FOR_REVIEW, Document.Status.UNPROCESSED]:
             # Delete existing redactions to avoid duplicates
             document.redactions.all().delete()
             document.status = Document.Status.PROCESSING
@@ -138,6 +139,42 @@ class DocumentResubmitView(APIView):
             async_task("cases.services.process_document_and_create_redactions", document.id)
             return Response(status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class DocumentCancelProcessingView(APIView):
+    """
+    API view to cancel a document that is currently processing.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, document_id, *args, **kwargs):
+        document = get_object_or_404(Document, id=document_id)
+        if document.status != Document.Status.PROCESSING:
+            return Response(
+                {"detail": "Document is not currently processing."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Remove from the queue
+        if document.processing_task_id:
+            OrmQ.objects.filter(key=document.processing_task_id).delete()
+        document.redactions.all().delete()
+        document.extracted_text = None
+        document.extracted_tables = []
+        document.extracted_structure = None
+        document.status = Document.Status.UNPROCESSED
+        document.processing_task_id = None
+        document.save(
+            update_fields=[
+                "status",
+                "processing_task_id",
+                "extracted_text",
+                "extracted_tables",
+                "extracted_structure",
+            ]
+        )
+        return Response(status=status.HTTP_200_OK)
 
 
 class DocumentReviewView(RetrieveAPIView):

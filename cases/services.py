@@ -84,6 +84,10 @@ def process_document_and_create_redactions(document_id):
         print(f"Document with id {document_id} not found.")
         return
 
+    if document.status != Document.Status.PROCESSING:
+        print(f"Document {document_id} is no longer processing (status: {document.status}). Aborting.")
+        return
+
     manager = SpacyModelManager.get_instance()
     active_model_instance = manager.get_model_entry()
 

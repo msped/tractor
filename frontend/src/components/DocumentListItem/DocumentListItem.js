@@ -12,6 +12,7 @@ import {
     CircularProgress 
 } from '@mui/material';
 import ArticleIcon from '@mui/icons-material/Article';
+import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import NextLink from 'next/link';
@@ -21,6 +22,8 @@ import { getDocument } from '@/services/documentService';
 
 const getStatusChipColor = (status) => {
     switch (status) {
+        case 'Unprocessed':
+            return 'default';
         case 'Processing':
             return 'primary';
         case 'Ready for Review':
@@ -35,13 +38,14 @@ const getStatusChipColor = (status) => {
 };
 
 
-export const DocumentListItem = ({ 
+export const DocumentListItem = ({
     doc,
     caseId,
     onDelete,
     onResubmit,
+    onCancelProcessing,
     handleDocumentUpdate,
-    isCaseFinalised 
+    isCaseFinalised
 }) => {
 
     const { data: session } = useSession();
@@ -95,11 +99,20 @@ export const DocumentListItem = ({
                             Open
                         </Button>
                     )}
-                    {doc.status === 'Error' && (
-                        <Tooltip title={isCaseFinalised || doc.status !== 'Error' ? "Cannot re-submit document." : "Re-submit document for processing"}>
+                    {(doc.status === 'Error' || doc.status === 'Unprocessed') && (
+                        <Tooltip title={isCaseFinalised ? "Cannot re-submit document." : "Re-submit document for processing"}>
                             <span>
-                                <IconButton aria-label="resubmit" onClick={() => onResubmit(doc.id)} disabled={isCaseFinalised || !doc.status === 'Error'}>
+                                <IconButton aria-label="resubmit" onClick={() => onResubmit(doc.id)} disabled={isCaseFinalised}>
                                     <RefreshIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    )}
+                    {doc.status === 'Processing' && (
+                        <Tooltip title="Cancel processing">
+                            <span>
+                                <IconButton aria-label="cancel processing" onClick={() => onCancelProcessing(doc.id)}>
+                                    <CloseIcon />
                                 </IconButton>
                             </span>
                         </Tooltip>

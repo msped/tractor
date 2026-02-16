@@ -11,7 +11,8 @@ def document_post_save(sender, instance, created, **kwargs):
     When a document is first created, trigger the AI processing task.
     """
     if created and instance.status == Document.Status.PROCESSING:
-        async_task("cases.services.process_document_and_create_redactions", instance.id)
+        task_id = async_task("cases.services.process_document_and_create_redactions", instance.id)
+        Document.objects.filter(pk=instance.pk).update(processing_task_id=task_id)
 
 
 @receiver(post_save, sender=Redaction)

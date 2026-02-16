@@ -139,6 +139,18 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIsNone(self.document.extracted_text)
         self.assertEqual(self.document.redactions.count(), 0)
 
+    def test_process_document_aborts_if_not_processing(self):
+        """Test that the task aborts early if the document status is no longer PROCESSING."""
+        self.document.status = Document.Status.UNPROCESSED
+        self.document.save()
+
+        process_document_and_create_redactions(self.document.id)
+
+        self.document.refresh_from_db()
+        # Status should remain UNPROCESSED — not changed by the task
+        self.assertEqual(self.document.status, Document.Status.UNPROCESSED)
+        self.assertEqual(self.document.redactions.count(), 0)
+
     def test_process_document_not_found(self):
         """Test that the function handles a non-existent document ID
         gracefully."""

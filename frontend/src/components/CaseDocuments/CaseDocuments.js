@@ -25,7 +25,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { uploadDocuments, deleteDocument, resubmitDocument } from '@/services/documentService';
+import { uploadDocuments, deleteDocument, resubmitDocument, cancelProcessing } from '@/services/documentService';
 import { DocumentListItem } from '@/components/DocumentListItem';
 import toast from 'react-hot-toast';
 
@@ -122,6 +122,18 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         }
     };
 
+    const handleCancelProcessing = async (docId) => {
+        if (!caseId) return;
+
+        try {
+            await cancelProcessing(docId, session?.access_token);
+            toast.success('Document processing cancelled.');
+            if (onUpdate) await onUpdate();
+        } catch (error) {
+            toast.error('Failed to cancel processing. Please try again.');
+        }
+    };
+
     const handleUpload = async () => {
         if (selectedFiles.length === 0 || !caseId) return;
 
@@ -173,6 +185,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
                                     caseId={caseId}
                                     onDelete={handleDeleteDocument}
                                     onResubmit={handleResubmitDocument}
+                                    onCancelProcessing={handleCancelProcessing}
                                     handleDocumentUpdate={onUpdate}
                                     isCaseFinalised={isCaseFinalised}
                                 />

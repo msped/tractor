@@ -122,6 +122,7 @@ class Document(models.Model):
     """
 
     class Status(models.TextChoices):
+        UNPROCESSED = "UNPROCESSED", "Unprocessed"
         PROCESSING = "PROCESSING", "Processing"
         READY_FOR_REVIEW = "READY", "Ready for Review"
         COMPLETED = "COMPLETED", "Completed"
@@ -147,6 +148,7 @@ class Document(models.Model):
     extracted_structure = models.JSONField(null=True, blank=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    processing_task_id = models.CharField(max_length=255, null=True, blank=True)
     spacy_model = models.ForeignKey(
         Model,
         on_delete=models.SET_NULL,  # Important for data retention
