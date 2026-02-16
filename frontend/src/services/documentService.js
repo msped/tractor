@@ -52,6 +52,23 @@ export const resubmitDocument = async (docId, accessToken) => {
     }
 }
 
+export const cancelProcessing = async (docId, accessToken) => {
+    try {
+        const response = await apiClient.post(`/cases/documents/${docId}/cancel`, {}, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to cancel processing: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to cancel processing. Please try again.');
+        }
+    }
+}
+
 export const uploadDocuments = async (caseId, formData, accessToken) => {
     try {
         const response = await apiClient.post(`/cases/${caseId}/documents`, formData, {
