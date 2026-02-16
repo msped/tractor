@@ -136,8 +136,7 @@ class DocumentResubmitView(APIView):
             document.redactions.all().delete()
             document.status = Document.Status.PROCESSING
             document.save(update_fields=["status"])
-            async_task(
-                "cases.services.process_document_and_create_redactions", document.id)
+            async_task("cases.services.process_document_and_create_redactions", document.id)
             return Response(status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -230,8 +229,7 @@ class RedactionContextView(APIView):
         # Use update_or_create to handle both creation of a new context
         # and update of an existing one.
         context, created = RedactionContext.objects.update_or_create(
-            redaction=redaction, defaults={
-                "text": serializer.validated_data["text"]}
+            redaction=redaction, defaults={"text": serializer.validated_data["text"]}
         )
 
         status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
