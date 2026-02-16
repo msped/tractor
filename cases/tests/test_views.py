@@ -392,6 +392,74 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_cancel_processing_success(self):
+        """Test cancelling a document that is currently processing."""
+        self.document.status = Document.Status.PROCESSING
+        self.document.processing_task_id = "test-task-id"
+        self.document.save()
+
+        url = reverse("document-cancel", kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, Document.Status.UNPROCESSED)
+        self.assertIsNone(self.document.processing_task_id)
+        self.assertIsNone(self.document.extracted_text)
+        self.assertEqual(self.document.extracted_tables, [])
+        self.assertIsNone(self.document.extracted_structure)
+        self.assertEqual(self.document.redactions.count(), 0)
+
+    def test_cancel_processing_wrong_status(self):
+        """Test cancelling a document that is not processing returns 400."""
+        self.document.status = Document.Status.READY_FOR_REVIEW
+        self.document.save()
+
+        url = reverse("document-cancel", kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, Document.Status.READY_FOR_REVIEW)
+
+    def test_cancel_processing_not_found(self):
+        """Test cancelling a non-existent document returns 404."""
+        non_existent_uuid = uuid.uuid4()
+        url = reverse("document-cancel", kwargs={"document_id": non_existent_uuid})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cancel_processing_deletes_redactions(self):
+        """Test that cancelling processing deletes any redactions created so far."""
+        self.document.status = Document.Status.PROCESSING
+        self.document.save()
+
+        # Verify redaction exists before cancel
+        self.assertEqual(self.document.redactions.count(), 1)
+
+        url = reverse("document-cancel", kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.document.redactions.count(), 0)
+
+    @patch("cases.views.async_task")
+    def test_resubmit_document_unprocessed_status_success(self, mock_async_task):
+        """Test resubmitting a document in UNPROCESSED status succeeds."""
+        self.document.status = Document.Status.UNPROCESSED
+        self.document.save()
+
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, Document.Status.PROCESSING)
+        mock_async_task.assert_called_once_with(
+            "cases.services.process_document_and_create_redactions", self.document.id
+        )
+
     def test_unauthenticated_access_fails(self):
         """Test that unauthenticated users receive a 403 Forbidden error for
         all views."""
@@ -415,6 +483,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             },
             "redaction-detail": {"method": "get", "kwargs": {"pk": self.redaction.id}},
             "document-resubmit": {"method": "post", "kwargs": {"document_id": self.document.id}},
+            "document-cancel": {"method": "post", "kwargs": {"document_id": self.document.id}},
         }
 
         for name, details in endpoints.items():
