@@ -4,6 +4,7 @@ from .views import (
     CaseDetailView,
     CaseExportView,
     CaseListCreateView,
+    DocumentCancelProcessingView,
     DocumentDetailView,
     DocumentListCreateView,
     DocumentResubmitView,
@@ -23,6 +24,11 @@ urlpatterns = [
         "cases/documents/<uuid:document_id>/resubmit",
         DocumentResubmitView.as_view(),
         name="document-resubmit",
+    ),
+    path(
+        "cases/documents/<uuid:document_id>/cancel",
+        DocumentCancelProcessingView.as_view(),
+        name="document-cancel",
     ),
     path(
         "cases/<uuid:case_id>/document/<uuid:document_id>/review",
