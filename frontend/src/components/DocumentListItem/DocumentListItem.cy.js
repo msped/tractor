@@ -139,6 +139,92 @@ describe('<DocumentListItem />', () => {
         });
     });
 
+    context('Cancel processing', () => {
+        it('shows a cancel button when status is "Processing"', () => {
+            const processingDoc = { ...baseDoc, status: 'Processing' };
+            const onCancelProcessing = cy.stub().as('onCancelStub');
+
+            cy.fullMount(
+                <DocumentListItem
+                    doc={processingDoc}
+                    caseId={caseId}
+                    onDelete={() => {}}
+                    onCancelProcessing={onCancelProcessing}
+                    handleDocumentUpdate={() => {}}
+                    isCaseFinalised={false}
+                />,
+                mountOpts
+            );
+
+            cy.get('button[aria-label="cancel processing"]')
+                .should('be.visible')
+                .click();
+
+            cy.get('@onCancelStub').should('have.been.calledOnceWith', processingDoc.id);
+        });
+
+        it('does not show a cancel button when status is not "Processing"', () => {
+            cy.fullMount(
+                <DocumentListItem
+                    doc={baseDoc}
+                    caseId={caseId}
+                    onDelete={() => {}}
+                    onCancelProcessing={() => {}}
+                    handleDocumentUpdate={() => {}}
+                    isCaseFinalised={false}
+                />,
+                mountOpts
+            );
+
+            cy.get('button[aria-label="cancel processing"]').should('not.exist');
+        });
+    });
+
+    context('Unprocessed status', () => {
+        it('shows a resubmit button for "Unprocessed" status', () => {
+            const unprocessedDoc = { ...baseDoc, status: 'Unprocessed' };
+            const onResubmit = cy.stub().as('onResubmitStub');
+
+            cy.fullMount(
+                <DocumentListItem
+                    doc={unprocessedDoc}
+                    caseId={caseId}
+                    onDelete={() => {}}
+                    onResubmit={onResubmit}
+                    onCancelProcessing={() => {}}
+                    handleDocumentUpdate={() => {}}
+                    isCaseFinalised={false}
+                />,
+                mountOpts
+            );
+
+            cy.get('button[aria-label="resubmit"]')
+                .should('be.visible')
+                .click();
+
+            cy.get('@onResubmitStub').should('have.been.calledOnceWith', unprocessedDoc.id);
+        });
+
+        it('renders the "Unprocessed" status chip with default color', () => {
+            const unprocessedDoc = { ...baseDoc, status: 'Unprocessed' };
+
+            cy.fullMount(
+                <DocumentListItem
+                    doc={unprocessedDoc}
+                    caseId={caseId}
+                    onDelete={() => {}}
+                    onResubmit={() => {}}
+                    onCancelProcessing={() => {}}
+                    handleDocumentUpdate={() => {}}
+                    isCaseFinalised={false}
+                />,
+                mountOpts
+            );
+
+            cy.contains('Unprocessed').should('be.visible');
+        });
+    });
+
     context('Resubmission handling', () => {
         it('shows "Resubmit" button for "Error" status and calls onResubmit when clicked', () => {
             const resubmitDoc = { ...baseDoc, status: 'Error' };
