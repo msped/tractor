@@ -17,18 +17,27 @@ const mockModels = [
         name: 'Redaction Model v1',
         is_active: true,
         created_at: '2024-01-15T10:30:00Z',
+        precision: 0.9571,
+        recall: 0.7716,
+        f1_score: 0.8544,
     },
     {
         id: 'model-2',
         name: 'Redaction Model v2',
         is_active: false,
         created_at: '2024-02-20T14:45:00Z',
+        precision: 0.92,
+        recall: 0.88,
+        f1_score: 0.8996,
     },
     {
         id: 'model-3',
         name: 'Redaction Model v3',
         is_active: false,
         created_at: '2024-03-10T09:00:00Z',
+        precision: null,
+        recall: null,
+        f1_score: null,
     },
 ];
 
@@ -104,7 +113,7 @@ describe('<ModelManagementCard />', () => {
             cy.contains('Select the model to be used for suggesting redactions').should('be.visible');
         });
 
-        it('displays all models in the list', () => {
+        it('displays all models in the table', () => {
             cy.fullMount(
                 <TestWrapper>
                     <ModelManagementCard />
@@ -118,6 +127,23 @@ describe('<ModelManagementCard />', () => {
             cy.contains('Redaction Model v3').should('be.visible');
         });
 
+        it('displays table headers', () => {
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.get('thead th').should('have.length', 6);
+            cy.get('thead').contains('Name').should('be.visible');
+            cy.get('thead').contains('Created').should('be.visible');
+            cy.get('thead').contains('Precision').should('be.visible');
+            cy.get('thead').contains('Recall').should('be.visible');
+            cy.get('thead').contains('F1 Score').should('be.visible');
+        });
+
         it('shows "Active" chip for the active model', () => {
             cy.fullMount(
                 <TestWrapper>
@@ -127,7 +153,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v1').within(() => {
+            cy.contains('tr', 'Redaction Model v1').within(() => {
                 cy.contains('Active').should('be.visible');
             });
         });
@@ -141,7 +167,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2').within(() => {
+            cy.contains('tr', 'Redaction Model v2').within(() => {
                 cy.contains('span', 'Active').should('not.exist');
             });
         });
@@ -155,7 +181,42 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('Created:').should('be.visible');
+            cy.get('tbody tr').should('have.length', 3);
+            cy.get('tbody tr').each(($row) => {
+                cy.wrap($row).find('td').eq(1).should('not.be.empty');
+            });
+        });
+
+        it('displays scores as percentages', () => {
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v1').within(() => {
+                cy.get('td').eq(2).should('have.text', '95.71%');
+                cy.get('td').eq(3).should('have.text', '77.16%');
+                cy.get('td').eq(4).should('have.text', '85.44%');
+            });
+        });
+
+        it('displays "N/A" for null scores', () => {
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v3').within(() => {
+                cy.get('td').eq(2).should('have.text', 'N/A');
+                cy.get('td').eq(3).should('have.text', 'N/A');
+                cy.get('td').eq(4).should('have.text', 'N/A');
+            });
         });
 
         it('disables "Set Active" button for the active model', () => {
@@ -167,7 +228,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v1')
+            cy.contains('tr', 'Redaction Model v1')
                 .contains('button', 'Set Active')
                 .should('be.disabled');
         });
@@ -181,7 +242,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .should('not.be.disabled');
         });
@@ -206,7 +267,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
 
@@ -228,11 +289,11 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
 
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .find('button')
                 .find('[role="progressbar"]')
                 .should('be.visible');
@@ -252,7 +313,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
 
@@ -274,7 +335,7 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
 
@@ -297,11 +358,11 @@ describe('<ModelManagementCard />', () => {
             );
 
             cy.wait('@getModels');
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
 
-            cy.contains('li', 'Redaction Model v3')
+            cy.contains('tr', 'Redaction Model v3')
                 .contains('button', 'Set Active')
                 .should('be.disabled');
         });
@@ -330,18 +391,18 @@ describe('<ModelManagementCard />', () => {
 
             cy.intercept('GET', '**/models', { body: updatedModels }).as('getModelsRefresh');
 
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
 
             cy.wait('@setActive');
             cy.wait('@getModelsRefresh');
 
-            cy.contains('li', 'Redaction Model v2')
+            cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .should('be.disabled');
 
-            cy.contains('li', 'Redaction Model v3')
+            cy.contains('tr', 'Redaction Model v3')
                 .contains('button', 'Set Active')
                 .should('not.be.disabled');
         });
