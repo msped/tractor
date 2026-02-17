@@ -4,21 +4,27 @@ import React, { useState } from 'react';
 import useSWR from 'swr';
 import {
     Typography,
-    List,
-    ListItem,
-    ListItemText,
     Button,
     Chip,
     CircularProgress,
     Alert,
     Box,
-    Divider,
     Card,
     CardContent,
+    Table,
+    TableHead,
+    TableBody,
+    TableRow,
+    TableCell,
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import { getModels, setActiveModel } from '@/services/trainingService';
 import toast from 'react-hot-toast';
+
+const formatScore = (score) => {
+    if (score === null || score === undefined) return 'N/A';
+    return `${(score * 100).toFixed(2)}%`;
+};
 
 export const ModelManagementCard = () => {
     const { data: session } = useSession();
@@ -56,13 +62,32 @@ export const ModelManagementCard = () => {
                 {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}><CircularProgress /></Box>}
                 {error && <Alert severity="error">{error.message}</Alert>}
                 {models && (
-                    <List disablePadding>
-                        {models.length > 0 ? models.map((model, index) => (
-                            <React.Fragment key={model.id}>
-                                <ListItem
-                                    disablePadding
-                                    secondaryAction={
-                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                    models.length > 0 ? (
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Name</TableCell>
+                                    <TableCell>Created</TableCell>
+                                    <TableCell>Precision</TableCell>
+                                    <TableCell>Recall</TableCell>
+                                    <TableCell>F1 Score</TableCell>
+                                    <TableCell></TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {models.map((model) => (
+                                    <TableRow key={model.id}>
+                                        <TableCell>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Typography variant="subtitle2" component="span">{model.name}</Typography>
+                                                {model.is_active && <Chip label="Active" color="success" size="small" />}
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell>{new Date(model.created_at).toLocaleString('en-GB')}</TableCell>
+                                        <TableCell>{formatScore(model.precision)}</TableCell>
+                                        <TableCell>{formatScore(model.recall)}</TableCell>
+                                        <TableCell>{formatScore(model.f1_score)}</TableCell>
+                                        <TableCell>
                                             <Button
                                                 variant="contained"
                                                 onClick={() => handleSetActive(model.id)}
@@ -71,18 +96,14 @@ export const ModelManagementCard = () => {
                                             >
                                                 {isSubmitting === model.id ? <CircularProgress color="inherit" size={20} /> : 'Set Active'}
                                             </Button>
-                                        </Box>
-                                    }
-                                >
-                                    <ListItemText
-                                        primary={<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}><Typography variant="subtitle1" component="span">{model.name}</Typography>{model.is_active && (<Chip label="Active" color="success" size="small" />)}</Box>}
-                                        secondary={`Created: ${new Date(model.created_at).toLocaleString('en-GB')}`}
-                                    />
-                                </ListItem>
-                                {index < models.length - 1 && <Divider component="li" sx={{ my: 2 }} />}
-                            </React.Fragment>
-                        )) : (<Typography color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>No trained models found.</Typography>)}
-                    </List>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : (
+                        <Typography color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>No trained models found.</Typography>
+                    )
                 )}
             </CardContent>
         </Card>
