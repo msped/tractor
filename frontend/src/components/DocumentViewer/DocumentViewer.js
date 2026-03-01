@@ -281,14 +281,47 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
             if (selectedText.trim() === '') return;
 
             const range = selection.getRangeAt(0);
-            const preSelectionRange = document.createRange();
-            preSelectionRange.selectNodeContents(viewerRef.current);
-            preSelectionRange.setEnd(range.startContainer, range.startOffset);
-            const start = preSelectionRange.toString().length;
-            const end = start + selectedText.length;
+            let start;
 
-            onTextSelect({ text: selectedText, start_char: start, end_char: end }, range);
+            if (structure && structure.length > 0) {
+                // Structured (DOCX): DOM text has no '\n' between block elements but
+                // extracted_text does. Walk up from the selection to find the nearest
+                // element stamped with data-startchar, then measure only within it.
+                let node = range.startContainer;
+                let structureEl = null;
+                while (node && node !== viewerRef.current) {
+                    if (node.nodeType === Node.ELEMENT_NODE && node.dataset?.startchar !== undefined) {
+                        structureEl = node;
+                        break;
+                    }
+                    node = node.parentNode;
+                }
+
+                if (structureEl) {
+                    const elementStart = parseInt(structureEl.dataset.startchar, 10);
+                    const preRange = document.createRange();
+                    preRange.selectNodeContents(structureEl);
+                    preRange.setEnd(range.startContainer, range.startOffset);
+                    start = elementStart + preRange.toString().length;
+                } else {
+                    // Fallback (should not happen for well-formed structure)
+                    const preRange = document.createRange();
+                    preRange.selectNodeContents(viewerRef.current);
+                    preRange.setEnd(range.startContainer, range.startOffset);
+                    start = preRange.toString().length;
+                }
+            } else {
+                // Plain text (PDF): DOM text == extracted_text, direct offset is correct.
+                const preRange = document.createRange();
+                preRange.selectNodeContents(viewerRef.current);
+                preRange.setEnd(range.startContainer, range.startOffset);
+                start = preRange.toString().length;
+            }
+
+            const end = start + selectedText.length;
+            const rect = range.getBoundingClientRect();
             selection.removeAllRanges();
+            onTextSelect({ text: selectedText, start_char: start, end_char: end }, rect);
         }
     };
 
@@ -339,6 +372,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                     <Typography
                         key={`heading-${index}`}
                         component={HeadingTag}
+                        data-startchar={element.start}
                         sx={{
                             ...hStyle,
                             fontFamily: fontFamily,
@@ -354,6 +388,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                     <Typography
                         key={`para-${index}`}
                         component="p"
+                        data-startchar={element.start}
                         sx={{
                             ...paragraphStyles,
                             fontFamily: fontFamily,
@@ -396,6 +431,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                                             {rowCells.map((cell, cellIndex) => (
                                                 <td
                                                     key={`cell-${rowIndex}-${cellIndex}`}
+                                                    data-startchar={cell.start}
                                                     style={{
                                                         ...(hasBorders ? { border: '1px solid #000' } : {}),
                                                         padding: '6px 8px',

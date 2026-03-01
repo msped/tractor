@@ -166,6 +166,21 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [session?.access_token]);
 
+    const handleBulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
+        try {
+            const updates = await Promise.all(
+                ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
+            );
+            setRedactions(prev => {
+                const updatedMap = new Map(updates.map(r => [r.id, r]));
+                return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
+            });
+            toast.success("Suggestions type changed and accepted.");
+        } catch (error) {
+            toast.error("Failed to change suggestion types. Please try again.");
+        }
+    }, [session?.access_token]);
+
     const handleOpenRejectDialog = useCallback((redaction) => {
         setBulkRejectIds([]);
         setRejectionTarget(redaction);
@@ -250,10 +265,10 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [redactions, session?.access_token]);
 
-    const handleTextSelect = useCallback((selection, range) => {
+    const handleTextSelect = useCallback((selection, rect) => {
         setNewSelection(selection);
         setPendingRedaction(selection);
-        const virtualEl = { getBoundingClientRect: () => range.getBoundingClientRect(), nodeType: 1 };
+        const virtualEl = { getBoundingClientRect: () => rect, nodeType: 1 };
         setManualRedactionAnchor(virtualEl);
     }, []);
 
@@ -470,6 +485,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     onReject={handleOpenRejectDialog}
                     onRemove={handleRemoveRedaction}
                     onChangeTypeAndAccept={handleChangeTypeAndAccept}
+                    onBulkChangeTypeAndAccept={handleBulkChangeTypeAndAccept}
                     onBulkAccept={handleBulkAccept}
                     onBulkReject={handleOpenBulkRejectDialog}
                     onRejectAsDisclosable={handleRejectAsDisclosable}

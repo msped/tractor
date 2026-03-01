@@ -33,6 +33,7 @@ export const RedactionSidebar = ({
     onReject,
     onRemove,
     onChangeTypeAndAccept,
+    onBulkChangeTypeAndAccept = () => {},
     onBulkAccept = () => {},
     onBulkReject = () => {},
     onRejectAsDisclosable = () => {},
@@ -86,7 +87,11 @@ export const RedactionSidebar = ({
     };
 
     const handleTypeChange = (newType) => {
-        onChangeTypeAndAccept(currentItemForMenu.id || currentItemForMenu.ids?.[0], newType);
+        if (currentItemForMenu?.isMerged) {
+            onBulkChangeTypeAndAccept(currentItemForMenu.ids, newType);
+        } else {
+            onChangeTypeAndAccept(currentItemForMenu.id || currentItemForMenu.ids?.[0], newType);
+        }
         handleMenuClose();
     };
 
@@ -209,14 +214,18 @@ export const RedactionSidebar = ({
                                                 <ArrowDropDownIcon />
                                             </Button>
                                         </ButtonGroup>
-                                        <Button
-                                            size="small"
-                                            variant='contained'
-                                            color="success"
-                                            onClick={() => onBulkAccept(ids)}
-                                        >
-                                            Accept
-                                        </Button>
+                                        <ButtonGroup variant="contained" color="success" size="small">
+                                            <Button onClick={() => onBulkAccept(ids)}>Accept</Button>
+                                            <Button
+                                                aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
+                                                aria-expanded={menuAnchorEl ? 'true' : undefined}
+                                                aria-label="change redaction type and accept"
+                                                aria-haspopup="menu"
+                                                onClick={(e) => handleMenuClick(e, item)}
+                                            >
+                                                <ArrowDropDownIcon />
+                                            </Button>
+                                        </ButtonGroup>
                                     </>
                                 ) : (
                                     <>
@@ -341,14 +350,18 @@ export const RedactionSidebar = ({
                                                                             <ArrowDropDownIcon />
                                                                         </Button>
                                                                     </ButtonGroup>
-                                                                    <Button
-                                                                        size="small"
-                                                                        variant="contained"
-                                                                        color="success"
-                                                                        onClick={() => onBulkAccept(allIds)}
-                                                                    >
-                                                                        Accept All
-                                                                    </Button>
+                                                                    <ButtonGroup variant="contained" color="success" size="small">
+                                                                        <Button onClick={() => onBulkAccept(allIds)}>Accept All</Button>
+                                                                        <Button
+                                                                            aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
+                                                                            aria-expanded={menuAnchorEl ? 'true' : undefined}
+                                                                            aria-label="change redaction type and accept all"
+                                                                            aria-haspopup="menu"
+                                                                            onClick={(e) => handleMenuClick(e, { ids: allIds, isMerged: true, redaction_type: displayItem.redaction_type })}
+                                                                        >
+                                                                            <ArrowDropDownIcon />
+                                                                        </Button>
+                                                                    </ButtonGroup>
                                                                 </CardActions>
                                                             )}
                                                             {isGroupExpanded && (
