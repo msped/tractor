@@ -499,3 +499,103 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         url = reverse("case-detail", kwargs={"case_id": non_existent_uuid})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username="bulkuser", password="password")
+        self.client.force_authenticate(user=self.user)
+
+        self.case = Case.objects.create(
+            case_reference="BULK01",
+            data_subject_name="Bulk Test",
+            created_by=self.user,
+        )
+        test_file = SimpleUploadedFile("bulk.pdf", b"bulk content", "application/pdf")
+        self.document = Document.objects.create(case=self.case, original_file=test_file)
+        self.r1 = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=3,
+            text="PII",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        self.r2 = Redaction.objects.create(
+            document=self.document,
+            start_char=4,
+            end_char=8,
+            text="data",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def test_bulk_accept_redactions(self):
+        """Test accepting multiple redactions in a single request."""
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
+        data = {"ids": [str(self.r1.id), str(self.r2.id)], "is_accepted": True}
+        response = self.client.patch(url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.r1.refresh_from_db()
+        self.r2.refresh_from_db()
+        self.assertTrue(self.r1.is_accepted)
+        self.assertTrue(self.r2.is_accepted)
+
+    def test_bulk_reject_with_justification(self):
+        """Test rejecting multiple redactions with a shared justification."""
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
+        data = {
+            "ids": [str(self.r1.id), str(self.r2.id)],
+            "is_accepted": False,
+            "justification": "Bulk rejection reason",
+        }
+        response = self.client.patch(url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.r1.refresh_from_db()
+        self.r2.refresh_from_db()
+        self.assertEqual(self.r1.justification, "Bulk rejection reason")
+        self.assertEqual(self.r2.justification, "Bulk rejection reason")
+
+    def test_bulk_update_filters_by_document(self):
+        """Redactions belonging to a different document are not updated."""
+        other_file = SimpleUploadedFile("other.pdf", b"other", "application/pdf")
+        other_doc = Document.objects.create(case=self.case, original_file=other_file)
+        other_r = Redaction.objects.create(
+            document=other_doc,
+            start_char=0,
+            end_char=3,
+            text="PII",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
+        data = {"ids": [str(other_r.id)], "is_accepted": True}
+        response = self.client.patch(url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+        other_r.refresh_from_db()
+        self.assertFalse(other_r.is_accepted)
+
+    def test_bulk_update_empty_ids(self):
+        """An empty ids list returns an empty 200 response."""
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
+        data = {"ids": [], "is_accepted": True}
+        response = self.client.patch(url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_bulk_update_unauthenticated(self):
+        """Unauthenticated requests are rejected."""
+        self.client.logout()
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
+        response = self.client.patch(url, {"ids": [], "is_accepted": True}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

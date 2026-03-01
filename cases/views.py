@@ -213,6 +213,28 @@ class RedactionDetailView(RetrieveUpdateDestroyAPIView):
     lookup_url_kwarg = "pk"
 
 
+class BulkRedactionUpdateView(APIView):
+    """
+    API view to bulk update multiple redactions for a document at once.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, document_id):
+        ids = request.data.get("ids", [])
+        is_accepted = request.data.get("is_accepted")
+        justification = request.data.get("justification", None)
+
+        Redaction.objects.filter(
+            document_id=document_id,
+            id__in=ids,
+        ).update(is_accepted=is_accepted, justification=justification)
+
+        updated = Redaction.objects.filter(id__in=ids, document_id=document_id)
+        serializer = RedactionSerializer(updated, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class RedactionContextView(APIView):
     """
     API view to get, create, or update the context for a specific redaction.

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    BulkRedactionUpdateView,
     CaseDetailView,
     CaseExportView,
     CaseListCreateView,
@@ -39,6 +40,11 @@ urlpatterns = [
         "cases/document/<uuid:document_id>/redaction", RedactionListCreateView.as_view(), name="redaction-list-create"
     ),
     path("cases/document/redaction/<uuid:pk>", RedactionDetailView.as_view(), name="redaction-detail"),
+    path(
+        "cases/document/<uuid:document_id>/redactions/bulk/",
+        BulkRedactionUpdateView.as_view(),
+        name="bulk-redaction-update",
+    ),
     path(
         "cases/document/redaction/<uuid:redaction_id>/context", RedactionContextView.as_view(), name="redaction-context"
     ),

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, IconButton } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -11,7 +11,8 @@ import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { markAsComplete, resubmitDocument } from '@/services/documentService'
-import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
+import { createRedaction, updateRedaction, deleteRedaction, bulkUpdateRedactions } from '@/services/redactionService';
+import { mergeAdjacentSpans, groupByTextAndType } from '@/utils/mergeRedactionSpans';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -32,9 +33,10 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // State for highlighting text for manual redaction
     const [pendingRedaction, setPendingRedaction] = useState(null);
 
-    // State for rejection dialog
+    // State for rejection dialog (single and bulk)
     const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
     const [rejectionTarget, setRejectionTarget] = useState(null);
+    const [bulkRejectIds, setBulkRejectIds] = useState([]);
 
     // State for hovering suggestions
     const [hoveredSuggestionId, setHoveredSuggestionId] = useState(null);
@@ -45,6 +47,9 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // State for resubmit confirmation dialog
     const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
     const [isResubmitting, setIsResubmitting] = useState(false);
+
+    // State for merged span splits (display-only)
+    const [splitMerges, setSplitMerges] = useState(new Set());
 
     // Font size controls
     const [fontSizeIndex, setFontSizeIndex] = useState(2);
@@ -106,14 +111,50 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [session?.access_token]);
 
+    const handleBulkAccept = useCallback(async (ids) => {
+        try {
+            const updatedRedactions = await bulkUpdateRedactions(
+                document.id, ids, true, null, session?.access_token
+            );
+            setRedactions(prev => {
+                const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
+                return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
+            });
+        } catch (error) {
+            toast.error("Failed to accept suggestions. Please try again.");
+        }
+    }, [document.id, session?.access_token]);
+
+    const handleRejectAsDisclosable = useCallback(async (ids) => {
+        const DISCLOSABLE = 'Disclosable';
+        try {
+            if (ids.length === 1) {
+                const updated = await updateRedaction(
+                    ids[0], { is_accepted: false, justification: DISCLOSABLE }, session?.access_token
+                );
+                setRedactions(prev => prev.map(r => r.id === ids[0] ? updated : r));
+            } else {
+                const updatedList = await bulkUpdateRedactions(
+                    document.id, ids, false, DISCLOSABLE, session?.access_token
+                );
+                setRedactions(prev => {
+                    const updatedMap = new Map(updatedList.map(r => [r.id, r]));
+                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
+                });
+            }
+        } catch (error) {
+            toast.error("Failed to mark as disclosable. Please try again.");
+        }
+    }, [document.id, session?.access_token]);
+
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         try {
             const updatedRedaction = await updateRedaction(
-                redactionId, 
+                redactionId,
                 {
                     redaction_type: newType,
                     is_accepted: true,
-                    is_suggestion: false   
+                    is_suggestion: false
                 }, session?.access_token
             );
             setRedactions(prev => prev.map(r =>
@@ -126,26 +167,56 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, [session?.access_token]);
 
     const handleOpenRejectDialog = useCallback((redaction) => {
+        setBulkRejectIds([]);
         setRejectionTarget(redaction);
         setRejectionDialogOpen(true);
     }, []);
 
-    const handleRejectSuggestion = useCallback(async (redactionId, reason) => {
-        try {
-            const updatedRedaction = await updateRedaction(
-                redactionId, 
-                { is_accepted: false, justification: reason },
-                session?.access_token
-            );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
-            setRejectionDialogOpen(false);
-            setRejectionTarget(null);
-        } catch(error) {
-            toast.error("Failed to reject suggestion. Please try again.");
-        };
-    }, [session?.access_token]);
+    const handleOpenBulkRejectDialog = useCallback((ids) => {
+        setBulkRejectIds(ids);
+        setRejectionTarget({ id: null, text: `${ids.length} selected items` });
+        setRejectionDialogOpen(true);
+    }, []);
+
+    const handleRejectConfirm = useCallback(async (redactionId, reason) => {
+        if (bulkRejectIds.length > 0) {
+            try {
+                const updatedRedactions = await bulkUpdateRedactions(
+                    document.id, bulkRejectIds, false, reason, session?.access_token
+                );
+                setRedactions(prev => {
+                    const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
+                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
+                });
+            } catch (error) {
+                toast.error("Failed to reject suggestions. Please try again.");
+            } finally {
+                setRejectionDialogOpen(false);
+                setRejectionTarget(null);
+                setBulkRejectIds([]);
+            }
+        } else {
+            try {
+                const updatedRedaction = await updateRedaction(
+                    redactionId,
+                    { is_accepted: false, justification: reason },
+                    session?.access_token
+                );
+                setRedactions(prev => prev.map(r =>
+                    r.id === redactionId ? updatedRedaction : r
+                ));
+            } catch (error) {
+                toast.error("Failed to reject suggestion. Please try again.");
+            } finally {
+                setRejectionDialogOpen(false);
+                setRejectionTarget(null);
+            }
+        }
+    }, [bulkRejectIds, document.id, session?.access_token]);
+
+    const handleSplitMerge = useCallback((mergeKey) => {
+        setSplitMerges(prev => new Set(prev).add(mergeKey));
+    }, []);
 
     const handleRemoveRedaction = useCallback(async (redactionId) => {
         const redactionToRemove = redactions.find(r => r.id === redactionId);
@@ -217,12 +288,12 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
             toast.success("Redaction created successfully.");
-            
+
         } catch (error) {
             handleCloseManualRedactionPopover();
             toast.error("Failed to create redaction. Please try again.");
         }
-        
+
     }, [newSelection, document.id, handleCloseManualRedactionPopover, session?.access_token]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
@@ -244,7 +315,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     const handleMarkAsComplete = useCallback(async () => {
         setIsLoading(true);
         try {
-            const updatedDocument =  await markAsComplete(currentDocument.id, session?.access_token);
+            const updatedDocument = await markAsComplete(currentDocument.id, session?.access_token);
             console.log(updatedDocument);
             toast.success("Document is ready for disclosure.");
             router.push(`/cases/${currentDocument.case}`);
@@ -253,7 +324,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [ currentDocument.id, currentDocument.case, session?.access_token, router]);
+    }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
 
     const handleResubmit = useCallback(async () => {
         setIsResubmitting(true);
@@ -269,19 +340,27 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
 
+    // Compute grouped/merged display sections for the sidebar
+    const displaySections = useMemo(() => {
+        const pending = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
+        const accepted = redactions.filter(r => r.is_suggestion && r.is_accepted);
+        const rejected = redactions.filter(r => r.is_suggestion && !r.is_accepted && !!r.justification);
+        const manual = redactions.filter(r => !r.is_suggestion);
 
-    const pendingSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
-    const manualRedactions = redactions.filter(r => !r.is_suggestion);
-    const acceptedSuggestions = redactions.filter(r => r.is_suggestion && r.is_accepted);
-    const rejectedSuggestions = redactions.filter(r => r.is_suggestion && !r.is_accepted && !!r.justification);
+        const processSection = (items) => ({
+            total: items.length,
+            items: groupByTextAndType(mergeAdjacentSpans(items, splitMerges)),
+        });
 
+        return {
+            pending: processSection(pending),
+            accepted: processSection(accepted),
+            rejected: processSection(rejected),
+            manual: processSection(manual),
+        };
+    }, [redactions, splitMerges]);
 
-    const sortedRedactions = {
-        pending: pendingSuggestions,
-        manual: manualRedactions,
-        accepted: acceptedSuggestions,
-        rejected: rejectedSuggestions,
-    }
+    const pendingCount = displaySections.pending.total;
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
@@ -334,12 +413,12 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                         <RefreshIcon />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip title={pendingSuggestions.length > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                                <Tooltip title={pendingCount > 0 ? "You must resolve all AI suggestions before completing." : ""}>
                                     <span>
                                         <Button
                                             variant="contained"
                                             color="info"
-                                            disabled={pendingSuggestions.length > 0 || isLoading}
+                                            disabled={pendingCount > 0 || isLoading}
                                             onClick={handleMarkAsComplete}
                                             sx={{ minWidth: 180 }}
                                         >
@@ -368,7 +447,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     hoveredSuggestionId={hoveredSuggestionId}
                     onTextSelect={handleTextSelect}
                     onHighlightClick={handleHighlightClick}
-                    reviewComplete={pendingSuggestions.length === 0}
+                    reviewComplete={pendingCount === 0}
                     baseFontSize={baseFontSize}
                 />
             </Container>
@@ -386,11 +465,15 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             />
             <Box sx={{ width: sidebarWidth, flexShrink: 0 }}>
                 <RedactionSidebar
-                    redactions={sortedRedactions}
+                    redactions={displaySections}
                     onAccept={handleAcceptSuggestion}
                     onReject={handleOpenRejectDialog}
                     onRemove={handleRemoveRedaction}
                     onChangeTypeAndAccept={handleChangeTypeAndAccept}
+                    onBulkAccept={handleBulkAccept}
+                    onBulkReject={handleOpenBulkRejectDialog}
+                    onRejectAsDisclosable={handleRejectAsDisclosable}
+                    onSplitMerge={handleSplitMerge}
                     onSuggestionMouseEnter={handleSuggestionMouseEnter}
                     onSuggestionMouseLeave={handleSuggestionMouseLeave}
                     scrollToId={scrollToId}
@@ -408,8 +491,12 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             {rejectionTarget && (
                 <RejectReasonDialog
                     open={rejectionDialogOpen}
-                    onClose={() => setRejectionDialogOpen(false)}
-                    onSubmit={handleRejectSuggestion}
+                    onClose={() => {
+                        setRejectionDialogOpen(false);
+                        setRejectionTarget(null);
+                        setBulkRejectIds([]);
+                    }}
+                    onSubmit={handleRejectConfirm}
                     redaction={rejectionTarget}
                 />
             )}

@@ -6,4 +6,4 @@ class TrainingConfig(AppConfig):
     name = "training"
 
     def ready(self):
-        pass
+        import training.signals  # noqa: F401

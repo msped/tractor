@@ -14,5 +14,6 @@ def delete_model_folder_on_delete(sender, instance, **kwargs):
         model_path = Path(instance.path)
         # The path points to model-best, so get the parent directory
         model_dir = model_path.parent if model_path.name == "model-best" else model_path
+        print("Deleting model directory: ", model_dir)
         if model_dir.exists() and model_dir.is_dir():
             shutil.rmtree(model_dir)

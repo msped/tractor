@@ -25,6 +25,8 @@ class BaseTrainingAPITestCase(APITestCase):
         self.admin_user = User.objects.create_superuser("admin", "admin@example.com", "password")
         self.regular_user = User.objects.create_user("user", "user@example.com", "password")
 
+        # Clear any models seeded by migrations (e.g. legacy GLiNER entry)
+        Model.objects.all().delete()
         self.model = Model.objects.create(name="test_model_v1", path="/path/to/model_v1")
         self.docx_file = SimpleUploadedFile(
             "test.docx",
@@ -60,12 +62,12 @@ class ModelViewTests(BaseTrainingAPITestCase):
         self.assertEqual(self.client.post(set_active_url).status_code, status.HTTP_403_FORBIDDEN)
 
     def test_list_models_as_admin(self):
-        """Admin can list all models. Should be 2 (1 from setup, 1 new)."""
+        """Admin can list all models."""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse("model-list-create")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["name"], self.model.name)
 
     def test_create_model_as_admin(self):
@@ -75,26 +77,26 @@ class ModelViewTests(BaseTrainingAPITestCase):
         data = {"name": "new-model-v2"}
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(Model.objects.count(), 3)
+        self.assertEqual(Model.objects.count(), 2)
 
     def test_delete_model_as_admin(self):
-        """Admin can delete a model entry. Should leave 1 model (default)"""
+        """Admin can delete a model entry."""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse("model-detail", kwargs={"pk": self.model.pk})
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(Model.objects.count(), 1)
+        self.assertEqual(Model.objects.count(), 0)
 
-    @patch("training.views.SpacyModelManager")
-    def test_set_active_model_as_admin(self, mock_model_manager):
-        """Admin can set a model to active."""
-        mock_manager_instance = mock_model_manager.get_instance.return_value
+    @patch("training.views.SpanCatModelManager")
+    def test_set_active_model_as_admin(self, mock_spancat_manager):
+        """Admin can set a model to active; SpanCatModelManager is called."""
+        mock_manager_instance = mock_spancat_manager.get_instance.return_value
         self.client.force_authenticate(user=self.admin_user)
         url = reverse("model-set-active", kwargs={"pk": self.model.pk})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        mock_model_manager.get_instance.assert_called_once()
+        mock_spancat_manager.get_instance.assert_called_once()
         mock_manager_instance.switch_model.assert_called_once_with(self.model.name)
 
     def test_set_active_model_not_found(self):

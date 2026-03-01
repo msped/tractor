@@ -6,7 +6,8 @@ from django.db import models
 
 class Model(models.Model):
     """
-    Represents a trained spaCy model version.
+    Represents a trained SpanCat model version.
+    GLiNER is zero-shot and system-managed — it is never stored here.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

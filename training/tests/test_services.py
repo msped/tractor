@@ -6,7 +6,6 @@ from lxml import etree
 
 from ..services import (
     _deduplicate_entities,
-    _extract_ner_entities,
     _table_has_borders,
     extract_entities_from_text,
     extract_table_with_styling,
@@ -14,30 +13,9 @@ from ..services import (
 from .base import NetworkBlockerMixin
 
 
-class MockSpan:
-    """A simple mock for a spaCy Span object."""
-
-    def __init__(self, text, label_, start_char, end_char):
-        self.text = text
-        self.label_ = label_
-        self.start_char = start_char
-        self.end_char = end_char
-
-
-class MockEnt:
-    """A simple mock for a spaCy Entity object (from doc.ents)."""
-
-    def __init__(self, text, label_, start_char, end_char):
-        self.text = text
-        self.label_ = label_
-        self.start_char = start_char
-        self.end_char = end_char
-
-
 class ServicesTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        # Create a temporary file to act as the document path
-        self.temp_file = tempfile.NamedTemporaryFile(delete=False)
+        self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         self.temp_file.close()
         self.file_path = self.temp_file.name
 
@@ -46,150 +24,170 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
         os.remove(self.file_path)
 
-    @patch("training.services.spaCyLayout")
-    @patch("training.services.SpacyModelManager")
-    def test_extract_entities_from_text_success(self, mock_model_manager, mock_spacy_layout):
+    @patch("training.services._extract_text_from_pdf")
+    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_extract_entities_from_text_success(
+        self, mock_gliner_mgr, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+    ):
         """
-        Test successful entity extraction with hybrid NER + SpanCat.
-        SpanCat returns OPERATIONAL spans; base NER returns PERSON/GPE mapped to THIRD_PARTY.
+        Test successful entity extraction with GLiNER + Presidio for a non-DOCX file.
+        SpanCat returns None (not yet trained) — graceful degradation.
         """
-        # Mock the custom SpanCat model
-        mock_nlp = MagicMock()
-        mock_spancat_doc = MagicMock()
-        mock_spancat_doc.spans = {"sc": [MockSpan("ref-12345", "OPERATIONAL", 0, 9)]}
-        mock_nlp.return_value = mock_spancat_doc
+        mock_gliner_model = MagicMock()
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = mock_gliner_model
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
 
-        # Mock the base NER model
-        mock_base_nlp = MagicMock()
-        mock_base_doc = MagicMock()
-        mock_base_doc.ents = [
-            MockEnt("John Doe", "PERSON", 12, 20),
-            MockEnt("London", "GPE", 35, 41),
+        mock_pdf.return_value = "Hello, I'm John Doe and I live in London."
+
+        mock_gliner.return_value = [
+            {"text": "John Doe", "label": "THIRD_PARTY", "start_char": 12, "end_char": 20},
         ]
-        mock_base_nlp.return_value = mock_base_doc
-
-        mock_manager_instance = mock_model_manager.get_instance.return_value
-        mock_manager_instance.get_model.return_value = mock_nlp
-        mock_manager_instance.get_base_model.return_value = mock_base_nlp
-
-        mock_layout_instance = MagicMock()
-        mock_layout_doc = MagicMock()
-        mock_layout_doc.text = "Hello, I'm John Doe and I live in London."
-        mock_layout_instance.return_value = mock_layout_doc
-        mock_spacy_layout.return_value = mock_layout_instance
+        mock_presidio.return_value = [
+            {"text": "London", "label": "THIRD_PARTY", "start_char": 35, "end_char": 41},
+        ]
+        mock_presidio_op.return_value = []
 
         extracted_text, results, tables, structure = extract_entities_from_text(self.file_path)
 
         self.assertEqual(extracted_text, "Hello, I'm John Doe and I live in London.")
-        # 1 SpanCat + 2 NER entities = 3 total
-        self.assertEqual(len(results), 3)
-        # SpanCat result comes first
-        self.assertEqual(results[0]["text"], "ref-12345")
-        self.assertEqual(results[0]["label"], "OPERATIONAL")
-        # NER results mapped to THIRD_PARTY
-        self.assertEqual(results[1]["text"], "John Doe")
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["text"], "John Doe")
+        self.assertEqual(results[0]["label"], "THIRD_PARTY")
+        self.assertEqual(results[1]["text"], "London")
         self.assertEqual(results[1]["label"], "THIRD_PARTY")
-        self.assertEqual(results[2]["text"], "London")
-        self.assertEqual(results[2]["label"], "THIRD_PARTY")
         self.assertEqual(tables, [])
         self.assertIsNone(structure)
 
-    @patch("training.services.SpacyModelManager")
-    def test_extract_entities_no_model_found(self, mock_model_manager):
-        """
-        Test that a ValueError is raised if no active model is found.
-        """
-        mock_model_manager.get_instance.return_value.get_model.return_value = None
+        mock_gliner.assert_called_once_with(mock_gliner_model, "Hello, I'm John Doe and I live in London.")
+        mock_presidio.assert_called_once_with("Hello, I'm John Doe and I live in London.")
 
-        with self.assertRaisesMessage(ValueError, "No active spaCy model found."):
+    @patch("training.services._extract_text_from_pdf")
+    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.extractors.spancat_extractor.extract_with_spancat")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_extract_entities_with_spancat(
+        self, mock_gliner_mgr, mock_spancat_mgr, mock_spancat, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+    ):
+        """
+        Test that SpanCat results take priority over GLiNER and Presidio.
+        """
+        mock_gliner_model = MagicMock()
+        mock_spancat_nlp = MagicMock()
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = mock_gliner_model
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = mock_spancat_nlp
+
+        mock_pdf.return_value = "John Doe attended the scene."
+
+        mock_spancat.return_value = [
+            {"text": "attended the scene", "label": "OPERATIONAL", "start_char": 9, "end_char": 27},
+        ]
+        mock_gliner.return_value = [
+            {"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8},
+        ]
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+
+        _, results, _, _ = extract_entities_from_text(self.file_path)
+
+        self.assertEqual(len(results), 2)
+        labels = {r["label"] for r in results}
+        self.assertIn("OPERATIONAL", labels)
+        self.assertIn("THIRD_PARTY", labels)
+        mock_spancat.assert_called_once_with(mock_spancat_nlp, "John Doe attended the scene.")
+
+    @patch("training.services._extract_text_from_pdf")
+    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_spancat_none_skips_spancat_extractor(
+        self, mock_gliner_mgr, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+    ):
+        """
+        When SpanCat returns None (not trained), extract_with_spancat is not called.
+        """
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = MagicMock()
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+
+        mock_pdf.return_value = "Some text here."
+        mock_gliner.return_value = []
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+
+        with patch("training.extractors.spancat_extractor.extract_with_spancat") as mock_spancat:
+            _, results, _, _ = extract_entities_from_text(self.file_path)
+            mock_spancat.assert_not_called()
+
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_extract_entities_no_model_found(self, mock_manager, mock_spancat_mgr):
+        """
+        Test that a ValueError is raised if get_model() returns None.
+        """
+        mock_manager.get_instance.return_value.get_model.return_value = None
+
+        with self.assertRaisesMessage(ValueError, "No GLiNER model available."):
             extract_entities_from_text(self.file_path)
 
-    @patch("training.services.spaCyLayout")
-    @patch("training.services.SpacyModelManager")
-    def test_extract_entities_no_text_in_document(self, mock_model_manager, mock_spacy_layout):
+    @patch("training.services._extract_text_from_pdf")
+    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_extract_entities_no_text_in_document(
+        self, mock_manager, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+    ):
         """
         Test that a ValueError is raised if the document contains no text.
         """
-        mock_nlp = MagicMock()
-        mock_manager_instance = mock_model_manager.get_instance.return_value
-        mock_manager_instance.get_model.return_value = mock_nlp
-
-        mock_layout_instance = MagicMock()
-        mock_layout_doc = MagicMock()
-        mock_layout_doc.text = ""
-        mock_layout_instance.return_value = mock_layout_doc
-        mock_spacy_layout.return_value = mock_layout_instance
+        mock_manager.get_instance.return_value.get_model.return_value = MagicMock()
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_pdf.return_value = ""
 
         with self.assertRaisesMessage(ValueError, "No text found in the document."):
             extract_entities_from_text(self.file_path)
 
-    @patch("training.services.spaCyLayout")
-    @patch("training.services.SpacyModelManager")
-    def test_extract_entities_includes_tables(self, mock_model_manager, mock_spacy_layout):
+    @patch("training.services._extract_text_from_pdf")
+    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_extract_entities_deduplicates_overlapping(
+        self, mock_manager, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+    ):
         """
-        Test that tables are extracted separately with HTML and text representations
-        via the display_table callback.
+        Test that overlapping GLiNER and Presidio results are deduplicated,
+        with GLiNER taking priority.
         """
-        mock_nlp = MagicMock()
-        mock_spancat_doc = MagicMock()
-        mock_spancat_doc.spans = {"sc": []}
-        mock_nlp.return_value = mock_spancat_doc
+        mock_manager.get_instance.return_value.get_model.return_value = MagicMock()
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_pdf.return_value = "John Doe lives in London."
 
-        # Mock the base NER model (returns no entities for this test)
-        mock_base_nlp = MagicMock()
-        mock_base_doc = MagicMock()
-        mock_base_doc.ents = []
-        mock_base_nlp.return_value = mock_base_doc
+        # GLiNER finds "John Doe" at 0-8
+        mock_gliner.return_value = [
+            {"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8},
+        ]
+        # Presidio also finds "John" at 0-4 (overlaps with GLiNER result)
+        mock_presidio.return_value = [
+            {"text": "John", "label": "THIRD_PARTY", "start_char": 0, "end_char": 4},
+        ]
+        mock_presidio_op.return_value = []
 
-        mock_manager_instance = mock_model_manager.get_instance.return_value
-        mock_manager_instance.get_model.return_value = mock_nlp
-        mock_manager_instance.get_base_model.return_value = mock_base_nlp
+        _, results, _, _ = extract_entities_from_text(self.file_path)
 
-        # Mock spaCyLayout to capture and invoke the display_table callback
-        def fake_spacy_layout(nlp, display_table=None):
-            mock_layout_instance = MagicMock()
-
-            def fake_call(path):
-                mock_df = MagicMock()
-                mock_df.to_html.return_value = (
-                    "<table><tr><th>Name</th><th>Age</th></tr><tr><td>John</td><td>30</td></tr></table>"
-                )
-                mock_df.to_csv.return_value = "Name\tAge\nJohn\t30\n"
-
-                # Simulate what spaCyLayout does: call display_table for each table
-                table_placeholder = display_table(mock_df) if display_table else "TABLE"
-
-                mock_doc = MagicMock()
-                mock_doc.text = f"Document with a table:\n\n{table_placeholder}\n\nEnd of document."
-                return mock_doc
-
-            mock_layout_instance.side_effect = fake_call
-            return mock_layout_instance
-
-        mock_spacy_layout.side_effect = fake_spacy_layout
-
-        extracted_text, results, tables, structure = extract_entities_from_text(self.file_path)
-
-        # Tables should be extracted separately with position info
-        self.assertEqual(len(tables), 1)
-        self.assertEqual(tables[0]["id"], 0)
-        self.assertIn("<table>", tables[0]["html"])
-        self.assertIn("Name\tAge", tables[0]["text"])
-        self.assertIn("ner_start", tables[0])
-        self.assertIn("ner_end", tables[0])
-
-        # The NER text should have table text content (not HTML or placeholder)
-        self.assertIn("Name\tAge", extracted_text)
-        self.assertIn("Document with a table:", extracted_text)
-        self.assertNotIn("{{TABLE:", extracted_text)
-
-        # Verify ner_start/ner_end positions are correct
-        table = tables[0]
-        table_text_in_doc = extracted_text[table["ner_start"] : table["ner_end"]]
-        self.assertEqual(table_text_in_doc, table["text"])
-
-        # Structure is None for non-DOCX files
-        self.assertIsNone(structure)
+        # Only "John Doe" should remain (overlap removed)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["text"], "John Doe")
 
 
 def _make_tbl_xml(border_values=None, include_tbl_pr=True, include_tbl_borders=True):
@@ -294,58 +292,30 @@ class ExtractTableWithStylingBorderTests(TestCase):
         self.assertNotIn("border: 1px solid #000", html)
 
 
-class ExtractNerEntitiesTests(TestCase):
-    def test_extracts_matching_labels(self):
-        mock_nlp = MagicMock()
-        mock_doc = MagicMock()
-        mock_doc.ents = [
-            MockEnt("John", "PERSON", 0, 4),
-            MockEnt("London", "GPE", 10, 16),
-            MockEnt("$500", "MONEY", 20, 24),  # Not in NER_LABELS_TO_THIRD_PARTY
-        ]
-        mock_nlp.return_value = mock_doc
-
-        results = _extract_ner_entities(mock_nlp, "John lives London earns $500")
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0]["text"], "John")
-        self.assertEqual(results[0]["label"], "THIRD_PARTY")
-        self.assertEqual(results[1]["text"], "London")
-        self.assertEqual(results[1]["label"], "THIRD_PARTY")
-
-    def test_returns_empty_for_no_matching_labels(self):
-        mock_nlp = MagicMock()
-        mock_doc = MagicMock()
-        mock_doc.ents = [MockEnt("$500", "MONEY", 0, 4)]
-        mock_nlp.return_value = mock_doc
-
-        results = _extract_ner_entities(mock_nlp, "$500")
-        self.assertEqual(results, [])
-
-
 class DeduplicateEntitiesTests(TestCase):
     def test_no_overlap_keeps_all(self):
-        spancat = [{"text": "ref-123", "label": "OPERATIONAL", "start_char": 0, "end_char": 7}]
-        ner = [{"text": "John", "label": "THIRD_PARTY", "start_char": 10, "end_char": 14}]
-        result = _deduplicate_entities(spancat, ner)
+        primary = [{"text": "ref-123", "label": "OPERATIONAL", "start_char": 0, "end_char": 7}]
+        secondary = [{"text": "John", "label": "THIRD_PARTY", "start_char": 10, "end_char": 14}]
+        result = _deduplicate_entities(primary, secondary)
         self.assertEqual(len(result), 2)
 
-    def test_overlap_removes_ner_entity(self):
-        spancat = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
-        ner = [{"text": "John", "label": "THIRD_PARTY", "start_char": 0, "end_char": 4}]
-        result = _deduplicate_entities(spancat, ner)
+    def test_overlap_removes_secondary_entity(self):
+        primary = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
+        secondary = [{"text": "John", "label": "THIRD_PARTY", "start_char": 0, "end_char": 4}]
+        result = _deduplicate_entities(primary, secondary)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["text"], "John Doe")
 
-    def test_partial_overlap_removes_ner_entity(self):
-        spancat = [{"text": "John Doe ref", "label": "OPERATIONAL", "start_char": 0, "end_char": 12}]
-        ner = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
-        result = _deduplicate_entities(spancat, ner)
+    def test_partial_overlap_removes_secondary_entity(self):
+        primary = [{"text": "John Doe ref", "label": "OPERATIONAL", "start_char": 0, "end_char": 12}]
+        secondary = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
+        result = _deduplicate_entities(primary, secondary)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["label"], "OPERATIONAL")
 
     def test_empty_inputs(self):
         self.assertEqual(_deduplicate_entities([], []), [])
-        spancat = [{"text": "a", "label": "OPERATIONAL", "start_char": 0, "end_char": 1}]
-        self.assertEqual(len(_deduplicate_entities(spancat, [])), 1)
-        ner = [{"text": "b", "label": "THIRD_PARTY", "start_char": 5, "end_char": 6}]
-        self.assertEqual(len(_deduplicate_entities([], ner)), 1)
+        primary = [{"text": "a", "label": "OPERATIONAL", "start_char": 0, "end_char": 1}]
+        self.assertEqual(len(_deduplicate_entities(primary, [])), 1)
+        secondary = [{"text": "b", "label": "THIRD_PARTY", "start_char": 5, "end_char": 6}]
+        self.assertEqual(len(_deduplicate_entities([], secondary)), 1)

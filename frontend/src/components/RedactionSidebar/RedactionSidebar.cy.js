@@ -4,20 +4,33 @@ import { RedactionSidebar } from './RedactionSidebar';
 const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
 
 describe('<RedactionSidebar />', () => {
+    // Individual (non-merged, non-group) display items in new format
     const mockRedactions = {
-        pending: [
-            { id: 'p1', text: 'pending text', redaction_type: 'PII', is_suggestion: true },
-        ],
-        accepted: [
-            { id: 'a1', text: 'accepted text', redaction_type: 'OP_DATA', is_suggestion: false, context: null },
-            { id: 'a2', text: 'accepted with context', redaction_type: 'DS_INFO', is_suggestion: false, context: { text: 'This is existing context.' } },
-        ],
-        rejected: [
-            { id: 'r1', text: 'rejected text', redaction_type: 'PII', is_suggestion: true, justification: 'Not relevant' },
-        ],
-        manual: [
-            { id: 'm1', text: 'manual text', redaction_type: 'DS_INFO', is_suggestion: false },
-        ],
+        pending: {
+            total: 1,
+            items: [
+                { id: 'p1', ids: ['p1'], isMerged: false, isGroup: false, text: 'pending text', redaction_type: 'PII', is_suggestion: true },
+            ],
+        },
+        accepted: {
+            total: 2,
+            items: [
+                { id: 'a1', ids: ['a1'], isMerged: false, isGroup: false, text: 'accepted text', redaction_type: 'OP_DATA', is_suggestion: false, context: null },
+                { id: 'a2', ids: ['a2'], isMerged: false, isGroup: false, text: 'accepted with context', redaction_type: 'DS_INFO', is_suggestion: false, context: { text: 'This is existing context.' } },
+            ],
+        },
+        rejected: {
+            total: 1,
+            items: [
+                { id: 'r1', ids: ['r1'], isMerged: false, isGroup: false, text: 'rejected text', redaction_type: 'PII', is_suggestion: true, justification: 'Not relevant' },
+            ],
+        },
+        manual: {
+            total: 1,
+            items: [
+                { id: 'm1', ids: ['m1'], isMerged: false, isGroup: false, text: 'manual text', redaction_type: 'DS_INFO', is_suggestion: false },
+            ],
+        },
     };
 
     let baseProps;
@@ -28,6 +41,10 @@ describe('<RedactionSidebar />', () => {
             onReject: cy.stub().as('onReject'),
             onRemove: cy.stub().as('onRemove'),
             onChangeTypeAndAccept: cy.stub().as('onChangeTypeAndAccept'),
+            onBulkAccept: cy.stub().as('onBulkAccept'),
+            onBulkReject: cy.stub().as('onBulkReject'),
+            onRejectAsDisclosable: cy.stub().as('onRejectAsDisclosable'),
+            onSplitMerge: cy.stub().as('onSplitMerge'),
             onSuggestionMouseEnter: cy.stub().as('onSuggestionMouseEnter'),
             onSuggestionMouseLeave: cy.stub().as('onSuggestionMouseLeave'),
             scrollToId: null,
@@ -37,7 +54,12 @@ describe('<RedactionSidebar />', () => {
     });
 
     it('renders empty state when no redactions are provided', () => {
-        const emptyRedactions = { pending: [], accepted: [], rejected: [], manual: [] };
+        const emptyRedactions = {
+            pending: { total: 0, items: [] },
+            accepted: { total: 0, items: [] },
+            rejected: { total: 0, items: [] },
+            manual: { total: 0, items: [] },
+        };
         cy.fullMount(<RedactionSidebar {...baseProps} redactions={emptyRedactions} />, mountOpts);
         cy.contains('No redactions or suggestions yet.').should('be.visible');
     });
@@ -109,7 +131,7 @@ describe('<RedactionSidebar />', () => {
 
         it('calls onReject when "Reject" is clicked', () => {
             cy.contains('li', 'pending text').contains('button', 'Reject').click();
-            cy.get('@onReject').should('have.been.calledOnceWith', mockRedactions.pending[0]);
+            cy.get('@onReject').should('have.been.calledOnceWith', mockRedactions.pending.items[0]);
         });
 
         it('calls onRemove for an accepted item', () => {
@@ -122,6 +144,12 @@ describe('<RedactionSidebar />', () => {
             cy.contains('rejected (1)').click();
             cy.contains('li', 'rejected text').contains('button', 'Re-evaluate').click();
             cy.get('@onRemove').should('have.been.calledOnceWith', 'r1');
+        });
+
+        it('shows "Reject as Disclosable" in dropdown and calls onRejectAsDisclosable', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Disclosable').should('be.visible').click();
+            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['p1']);
         });
     });
 
@@ -224,6 +252,144 @@ describe('<RedactionSidebar />', () => {
                 cy.contains('button', 'Cancel').click();
                 cy.get('textarea[name="Context for Disclosure"]').should('not.exist');
             });
+        });
+    });
+
+    context('Grouped items', () => {
+        const mockRedactionsWithGroup = {
+            pending: {
+                total: 3,
+                items: [
+                    {
+                        key: 'john doe::pii',
+                        isGroup: true,
+                        text: 'John Doe',
+                        redaction_type: 'PII',
+                        items: [
+                            { id: 'g1', ids: ['g1'], isMerged: false, isGroup: false, text: 'John Doe', redaction_type: 'PII', is_suggestion: true },
+                            { id: 'g2', ids: ['g2'], isMerged: false, isGroup: false, text: 'John Doe', redaction_type: 'PII', is_suggestion: true },
+                            { id: 'g3', ids: ['g3'], isMerged: false, isGroup: false, text: 'John Doe', redaction_type: 'PII', is_suggestion: true },
+                        ],
+                    },
+                ],
+            },
+            accepted: { total: 0, items: [] },
+            rejected: { total: 0, items: [] },
+            manual: { total: 0, items: [] },
+        };
+
+        beforeEach(() => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} />, mountOpts);
+        });
+
+        it('shows section count as total DB records', () => {
+            cy.contains('pending (3)').should('be.visible');
+        });
+
+        it('renders group header with text, type, and occurrence count', () => {
+            cy.contains('"John Doe"').should('be.visible');
+            cy.contains('Third-Party PII · 3 occurrences').should('be.visible');
+        });
+
+        it('renders Accept All and Reject All buttons on pending group header', () => {
+            cy.contains('button', 'Accept All').should('be.visible');
+            cy.contains('button', 'Reject All').should('be.visible');
+        });
+
+        it('calls onBulkAccept with all group IDs when Accept All is clicked', () => {
+            cy.contains('button', 'Accept All').click();
+            cy.get('@onBulkAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
+        });
+
+        it('calls onBulkReject with all group IDs when Reject All is clicked', () => {
+            cy.contains('button', 'Reject All').click();
+            cy.get('@onBulkReject').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
+        });
+
+        it('shows "Reject as Disclosable" in group header dropdown and calls onRejectAsDisclosable', () => {
+            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Disclosable').should('be.visible').click();
+            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
+        });
+
+        it('expands group to show individual items when expand icon is clicked', () => {
+            cy.contains('button', 'Accept All').should('be.visible');
+            // Individual items hidden initially
+            cy.contains('li', 'g1').should('not.exist');
+
+            cy.get('button[aria-label="expand group"]').click();
+
+            // Individual items visible after expanding
+            cy.contains('"John Doe"').should('be.visible');
+        });
+
+        it('collapses group when collapse icon is clicked', () => {
+            cy.get('button[aria-label="expand group"]').click();
+            cy.get('button[aria-label="collapse group"]').should('be.visible').click();
+            cy.get('button[aria-label="expand group"]').should('be.visible');
+        });
+    });
+
+    context('Merged items', () => {
+        const mockRedactionsWithMerged = {
+            pending: {
+                total: 2,
+                items: [
+                    {
+                        id: 'merge1',
+                        ids: ['merge1', 'merge2'],
+                        isMerged: true,
+                        isGroup: false,
+                        text: 'John Doe',
+                        redaction_type: 'PII',
+                        is_suggestion: true,
+                    },
+                ],
+            },
+            accepted: { total: 0, items: [] },
+            rejected: { total: 0, items: [] },
+            manual: { total: 0, items: [] },
+        };
+
+        beforeEach(() => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactionsWithMerged} />, mountOpts);
+        });
+
+        it('shows section count as total DB records', () => {
+            cy.contains('pending (2)').should('be.visible');
+        });
+
+        it('renders the merged badge', () => {
+            cy.contains('merged (2)').should('be.visible');
+        });
+
+        it('renders a split button for merged items', () => {
+            cy.get('button[aria-label="split merged redaction"]').should('be.visible');
+        });
+
+        it('calls onSplitMerge with the merge key when Split is clicked', () => {
+            cy.get('button[aria-label="split merged redaction"]').click();
+            cy.get('@onSplitMerge').should('have.been.calledOnceWith', 'merge1:merge2');
+        });
+
+        it('calls onBulkAccept with all merged IDs when Accept is clicked', () => {
+            cy.contains('button', 'Accept').click();
+            cy.get('@onBulkAccept').should('have.been.calledOnceWith', ['merge1', 'merge2']);
+        });
+
+        it('calls onBulkReject with all merged IDs when Reject is clicked', () => {
+            cy.contains('button', 'Reject').click();
+            cy.get('@onBulkReject').should('have.been.calledOnceWith', ['merge1', 'merge2']);
+        });
+
+        it('shows "Reject as Disclosable" in merged item dropdown and calls onRejectAsDisclosable', () => {
+            cy.get('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Disclosable').should('be.visible').click();
+            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['merge1', 'merge2']);
+        });
+
+        it('does not show the change-type dropdown for merged items', () => {
+            cy.get('button[aria-label="change redaction type and accept"]').should('not.exist');
         });
     });
 });

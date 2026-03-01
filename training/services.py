@@ -2,47 +2,24 @@ import re
 
 from docx import Document
 from docx.oxml.ns import qn
-from spacy_layout import spaCyLayout
+from pypdf import PdfReader
 
-from .loader import SpacyModelManager
-
-# NER labels from en_core_web_lg that map to THIRD_PARTY
-NER_LABELS_TO_THIRD_PARTY = {"PERSON", "ORG", "GPE", "DATE", "FAC", "LOC", "NORP"}
+from .loader import GLiNERModelManager, SpanCatModelManager
 
 
-def _extract_ner_entities(base_nlp, text):
+def _deduplicate_entities(primary_entities, secondary_entities):
     """
-    Run en_core_web_lg NER on text and return entities mapped to THIRD_PARTY.
+    Combine two entity lists, with primary_entities taking priority.
+    Secondary entities that overlap with any primary span are skipped.
     """
-    doc = base_nlp(text)
-    results = []
-    for ent in doc.ents:
-        if ent.label_ in NER_LABELS_TO_THIRD_PARTY:
-            results.append(
-                {
-                    "text": ent.text,
-                    "label": "THIRD_PARTY",
-                    "start_char": ent.start_char,
-                    "end_char": ent.end_char,
-                }
-            )
-    return results
-
-
-def _deduplicate_entities(spancat_entities, ner_entities):
-    """
-    Combine SpanCat and NER results, with SpanCat taking priority.
-    NER entities that overlap with any SpanCat span are skipped.
-    """
-    combined = list(spancat_entities)
-    for ner_ent in ner_entities:
-        overlaps = False
-        for sc_ent in spancat_entities:
-            if ner_ent["start_char"] < sc_ent["end_char"] and ner_ent["end_char"] > sc_ent["start_char"]:
-                overlaps = True
-                break
+    combined = list(primary_entities)
+    for sec_ent in secondary_entities:
+        overlaps = any(
+            sec_ent["start_char"] < pri_ent["end_char"] and sec_ent["end_char"] > pri_ent["start_char"]
+            for pri_ent in primary_entities
+        )
         if not overlaps:
-            combined.append(ner_ent)
+            combined.append(sec_ent)
     return combined
 
 
@@ -161,7 +138,7 @@ def extract_document_structure(path):
     - elements: list of {type, level, text, start, end} for headings/paragraphs
     - tables_data: list of {id, html, text, ner_start, ner_end} for tables
 
-    For non-DOCX files, returns (None, None) to signal fallback to spaCyLayout.
+    For non-DOCX files, returns (None, None) to signal fallback to plain extraction.
     """
     if not path.lower().endswith((".docx", ".doc")):
         return None, None
@@ -259,24 +236,53 @@ def extract_document_structure(path):
     return elements, tables_data, full_text
 
 
+def _extract_text_from_pdf(path):
+    """
+    Extract plain text from a PDF file using pypdf.
+    Returns the extracted text string, or an empty string on failure.
+    """
+    try:
+        reader = PdfReader(path)
+        parts = []
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                parts.append(page_text)
+        return "\n\n".join(parts)
+    except Exception:
+        return ""
+
+
 def extract_entities_from_text(path):
     """
-    Processes a document with the currently active spaCy model.
+    Processes a document using GLiNER + SpanCat + Presidio.
     Extracts tables separately and stores them with HTML and text
     representations. Returns (ner_text, entities, tables, structure).
 
+    Pipeline:
+    - GLiNER     → THIRD_PARTY (zero-shot: names, orgs, locations, DOB, addresses)
+    - SpanCat    → THIRD_PARTY + OPERATIONAL (trained on user data; contextual chunks)
+    - Presidio   → THIRD_PARTY structured PII + OPERATIONAL structured refs
+
+    Deduplication priority: SpanCat > GLiNER > Presidio.
+
+    SpanCat is optional — if no model has been trained yet, the system falls
+    back gracefully to GLiNER + Presidio only.
+
     For DOCX files, uses python-docx to extract document structure
     (headings, paragraphs, tables with styling). For other formats,
-    falls back to spaCyLayout.
-
-    Each table entry includes ner_start/ner_end positions marking
-    where the table text sits within the returned ner_text.
-
-    Structure is a list of elements with type, text, and character positions.
+    falls back to pypdf for text extraction (no table extraction).
     """
-    nlp = SpacyModelManager.get_instance().get_model()
-    if not nlp:
-        raise ValueError("No active spaCy model found.")
+    # Lazy imports to avoid loading transformers/pandas at module import time
+    from .extractors.gliner_extractor import extract_with_gliner
+    from .extractors.presidio_extractor import extract_operational_with_presidio, extract_with_presidio
+    from .extractors.spancat_extractor import extract_with_spancat
+
+    gliner_model = GLiNERModelManager.get_instance().get_model()
+    if not gliner_model:
+        raise ValueError("No GLiNER model available.")
+
+    spancat_nlp = SpanCatModelManager.get_instance().get_model()
 
     # Try structure extraction for DOCX files first
     structure_result = extract_document_structure(path)
@@ -288,80 +294,34 @@ def extract_entities_from_text(path):
         if not ner_text or not ner_text.strip():
             raise ValueError("No text found in the document.")
 
-        ner_doc = nlp(ner_text)
+        gliner_results = extract_with_gliner(gliner_model, ner_text)
+        presidio_tp = extract_with_presidio(ner_text)
+        presidio_op = extract_operational_with_presidio(ner_text)
+        spancat_results = extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
 
-        spancat_results = []
-        for span in ner_doc.spans.get("sc", []):
-            spancat_results.append(
-                {
-                    "text": span.text,
-                    "label": span.label_,
-                    "start_char": span.start_char,
-                    "end_char": span.end_char,
-                }
-            )
+        # SpanCat > GLiNER > Presidio
+        combined = _deduplicate_entities(spancat_results, gliner_results)
+        combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
 
-        # Run base NER model for THIRD_PARTY entities
-        base_nlp = SpacyModelManager.get_instance().get_base_model()
-        ner_results = _extract_ner_entities(base_nlp, ner_text)
-        results = _deduplicate_entities(spancat_results, ner_results)
+        return ner_text, combined, tables, structure
 
-        return ner_text, results, tables, structure
+    # Fallback to pypdf for non-DOCX files (PDF, etc.)
+    ner_text = _extract_text_from_pdf(path)
 
-    # Fallback to spaCyLayout for non-DOCX files (PDF, etc.)
-    tables = []
-
-    def capture_table(df):
-        """Callback for spaCyLayout: captures table data and returns a placeholder."""
-        table_idx = len(tables)
-        tables.append(
-            {
-                "id": table_idx,
-                "html": df.to_html(index=False, border=1),
-                "text": df.to_csv(index=False, sep="\t"),
-            }
-        )
-        return f"{{{{TABLE:{table_idx}}}}}"
-
-    layout = spaCyLayout(nlp, display_table=capture_table)
-    doc = layout(path)
-
-    text = doc.text if doc.text else ""
-
-    # Normalize whitespace on placeholder text first
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    # Replace placeholders with table text, tracking positions
-    ner_text = text
-    for table in tables:
-        placeholder = f"{{{{TABLE:{table['id']}}}}}"
-        pos = ner_text.find(placeholder)
-        if pos >= 0:
-            table_text = table["text"]
-            table["ner_start"] = pos
-            table["ner_end"] = pos + len(table_text)
-            ner_text = ner_text[:pos] + table_text + ner_text[pos + len(placeholder) :]
+    # Normalize whitespace
+    ner_text = re.sub(r"\n{3,}", "\n\n", ner_text)
 
     if not ner_text.strip():
         raise ValueError("No text found in the document.")
 
-    ner_doc = nlp(ner_text)
+    gliner_results = extract_with_gliner(gliner_model, ner_text)
+    presidio_tp = extract_with_presidio(ner_text)
+    presidio_op = extract_operational_with_presidio(ner_text)
+    spancat_results = extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
 
-    spancat_results = []
-    for span in ner_doc.spans.get("sc", []):
-        spancat_results.append(
-            {
-                "text": span.text,
-                "label": span.label_,
-                "start_char": span.start_char,
-                "end_char": span.end_char,
-            }
-        )
+    # SpanCat > GLiNER > Presidio
+    combined = _deduplicate_entities(spancat_results, gliner_results)
+    combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
 
-    # Run base NER model for THIRD_PARTY entities
-    base_nlp = SpacyModelManager.get_instance().get_base_model()
-    ner_results = _extract_ner_entities(base_nlp, ner_text)
-    results = _deduplicate_entities(spancat_results, ner_results)
-
-    # For non-DOCX files, structure is None (fallback to plain text rendering)
-    return ner_text, results, tables, None
+    # For non-DOCX files, no tables and no structure (fallback to plain text rendering)
+    return ner_text, combined, [], None

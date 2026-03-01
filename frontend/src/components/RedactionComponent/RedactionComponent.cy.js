@@ -55,6 +55,54 @@ const mockRedactions = [
     },
 ];
 
+// Adjacent same-type items that will be merged (gap = 1 char, same type)
+const mockRedactionsWithAdjacent = [
+    {
+        id: 'adj1',
+        text: 'John',
+        redaction_type: 'PII',
+        is_suggestion: true,
+        is_accepted: false,
+        justification: null,
+        start_char: 62,
+        end_char: 66,
+    },
+    {
+        id: 'adj2',
+        text: 'Doe',
+        redaction_type: 'PII',
+        is_suggestion: true,
+        is_accepted: false,
+        justification: null,
+        start_char: 67,
+        end_char: 70,
+    },
+];
+
+// Same text+type at different positions — will be grouped
+const mockRedactionsWithDuplicates = [
+    {
+        id: 'dup1',
+        text: 'information',
+        redaction_type: 'OP_DATA',
+        is_suggestion: true,
+        is_accepted: false,
+        justification: null,
+        start_char: 25,
+        end_char: 36,
+    },
+    {
+        id: 'dup2',
+        text: 'information',
+        redaction_type: 'OP_DATA',
+        is_suggestion: true,
+        is_accepted: false,
+        justification: null,
+        start_char: 60,
+        end_char: 71,
+    },
+];
+
 const mountRedactionComponent = (document = mockDocument, redactions = mockRedactions) => {
     return cy.fullMount(
         <PathnameContext.Provider value="/cases/case-1/document/doc-1/review">
@@ -74,6 +122,19 @@ describe('<RedactionComponent />', () => {
             req.reply({ statusCode: 201, body: { ...req.body, id: 'new-redaction-id' } });
         }).as('createRedaction');
         cy.intercept('PATCH', '**/cases/documents/*', { statusCode: 200, body: { ...mockDocument, status: 'Completed' } }).as('markComplete');
+        cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', (req) => {
+            const updated = req.body.ids.map(id => ({
+                id,
+                is_accepted: req.body.is_accepted,
+                justification: req.body.justification,
+                is_suggestion: true,
+                text: 'bulk item',
+                redaction_type: 'PII',
+                start_char: 0,
+                end_char: 3,
+            }));
+            req.reply({ statusCode: 200, body: updated });
+        }).as('bulkUpdateRedaction');
     });
 
     context('Initial Render', () => {
@@ -269,6 +330,101 @@ describe('<RedactionComponent />', () => {
         });
     });
 
+    context('Adjacent Span Merging', () => {
+        beforeEach(() => {
+            mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
+        });
+
+        it('merges adjacent same-type spans into a single display item', () => {
+            // Two raw items become one merged display item
+            cy.contains('pending (2)').should('be.visible');
+            cy.contains('"John Doe"').should('be.visible');
+            cy.contains('merged (2)').should('be.visible');
+        });
+
+        it('shows a split button on merged items', () => {
+            cy.get('button[aria-label="split merged redaction"]').should('be.visible');
+        });
+
+        it('splits merged item into individual items when Split is clicked', () => {
+            cy.get('button[aria-label="split merged redaction"]').click();
+
+            // After split, two individual items appear
+            cy.contains('"John"').should('be.visible');
+            cy.contains('"Doe"').should('be.visible');
+            cy.contains('merged (2)').should('not.exist');
+        });
+
+        it('calls bulk API when Accept is clicked on a merged item', () => {
+            cy.contains('button', 'Accept').click();
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
+                is_accepted: true,
+                ids: ['adj1', 'adj2'],
+            });
+        });
+
+        it('calls bulk API when Reject is clicked on a merged item', () => {
+            cy.contains('button', 'Reject').click();
+
+            cy.get('[role="dialog"]').within(() => {
+                cy.get('textarea#reject-reason').type('Not relevant');
+                cy.contains('button', 'Submit').click();
+            });
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
+                is_accepted: false,
+                justification: 'Not relevant',
+            });
+        });
+    });
+
+    context('Same-Text Grouping', () => {
+        beforeEach(() => {
+            mountRedactionComponent(mockDocument, mockRedactionsWithDuplicates);
+        });
+
+        it('groups same-text same-type items under a group header', () => {
+            cy.contains('pending (2)').should('be.visible');
+            cy.contains('Third-Party PII · 2 occurrences').should('not.exist');
+            cy.contains('Operational Data · 2 occurrences').should('be.visible');
+        });
+
+        it('shows Accept All and Reject All on group headers', () => {
+            cy.contains('button', 'Accept All').should('be.visible');
+            cy.contains('button', 'Reject All').should('be.visible');
+        });
+
+        it('calls bulk API when Accept All is clicked', () => {
+            cy.contains('button', 'Accept All').click();
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
+                is_accepted: true,
+            });
+            cy.wait('@bulkUpdateRedaction').its('request.body.ids').should('include.members', ['dup1', 'dup2']);
+        });
+
+        it('calls bulk API with justification when Reject All is submitted', () => {
+            cy.contains('button', 'Reject All').click();
+
+            cy.get('[role="dialog"]').within(() => {
+                cy.get('textarea#reject-reason').type('Not relevant group');
+                cy.contains('button', 'Submit').click();
+            });
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
+                is_accepted: false,
+                justification: 'Not relevant group',
+            });
+        });
+
+        it('expands group to show individual items', () => {
+            cy.get('button[aria-label="expand group"]').click();
+            // Individual items visible after expanding
+            cy.contains('"information"').should('be.visible');
+        });
+    });
+
     context('Resubmit Document', () => {
         beforeEach(() => {
             cy.intercept('POST', '**/cases/documents/doc-1/resubmit', { statusCode: 200 }).as('resubmitDocument');
@@ -404,6 +560,48 @@ describe('<RedactionComponent />', () => {
         });
     });
 
+    context('Disclosable Quick-Reject', () => {
+        it('calls updateRedaction with Disclosable justification for a single item', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: req.body.justification } });
+            }).as('disclosableUpdate');
+
+            mountRedactionComponent();
+
+            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Disclosable').click();
+
+            cy.wait('@disclosableUpdate').its('request.body').should('deep.include', {
+                is_accepted: false,
+                justification: 'Disclosable',
+            });
+        });
+
+        it('calls bulk API with Disclosable justification for merged items', () => {
+            mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
+
+            cy.get('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Disclosable').click();
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
+                is_accepted: false,
+                justification: 'Disclosable',
+                ids: ['adj1', 'adj2'],
+            });
+        });
+
+        it('shows error toast when disclosable reject fails', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedDisclosable');
+            mountRedactionComponent();
+
+            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Disclosable').click();
+
+            cy.wait('@failedDisclosable');
+            cy.contains('Failed to mark as disclosable. Please try again.').should('be.visible');
+        });
+    });
+
     context('Error Handling', () => {
         it('shows error toast when accept fails', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedUpdate');
@@ -411,7 +609,7 @@ describe('<RedactionComponent />', () => {
 
             cy.contains('li', 'John Doe').should('be.visible');
             cy.contains('li', 'John Doe').contains('button', 'Accept').should('be.visible').click();
-            
+
             cy.wait('@failedUpdate');
 
             cy.contains('Failed to accept suggestion. Please try again.').should('be.visible');
@@ -438,6 +636,16 @@ describe('<RedactionComponent />', () => {
 
             cy.wait('@failedComplete');
             cy.contains('Failed to mark document as complete. Please try again.').should('be.visible');
+        });
+
+        it('shows error toast when bulk accept fails', () => {
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', { statusCode: 500 }).as('failedBulk');
+            mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
+
+            cy.contains('button', 'Accept').click();
+
+            cy.wait('@failedBulk');
+            cy.contains('Failed to accept suggestions. Please try again.').should('be.visible');
         });
     });
 });

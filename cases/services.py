@@ -11,7 +11,7 @@ from django.utils import timezone
 from weasyprint import CSS, HTML
 from weasyprint.text.fonts import FontConfiguration
 
-from training.loader import SpacyModelManager
+from training.loader import DEFAULT_GLINER_MODEL, GLiNERModelManager
 from training.services import extract_entities_from_text
 
 from .models import Case, Document, Redaction
@@ -88,15 +88,16 @@ def process_document_and_create_redactions(document_id):
         print(f"Document {document_id} is no longer processing (status: {document.status}). Aborting.")
         return
 
-    manager = SpacyModelManager.get_instance()
+    manager = GLiNERModelManager.get_instance()
     active_model_instance = manager.get_model_entry()
 
     document.spacy_model = active_model_instance
     document.save(update_fields=["spacy_model"])
 
+    model_display = manager.model_name or DEFAULT_GLINER_MODEL
     print(
         f"Starting text extraction and AI analysis for {document.filename} \
-        using model '{manager.model_name}'..."
+        using model '{model_display}'..."
     )
 
     extracted_text, ai_suggestions, tables, structure = extract_entities_from_text(document.original_file.path)

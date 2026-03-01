@@ -57,7 +57,7 @@ export const ModelManagementCard = () => {
                     Active Redaction Model
                 </Typography>
                 <Typography color="text.secondary" sx={{ mb: 3 }}>
-                    Select the model to be used for suggesting redactions on new documents. Only one model can be active at a time.
+                    Select the trained SpanCat model to use for OPERATIONAL entity detection. GLiNER handles THIRD_PARTY entities automatically.
                 </Typography>
                 {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}><CircularProgress /></Box>}
                 {error && <Alert severity="error">{error.message}</Alert>}
