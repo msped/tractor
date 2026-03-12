@@ -377,9 +377,10 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         self, mock_task, mock_collect, mock_build_pipeline, mock_prepare, mock_run_loop
     ):
         """train_model() creates TrainingRunTrainingDoc and TrainingRunCaseDoc for used docs."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
         from cases.models import Case
         from cases.models import Document as CaseDocument
-        from django.core.files.uploadedfile import SimpleUploadedFile
 
         from ..models import TrainingRunCaseDoc, TrainingRunTrainingDoc
 

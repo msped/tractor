@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from ..extractors.gliner_extractor import GLINER_LABELS, _MAX_CHUNK_CHARS, _chunk_text, extract_with_gliner
+from ..extractors.gliner_extractor import _MAX_CHUNK_CHARS, GLINER_LABELS, _chunk_text, extract_with_gliner
 from .base import NetworkBlockerMixin
 
 
@@ -87,7 +87,15 @@ class ExtractWithGLiNERTests(NetworkBlockerMixin, TestCase):
         def fake_predict(chunk_text, labels, **kwargs):
             if entity_text in chunk_text:
                 idx = chunk_text.index(entity_text)
-                return [{"text": entity_text, "label": "person name", "start": idx, "end": idx + len(entity_text), "score": 0.9}]
+                return [
+                    {
+                        "text": entity_text,
+                        "label": "person name",
+                        "start": idx,
+                        "end": idx + len(entity_text),
+                        "score": 0.9,
+                    }
+                ]
             return []
 
         model = MagicMock()

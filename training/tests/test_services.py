@@ -461,8 +461,6 @@ class ExtractDocumentStructureTests(NetworkBlockerMixin, TestCase):
             doc = DocxDocument()
             para = doc.add_paragraph("Custom heading")
             para.style = doc.styles["Heading 1"]
-            # Rename the style to something with no parseable number
-            para.style.name  # ensure style exists
             doc.save(path)
 
             # Override: directly test the except branch via a docx where the heading
@@ -569,8 +567,6 @@ class ExtractTableWithStylingFormattingTests(NetworkBlockerMixin, TestCase):
         self.assertIn("color: #FF0000", html)
 
     def test_background_color_in_cell(self):
-        from docx.oxml.ns import qn
-
         mock_table = MagicMock()
         mock_cell = MagicMock()
         mock_cell.text = "test"
