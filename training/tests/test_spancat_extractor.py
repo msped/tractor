@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from ..extractors.spancat_extractor import extract_with_spancat
+from .base import NetworkBlockerMixin
 
 
 def _make_span(text, label, start_char, end_char):
@@ -23,7 +24,7 @@ def _make_nlp(spans):
     return nlp
 
 
-class ExtractWithSpanCatTests(TestCase):
+class ExtractWithSpanCatTests(NetworkBlockerMixin, TestCase):
     def test_third_party_span_returned(self):
         span = _make_span("John Smith", "THIRD_PARTY", 0, 10)
         nlp = _make_nlp([span])

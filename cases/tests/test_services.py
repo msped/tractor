@@ -454,7 +454,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
-class DeleteOldCasesServiceTest(TestCase):
+class DeleteOldCasesServiceTest(NetworkBlockerMixin, TestCase):
     """
     Test suite for the `delete_cases_past_retention_date` service function.
     """

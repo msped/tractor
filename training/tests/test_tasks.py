@@ -13,6 +13,9 @@ from cases.models import Document as CaseDocument
 
 from ..models import Model, TrainingDocument, TrainingRun
 from ..tasks import (
+    _build_spancat_pipeline,
+    _prepare_examples,
+    _run_training_loop,
     collect_training_data_detailed,
     train_model,
 )
@@ -364,3 +367,202 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
         # No model should be created
         self.assertEqual(Model.objects.count(), initial_model_count)
+
+    @patch("training.tasks._run_training_loop")
+    @patch("training.tasks._prepare_examples")
+    @patch("training.tasks._build_spancat_pipeline")
+    @patch("training.tasks.collect_training_data_detailed")
+    @patch("training.tasks.Task")
+    def test_train_model_records_training_and_case_docs(
+        self, mock_task, mock_collect, mock_build_pipeline, mock_prepare, mock_run_loop
+    ):
+        """train_model() creates TrainingRunTrainingDoc and TrainingRunCaseDoc for used docs."""
+        from cases.models import Case
+        from cases.models import Document as CaseDocument
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from ..models import TrainingRunCaseDoc, TrainingRunTrainingDoc
+
+        mock_task.objects.filter.return_value.count.return_value = 0
+
+        case = Case.objects.create(case_reference="TRACK1")
+        case_doc = CaseDocument.objects.create(
+            case=case,
+            extracted_text="Some case text",
+            status=CaseDocument.Status.COMPLETED,
+        )
+        training_doc = TrainingDocument.objects.create(
+            name="Track Doc",
+            original_file=SimpleUploadedFile("track.docx", b"content"),
+            created_by=self.user,
+        )
+
+        fake_data = [(f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]}) for i in range(25)]
+        mock_collect.return_value = (fake_data, [training_doc], [case_doc])
+
+        mock_nlp = MagicMock()
+        mock_nlp.pipe_names = []
+        mock_build_pipeline.return_value = mock_nlp
+        mock_prepare.return_value = [MagicMock()]
+        mock_run_loop.return_value = {"spans_sc_p": 0.8, "spans_sc_r": 0.75, "spans_sc_f": 0.77}
+
+        train_model(source="both")
+
+        new_model = Model.objects.order_by("-created_at").first()
+        training_run = TrainingRun.objects.get(model=new_model)
+
+        self.assertEqual(TrainingRunTrainingDoc.objects.filter(training_run=training_run).count(), 1)
+        self.assertEqual(TrainingRunCaseDoc.objects.filter(training_run=training_run).count(), 1)
+
+
+class BuildSpancatPipelineTests(NetworkBlockerMixin, TestCase):
+    @patch("spacy.load")
+    def test_builds_pipeline_with_spancat(self, mock_load):
+        mock_nlp = MagicMock()
+        mock_nlp.pipe_names = ["tok2vec", "ner", "parser"]
+        mock_nlp.get_pipe.return_value.model.get_dim.return_value = 96
+        mock_spancat = MagicMock()
+        mock_nlp.add_pipe.return_value = mock_spancat
+        mock_load.return_value = mock_nlp
+
+        result = _build_spancat_pipeline()
+
+        mock_load.assert_called_once_with("en_core_web_lg")
+        mock_nlp.remove_pipe.assert_any_call("ner")
+        mock_nlp.remove_pipe.assert_any_call("parser")
+        mock_nlp.add_pipe.assert_called_once()
+        self.assertEqual(mock_nlp.add_pipe.call_args[0][0], "spancat")
+        mock_spancat.add_label.assert_any_call("THIRD_PARTY")
+        mock_spancat.add_label.assert_any_call("OPERATIONAL")
+        self.assertEqual(result, mock_nlp)
+
+
+class PrepareExamplesTests(NetworkBlockerMixin, TestCase):
+    def test_valid_spans_included(self):
+        mock_nlp = MagicMock()
+        mock_doc = MagicMock()
+        mock_ref = MagicMock()
+        mock_span = MagicMock()
+
+        mock_nlp.make_doc.return_value = mock_doc
+        mock_doc.copy.return_value = mock_ref
+        mock_ref.char_span.return_value = mock_span
+
+        train_data = [("Hello world", {"entities": [(0, 5, "THIRD_PARTY")]})]
+
+        with patch("training.tasks.Example") as mock_example:
+            mock_example.return_value = MagicMock()
+            examples = _prepare_examples(mock_nlp, train_data)
+
+        self.assertEqual(len(examples), 1)
+        mock_ref.char_span.assert_called_once_with(0, 5, label="THIRD_PARTY", alignment_mode="contract")
+
+    def test_misaligned_spans_dropped(self):
+        mock_nlp = MagicMock()
+        mock_doc = MagicMock()
+        mock_ref = MagicMock()
+
+        mock_nlp.make_doc.return_value = mock_doc
+        mock_doc.copy.return_value = mock_ref
+        mock_ref.char_span.return_value = None  # misaligned span
+
+        train_data = [("Hello world", {"entities": [(0, 5, "THIRD_PARTY")]})]
+
+        with patch("training.tasks.Example") as mock_example:
+            mock_example.return_value = MagicMock()
+            examples = _prepare_examples(mock_nlp, train_data)
+
+        self.assertEqual(len(examples), 1)
+        # The span was dropped, ref.spans["sc"] should be set to empty list
+        mock_ref.spans.__setitem__.assert_called_with("sc", [])
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_train_loop"))
+class RunTrainingLoopTests(NetworkBlockerMixin, TestCase):
+    def test_early_stopping_triggered(self):
+        mock_nlp = MagicMock()
+        mock_nlp.resume_training.return_value = MagicMock()
+        mock_nlp.evaluate.return_value = {"spans_sc_f": 0.0, "spans_sc_p": 0.0, "spans_sc_r": 0.0}
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            _run_training_loop(mock_nlp, [], [], output_dir)
+
+        # patience=3, so loop runs exactly 3 epochs before early stopping
+        self.assertEqual(mock_nlp.evaluate.call_count, 3)
+
+    def test_saves_to_disk_when_no_improvement(self):
+        mock_nlp = MagicMock()
+        mock_nlp.resume_training.return_value = MagicMock()
+        mock_nlp.evaluate.return_value = {"spans_sc_f": 0.0, "spans_sc_p": 0.0, "spans_sc_r": 0.0}
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            result = _run_training_loop(mock_nlp, [], [], output_dir)
+
+        # When best_f1==0.0, nlp.to_disk is still called after the loop
+        mock_nlp.to_disk.assert_called_once()
+        self.assertEqual(result.get("spans_sc_f"), 0.0)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_edge"))
+class CollectTrainingDataDetailedEdgeCasesTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("edgeuser", password="password")
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+
+    def test_ds_information_redactions_excluded(self):
+        """DS_INFORMATION redactions are excluded from training data."""
+        from cases.models import Case, Redaction
+        from cases.models import Document as CaseDocument
+
+        case = Case.objects.create(case_reference="EDGE1")
+        case_doc = CaseDocument.objects.create(
+            case=case,
+            extracted_text="DS info here and other stuff.",
+            status=CaseDocument.Status.COMPLETED,
+        )
+        Redaction.objects.create(
+            document=case_doc,
+            start_char=0,
+            end_char=7,
+            text="DS info",
+            is_accepted=True,
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+        )
+
+        train_data, _, _ = collect_training_data_detailed(source="redactions")
+        # DS_INFORMATION excluded → entities empty → no training data for this doc
+        self.assertEqual(len(train_data), 0)
+
+    def test_completed_doc_with_no_text_skipped(self):
+        """A completed document with empty extracted_text is skipped."""
+        from cases.models import Case
+        from cases.models import Document as CaseDocument
+
+        case = Case.objects.create(case_reference="EDGE2")
+        CaseDocument.objects.create(
+            case=case,
+            extracted_text="",
+            status=CaseDocument.Status.COMPLETED,
+        )
+
+        train_data, _, _ = collect_training_data_detailed(source="redactions")
+        self.assertEqual(len(train_data), 0)
+
+    def test_bad_docx_logs_error_and_continues(self):
+        """A corrupted training document is skipped without raising an exception."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        bad_file = SimpleUploadedFile("bad.docx", b"not a valid docx file")
+        TrainingDocument.objects.create(
+            name="Bad Docx",
+            original_file=bad_file,
+            created_by=self.user,
+            processed=False,
+        )
+
+        train_data, t_docs, _ = collect_training_data_detailed(source="training_docs")
+        self.assertEqual(len(train_data), 0)
+        self.assertEqual(len(t_docs), 0)

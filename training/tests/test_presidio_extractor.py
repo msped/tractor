@@ -2,10 +2,16 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from ..extractors.presidio_extractor import extract_operational_with_presidio, extract_with_presidio
+from ..extractors.presidio_extractor import (
+    _build_analyzer,
+    _build_operational_analyzer,
+    extract_operational_with_presidio,
+    extract_with_presidio,
+)
+from .base import NetworkBlockerMixin
 
 
-class ExtractWithPresidioTests(TestCase):
+class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         # Reset cached analyzers between tests to avoid state bleed
         import training.extractors.presidio_extractor as mod
@@ -114,7 +120,7 @@ class ExtractWithPresidioTests(TestCase):
             mock_build.assert_called_once()
 
 
-class ExtractOperationalWithPresidioTests(TestCase):
+class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         import training.extractors.presidio_extractor as mod
 
@@ -202,3 +208,39 @@ class ExtractOperationalWithPresidioTests(TestCase):
             extract_operational_with_presidio("test again")
 
             mock_build.assert_called_once()
+
+
+class BuildAnalyzerTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        import training.extractors.presidio_extractor as mod
+
+        mod._analyzer = None
+        mod._operational_analyzer = None
+
+    @patch("presidio_analyzer.nlp_engine.NlpEngineProvider")
+    @patch("presidio_analyzer.AnalyzerEngine")
+    @patch("presidio_analyzer.PatternRecognizer")
+    @patch("presidio_analyzer.Pattern")
+    def test_build_analyzer_returns_engine(self, mock_pattern, mock_recognizer, mock_engine, mock_provider):
+        mock_engine_instance = MagicMock()
+        mock_engine.return_value = mock_engine_instance
+
+        result = _build_analyzer()
+
+        mock_engine.assert_called_once()
+        self.assertEqual(mock_engine_instance.registry.add_recognizer.call_count, 2)
+        self.assertEqual(result, mock_engine_instance)
+
+    @patch("presidio_analyzer.nlp_engine.NlpEngineProvider")
+    @patch("presidio_analyzer.AnalyzerEngine")
+    @patch("presidio_analyzer.PatternRecognizer")
+    @patch("presidio_analyzer.Pattern")
+    def test_build_operational_analyzer_returns_engine(self, mock_pattern, mock_recognizer, mock_engine, mock_provider):
+        mock_engine_instance = MagicMock()
+        mock_engine.return_value = mock_engine_instance
+
+        result = _build_operational_analyzer()
+
+        mock_engine.assert_called_once()
+        self.assertEqual(mock_engine_instance.registry.add_recognizer.call_count, 2)
+        self.assertEqual(result, mock_engine_instance)

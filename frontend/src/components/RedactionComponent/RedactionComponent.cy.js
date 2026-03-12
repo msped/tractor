@@ -115,7 +115,9 @@ const mountRedactionComponent = (document = mockDocument, redactions = mockRedac
 describe('<RedactionComponent />', () => {
     beforeEach(() => {
         cy.intercept('PATCH', '**/cases/document/redaction/*', (req) => {
-            req.reply({ statusCode: 200, body: { ...req.body, id: req.url.split('/').pop() } });
+            const id = req.url.split('/').pop();
+            const existing = mockRedactions.find(r => r.id === id) || {};
+            req.reply({ statusCode: 200, body: { ...existing, ...req.body, id } });
         }).as('updateRedaction');
         cy.intercept('DELETE', '**/cases/document/redaction/*', { statusCode: 204 }).as('deleteRedaction');
         cy.intercept('POST', '**/cases/document/*/redaction', (req) => {
@@ -398,10 +400,10 @@ describe('<RedactionComponent />', () => {
         it('calls bulk API when Accept All is clicked', () => {
             cy.contains('button', 'Accept All').click();
 
-            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
-                is_accepted: true,
+            cy.wait('@bulkUpdateRedaction').then((interception) => {
+                expect(interception.request.body).to.deep.include({ is_accepted: true });
+                expect(interception.request.body.ids).to.include.members(['dup1', 'dup2']);
             });
-            cy.wait('@bulkUpdateRedaction').its('request.body.ids').should('include.members', ['dup1', 'dup2']);
         });
 
         it('calls bulk API with justification when Reject All is submitted', () => {

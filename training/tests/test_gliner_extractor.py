@@ -3,9 +3,10 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from ..extractors.gliner_extractor import GLINER_LABELS, _MAX_CHUNK_CHARS, _chunk_text, extract_with_gliner
+from .base import NetworkBlockerMixin
 
 
-class ExtractWithGLiNERTests(TestCase):
+class ExtractWithGLiNERTests(NetworkBlockerMixin, TestCase):
     def _make_model(self, raw_results):
         model = MagicMock()
         model.predict_entities.return_value = raw_results

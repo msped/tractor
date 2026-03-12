@@ -10,13 +10,14 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase, override_settings
 
 from ..models import Model, TrainingDocument
+from .base import NetworkBlockerMixin
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT, Q_CLUSTER={"sync": True})
-class BaseTrainingAPITestCase(APITestCase):
+class BaseTrainingAPITestCase(NetworkBlockerMixin, APITestCase):
     """Base class for training API tests with shared setup."""
 
     def setUp(self):
