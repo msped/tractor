@@ -2,14 +2,14 @@
 
 Welcome to the Tractor documentation.
 
-Tractor is a document redaction application with ML-powered Named Entity Recognition. Users upload documents, the system identifies sensitive information using spaCy NER, and users can accept/reject redactions before exporting redacted versions.
+Tractor is a document redaction application with ML-powered Named Entity Recognition. Users upload documents, the system identifies sensitive information using GLiNER and Presidio, and users can accept/reject redactions before exporting redacted versions.
 
 ## Key Features
 
 - **Document Upload**: Support for PDF and docx files.
-- **Automatic Redaction**: ML-powered Named Entity Recognition identifies sensitive information
-- **Review Workflow**: Accept or reject suggested redactions
-- **Model Training**: Train custom models from accepted redactions
+- **Automatic Redaction**: Hybrid three-model NER pipeline — SpanCat (trained), GLiNER (zero-shot), and Presidio (pattern-based)
+- **Review Workflow**: Accept, reject, or bulk-action suggested redactions. Adjacent same-type spans are automatically merged for easier review.
+- **Model Training**: Train custom SpanCat models from accepted redactions; GLiNER model managed separately
 - **Export**: Generate disclosure packages with original, redacted, and edited versions
 
 ## Quick Links
