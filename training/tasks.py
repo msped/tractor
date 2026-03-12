@@ -2,7 +2,6 @@ import random
 import shutil
 from pathlib import Path
 
-import spacy
 from django.conf import settings
 from django.utils import timezone
 from django_q.models import Task
@@ -66,7 +65,7 @@ def collect_training_data_detailed(source="both"):
                         stripped_text = entity_text.strip()
                         if stripped_text:
                             # Adjust boundaries to exclude leading/trailing whitespace
-                            # This ensures alignment with spaCy token boundaries
+                            # This ensures alignment with token boundaries
                             leading_ws = len(entity_text) - len(entity_text.lstrip())
                             trailing_ws = len(entity_text) - len(entity_text.rstrip())
                             adjusted_start = current_entity_start + leading_ws
@@ -158,6 +157,8 @@ def _build_spancat_pipeline():
     spancat component configured with an ngram suggester and a
     Tok2VecListener that reuses the frozen pretrained embeddings.
     """
+    import spacy
+
     nlp = spacy.load("en_core_web_lg")
 
     # Remove all pipes except tok2vec
@@ -233,8 +234,8 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
 
     Returns the best scores dict from evaluation.
     """
-    max_epochs = 30
-    patience = 10
+    max_epochs = 15
+    patience = 3
     best_f1 = 0.0
     epochs_without_improvement = 0
     best_scores = {}
@@ -300,10 +301,7 @@ def train_model(source="redactions", user=None):
     train_data, used_training_docs, used_case_docs = collect_training_data_detailed(source)
 
     if len(train_data) < 25:
-        print(
-            f"Not enough training data ({len(train_data)} \
-                examples). Aborting."
-        )
+        print(f"Not enough training data ({len(train_data)} examples). Aborting.")
         return
 
     # Prepare output dir
@@ -363,7 +361,4 @@ def train_model(source="redactions", user=None):
     for cdoc in used_case_docs:
         TrainingRunCaseDoc.objects.create(training_run=training_run, document=cdoc)
 
-    print(
-        f"Model trained and stored at {output_dir}, \
-            DB updated, TrainingRun created."
-    )
+    print(f"Model trained and stored at {output_dir}, DB updated, TrainingRun created.")

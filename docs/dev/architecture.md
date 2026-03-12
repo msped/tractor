@@ -10,7 +10,7 @@ This document describes the technical architecture of Tractor.
 | Backend | Django 5.2, Django REST Framework |
 | Database | PostgreSQL 15 |  
 | Task Queue | django-q2 |
-| NLP | spaCy 3.8 with PyTorch, `en_core_web_lg` + custom SpanCat |
+| NLP | SpanCat (spaCy 3.8), GLiNER (HuggingFace), Microsoft Presidio |
 | Authentication | NextAuth v5, JWT |
 
 ## Project Structure
@@ -32,15 +32,16 @@ tractor/
 ## Data Flow
 
 1. **Document Upload**: User uploads document → stored in media/originals
-2. **Text Extraction**: python-docx (DOCX) or spaCyLayout (PDF) extracts text and structure
-3. **Entity Recognition (Hybrid)**:
-    - Custom **SpanCat** model identifies OPERATIONAL and THIRD_PARTY spans via `doc.spans["sc"]`
-    - **`en_core_web_lg`** built-in NER identifies standard entities (PERSON, ORG, GPE, DATE, etc.) mapped to THIRD_PARTY
-    - Results are deduplicated — SpanCat takes priority where spans overlap
+2. **Text Extraction**: python-docx (DOCX) or pdfplumber (PDF) extracts text and structure
+3. **Entity Recognition (Three-model pipeline)**:
+    - **SpanCat** identifies OPERATIONAL and THIRD_PARTY spans from the trained custom model (optional — skipped gracefully if no model trained yet)
+    - **GLiNER** identifies **THIRD_PARTY** spans (names, orgs, locations, DOB, addresses) using a zero-shot model from HuggingFace
+    - **Presidio** identifies structured **THIRD_PARTY** PII (phone, email, NHS, postcode, NI) and structured **OPERATIONAL** refs (crime references, collar numbers) via pattern recognisers
+    - Results are deduplicated with priority: **SpanCat > GLiNER > Presidio**
 4. **Data Subject Filtering**: Entities matching the case's data subject name or DOB are excluded from suggestions
-5. **User Review**: User accepts/rejects redactions in the UI
+5. **User Review**: User accepts/rejects redactions in the UI. Adjacent same-type spans are automatically merged into compound display items for easier review. Merged items can be split and reviewed individually.
 6. **Export**: WeasyPrint generates PDF exports with redactions applied
-7. **Training**: Accepted redactions feed into SpanCat model training pipeline
+7. **Training**: Accepted redactions from completed documents feed into the SpanCat training pipeline
 
 ## API Endpoints
 
@@ -90,6 +91,7 @@ All endpoints are prefixed with `/api/`.
 | PATCH | `/cases/document/redaction/<id>` | Update redaction (accept/reject) |
 | DELETE | `/cases/document/redaction/<id>` | Delete redaction |
 | POST | `/cases/document/redaction/<id>/context` | Add/update context |
+| PATCH | `/cases/document/<document_id>/redactions/bulk` | Bulk accept/reject/retype multiple redactions |
 
 ### Models & Training (`/api/...`)
 
@@ -112,36 +114,59 @@ All endpoints are prefixed with `/api/`.
 
 ## Entity Recognition
 
-Tractor uses a hybrid two-model approach for entity recognition:
+Tractor uses a three-model hybrid pipeline. All three models run on every document and their results are merged and deduplicated.
 
-### `en_core_web_lg` (Built-in NER)
+### SpanCat (Trained Model)
 
-The pre-trained spaCy model provides out-of-the-box recognition for standard entity types. The following NER labels are mapped to **THIRD_PARTY** redactions:
+A custom SpanCat (Span Categorisation) model trained on your organisation's accepted redactions. It can identify both:
 
-| NER Label | Example |
-|-----------|---------|
-| PERSON | "John Smith", "Dr. Jones" |
-| ORG | "NHS", "Acme Ltd" |
-| GPE | "London", "United Kingdom" |
-| DATE | "1 January 1990", "last Tuesday" |
-| FAC | "Heathrow Airport" |
-| LOC | "the Thames" |
-| NORP | "British", "Muslim" |
+- **OPERATIONAL** — reference numbers, case IDs, and other domain-specific operational patterns
+- **THIRD_PARTY** — domain-specific PII patterns learned from training data
 
-This model requires no training and works immediately.
+SpanCat is loaded as a singleton (`SpanCatModelManager`) and takes the **highest priority** in deduplication. If no SpanCat model has been trained yet, this step is skipped and the system falls back to GLiNER + Presidio. Trained models are stored in `nlp_models/`.
 
-### Custom SpanCat Model
+### GLiNER (Third-Party PII — Zero-Shot)
 
-A SpanCat (Span Categorisation) model trained on domain-specific data. Results are stored in `doc.spans["sc"]` with labels:
+[GLiNER](https://github.com/urchade/GLiNER) is a zero-shot generalist NER model downloaded from HuggingFace and registered in the database via the `download_model` management command. It identifies **THIRD_PARTY** entities:
 
-- **OPERATIONAL** → Operational Data (reference numbers, case IDs, internal codes)
-- **THIRD_PARTY** → Third-Party PII (domain-specific patterns)
+- person names, organisations, locations, dates of birth, addresses
 
-Training is performed via the training pipeline using accepted redactions from completed documents. Models are versioned and stored in `nlp_models/`.
+GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in the database is the HuggingFace model identifier (e.g. `urchade/gliner_medium-v2.1`); HuggingFace handles local caching automatically. Long texts are chunked to stay within the model's ~1500 character token limit per chunk.
+
+### Presidio (Pattern-Based)
+
+[Microsoft Presidio](https://microsoft.github.io/presidio/) is a rule-based detection framework using custom pattern recognisers. It runs two separate analyzers:
+
+**THIRD_PARTY analyzer:**
+
+| Recogniser | Entities detected |
+|------------|------------------|
+| Built-in (spaCy `en_core_web_sm`) | PHONE_NUMBER, EMAIL_ADDRESS, UK_NHS |
+| Custom pattern | UK postcodes |
+| Custom pattern | National Insurance numbers |
+
+**OPERATIONAL analyzer:**
+
+| Recogniser | Entities detected |
+|------------|------------------|
+| Custom pattern | Crime reference numbers (e.g. `42/12345/24`) |
+| Custom pattern | Police collar numbers (e.g. `PC 1234`) |
+
+Both analyzers are instantiated lazily and cached as module-level singletons.
 
 ### Deduplication
 
-When both models identify overlapping spans, the SpanCat result takes priority since it was trained on domain-specific data.
+After all three models run, overlapping spans are deduplicated with this priority order:
+
+1. SpanCat results are kept in full
+2. GLiNER results are added where they don't overlap SpanCat spans
+3. Presidio results are added where they don't overlap either of the above
+
+### Merged Display Items
+
+Adjacent or near-adjacent spans of the **same type** (within a 2-character gap by default) are automatically merged into a single compound display item in the review sidebar. This reduces noise when, for example, a first name and surname are detected as separate spans.
+
+Merged items show all underlying span IDs and can be split back into individual items by the user from the sidebar.
 
 ### Data Subject Filtering
 

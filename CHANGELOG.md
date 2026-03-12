@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Three-model NLP pipeline: SpanCat (trained, highest priority) + GLiNER (zero-shot THIRD_PARTY) + Presidio (structured THIRD_PARTY PII and OPERATIONAL pattern refs); replaces previous SpanCat + `en_core_web_lg` approach
+- GLiNER added for zero-shot third-party PII detection (names, orgs, locations, DOB, addresses) — works without training data
+- Presidio added with custom UK pattern recognisers for postcodes, NI numbers, crime references, and collar numbers
+- `download_model` management command to fetch a GLiNER model from HuggingFace and register it as the active model
+- Merged redaction display: adjacent same-type spans within a 2-character gap are combined into a single sidebar item, with a split action to expand them individually
+- Bulk accept/reject for grouped redactions (same text + type) via `PATCH /api/cases/document/<id>/redactions/bulk/`
+- Bulk redaction type change on merged items
 - Cancel document processing: users can cancel a document currently being processed, resetting it to a new `UNPROCESSED` status (#39)
-- Hybrid NER pipeline: SpanCat model for operational data combined with `en_core_web_lg` for third-party PII detection (#38)
 - Resizable redaction sidebar with drag handle (#37)
 - Font size changer in document review/view (#35)
 - Table display with redactions in document viewer (#35)
@@ -28,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- NLP stack updated: `en_core_web_lg` replaced by GLiNER + Presidio; SpanCat retained as the primary trained model
+- GLiNER model paths store HuggingFace model IDs; HuggingFace handles local caching. SpanCat models continue to be stored in `nlp_models/`
 - CI pipeline now checks linting before running tests (#33)
 - Removed lint.yml as linting now occurs before testing
 - Refactored API calls to use service functions with access tokens instead of direct apiClient usage (#23)

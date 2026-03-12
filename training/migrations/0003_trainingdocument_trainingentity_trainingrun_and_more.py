@@ -10,7 +10,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("cases", "0007_document_spacy_model"),
-        ("training", "0003_auto_20250911_2032"),
+        ("training", "0002_model_f1_score_model_precision_model_recall"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

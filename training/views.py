@@ -6,14 +6,15 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .loader import SpacyModelManager
+from .loader import SpanCatModelManager
 from .models import Model, TrainingDocument, TrainingRun
 from .serializers import ModelSerializer, ScheduleSerializer, TrainingDocumentSerializer, TrainingRunSerializer
 
 
 class ModelListCreateView(ListCreateAPIView):
     """
-    API view to list all trained models or create a new model entry.
+    API view to list SpanCat models or create a new model entry.
+    GLiNER is always active and system-managed — excluded from this list.
     """
 
     permission_classes = [IsAdminUser]
@@ -40,7 +41,7 @@ class ModelSetActiveView(APIView):
     def post(self, request, pk, *args, **kwargs):
         try:
             model = Model.objects.get(id=pk)
-            SpacyModelManager.get_instance().switch_model(model.name)
+            SpanCatModelManager.get_instance().switch_model(model.name)
             return Response(status=status.HTTP_200_OK)
         except Model.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)

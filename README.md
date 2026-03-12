@@ -26,7 +26,7 @@ This section provides a technical overview for developers and IT administrators.
 | **Frontend** | Next.js (React) with Material UI (MUI) |
 | **Backend** | Django (Python) |
 | **Database** | Postgres |
-| **AI / NLP** | spaCy v3 |
+| **AI / NLP** | GLiNER, SpanCat (spaCy), Microsoft Presidio |
 | **Hosting** | This will be upto your organisation |
 
 #### Hosting
@@ -41,9 +41,13 @@ The simplist hosting solution is to use [Docker](https://www.docker.com/) to hos
 
 ### AI / NLP Component Justification
 
-The service uses the **spaCy** library to perform Named Entity Recognition (NER) on user-submitted text. This is essential for automatically identifying key information (like people, places, and dates) to improve service efficiency. The spaCy library requires the torch framework as its machine learning backend.
+The service uses a three-model hybrid pipeline to perform Named Entity Recognition (NER) on user-submitted text:
 
-As part of the package, during setup departments can train the model on previous documents. This ensures that the information it identifies will speed up your organisations workflow. Currently, this only works for highlighting within a word document.
+- **SpanCat (spaCy)** — a custom trained model that identifies both **Operational Data** and **Third-Party PII** based on your organisation's accepted redactions. This takes highest priority in the pipeline. If no model has been trained yet, the system falls back to the other two models.
+- **GLiNER** — a zero-shot NER model downloaded from HuggingFace. It identifies **Third-Party PII** such as names, organisations, addresses, and dates of birth without requiring training data.
+- **Microsoft Presidio** — a rule-based PII detection framework. It identifies structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, NI numbers) and structured **Operational Data** (crime reference numbers, collar numbers) using pattern recognisers.
+
+The SpanCat model improves over time as more redactions are accepted and the model is retrained.
 
 ---
 
@@ -129,37 +133,30 @@ If you get an error like cannot load library 'xxx': error xxx, it means that Wea
 
 ---
 
-## Model Training
+## Model Management
 
-The application supports training custom redaction models based on the redactions that users accept in completed cases as well as the uploading of completed material to train from.
+### GLiNER (Third-Party PII)
 
-### How it Works
+The GLiNER model is downloaded from HuggingFace and registered in the database via a management command. On first setup, run:
 
-1. **Data Collection**: The system gathers all documents marked as "Completed". For each document, it collects the text and the set of accepted redactions.
-2. **Training Format**: This data is converted into the format required by spaCy for training Named Entity Recognition (NER) models.
-3. **Training Process**: A new, blank spaCy model is trained from scratch using this data. The training process runs for a set number of iterations to improve the model's accuracy.
-4. **Model Versioning**: After training, the new model is saved to the `nlp_models/` directory with a timestamped version name (e.g., `model_20240521_143000`). A record of this new model is created in the database.
+```bash
+python manage.py download_model
+```
 
-### Running the Training
+To download a specific model variant:
 
-Training will run automatically on redactions where applicable and at the time specified below. In the settings page, you can upload your own Documents, with highlighted redactions, to use for training.
+```bash
+python manage.py download_model --name urchade/gliner_large-v2.1
+```
+
+### SpanCat (Trained Model)
+
+The SpanCat model is trained on your organisation's accepted redactions. Training can be triggered manually from the Settings page or scheduled to run automatically. After training, the new model must be activated before it is used for processing.
+
+Models are listed and activated via the **Settings → Models** page. Activating a new model will automatically deactivate the current active model.
+
+### Training
+
+Training will automatically collect accepted redactions from completed documents as training data. You can also upload pre-annotated Word documents from the Settings → Training section.
 
 This process can be resource-intensive and may take some time depending on the amount of training data.
-
-### Scheduled training
-
-You can run scheduled training by going to `/settings/training` and specifying the frequency then when you would like it to first run. Alternatively, you can add an entry in the Django admin under Django Q, you can add a new entry with the following:
-
-* Name: Monthly Model Training (or whatever you prefer)
-* Func: `training.tasks.train_model`
-* Kwargs: `{"source": "redactions"}`
-* Schedule Type: Select from the drop down menu
-* Repeats: -1 (This means it will repeat forver)
-* Next Run: Set the date and time for the first time you want the training to run.
-
-### Managing Models
-
-After training, new models are available but not active. An administrator must activate a model for it to be used for new document processing.
-
-* **Default Model**: If no custom model is active, the system falls back to the default `en_core_web_lg` spaCy model.
-* **Activating a Model**: Model activation can be handled via the settings page. Activating a new model will automatically deactivate any other active model.

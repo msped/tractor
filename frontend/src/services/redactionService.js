@@ -66,6 +66,27 @@ export const deleteRedaction = async (redactionId, accessToken) => {
     }
 };
 
+export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification, accessToken) => {
+    try {
+        const response = await apiClient.patch(
+            `cases/document/${documentId}/redactions/bulk/`,
+            { ids, is_accepted: isAccepted, justification: justification ?? null },
+            {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to bulk update redactions: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to bulk update redactions. Please try again.');
+        }
+    }
+};
+
 export const updateRedactionContext = async (redactionId, contextData, accessToken) => {
 
     try {

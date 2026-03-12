@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, Accordion, AccordionSummary, AccordionDetails, List, ListItem, Card, CardContent, CardActions, Button, Chip, ButtonGroup, Menu, MenuItem } from '@mui/material';
+import {
+    Box, Typography, Accordion, AccordionSummary, AccordionDetails,
+    List, ListItem, Card, CardContent, CardActions, Button, Chip,
+    ButtonGroup, Menu, MenuItem, IconButton, Tooltip,
+} from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import { RedactionContextManager } from '../RedactionContextManager.js';
@@ -27,15 +33,20 @@ export const RedactionSidebar = ({
     onReject,
     onRemove,
     onChangeTypeAndAccept,
+    onBulkChangeTypeAndAccept = () => {},
+    onBulkAccept = () => {},
+    onBulkReject = () => {},
+    onRejectAsDisclosable = () => {},
+    onSplitMerge = () => {},
     onSuggestionMouseEnter,
     onSuggestionMouseLeave,
     scrollToId,
     removeScrollId,
     onContextSave,
 }) => {
-    const { rejected, accepted, pending, manual } = redactions;
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
+    const [expandedGroups, setExpandedGroups] = useState(new Set());
     const [editingContextId, setEditingContextId] = useState(null);
     const itemRefs = useRef({});
 
@@ -51,8 +62,19 @@ export const RedactionSidebar = ({
         });
     };
 
+    const toggleGroup = (key) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
     const [currentItemForMenu, setCurrentItemForMenu] = useState(null);
+    const [rejectMenuAnchorEl, setRejectMenuAnchorEl] = useState(null);
+    const [currentItemForRejectMenu, setCurrentItemForRejectMenu] = useState(null);
 
     const handleMenuClick = (event, item) => {
         setMenuAnchorEl(event.currentTarget);
@@ -65,20 +87,44 @@ export const RedactionSidebar = ({
     };
 
     const handleTypeChange = (newType) => {
-        onChangeTypeAndAccept(currentItemForMenu.id, newType);
+        if (currentItemForMenu?.isMerged) {
+            onBulkChangeTypeAndAccept(currentItemForMenu.ids, newType);
+        } else {
+            onChangeTypeAndAccept(currentItemForMenu.id || currentItemForMenu.ids?.[0], newType);
+        }
         handleMenuClose();
+    };
+
+    // Helper: get all DB ids from a display item (single, merged, or group)
+    const getAllIds = (item) => {
+        if (item.isGroup) {
+            return item.items.flatMap(gi => gi.ids || [gi.id]);
+        }
+        return item.ids || [item.id];
     };
 
     useEffect(() => {
         if (!scrollToId) return;
 
-        const targetSection = redactionSections.find(key =>
-            redactions[key].some(item => item.id === scrollToId)
-        );
+        const targetSection = redactionSections.find(key => {
+            const sectionData = redactions[key];
+            const items = sectionData?.items || (Array.isArray(sectionData) ? sectionData : []);
+            return items.some(item => getAllIds(item).includes(scrollToId));
+        });
 
         if (targetSection) {
             if (!expanded.has(targetSection)) {
                 setExpanded(prev => new Set(prev).add(targetSection));
+            }
+
+            // If item is inside a collapsed group, expand the group too
+            const sectionData = redactions[targetSection];
+            const sectionItems = sectionData?.items || (Array.isArray(sectionData) ? sectionData : []);
+            const parentGroup = sectionItems.find(item =>
+                item.isGroup && item.items.some(gi => (gi.ids || [gi.id]).includes(scrollToId))
+            );
+            if (parentGroup && !expandedGroups.has(parentGroup.key)) {
+                setExpandedGroups(prev => new Set(prev).add(parentGroup.key));
             }
 
             const timer = setTimeout(() => {
@@ -95,18 +141,156 @@ export const RedactionSidebar = ({
 
             return () => clearTimeout(timer);
         }
-    }, [scrollToId, redactions, redactionSections, expanded, removeScrollId]);
+    }, [scrollToId, redactions, redactionSections, expanded, expandedGroups, removeScrollId]);
+
+    const renderItem = (item, sectionKey) => {
+        const ids = item.ids || [item.id];
+        const itemKey = ids[0];
+        const isMerged = item.isMerged || false;
+
+        return (
+            <ListItem
+                key={itemKey}
+                ref={el => ids.forEach(id => { itemRefs.current[id] = el; })}
+                sx={{ px: 0, '&:not(:last-child)': { mb: 1 } }}
+                onMouseEnter={() => onSuggestionMouseEnter(itemKey)}
+                onMouseLeave={onSuggestionMouseLeave}
+            >
+                <Card variant="outlined" sx={{ width: '100%' }}>
+                    <CardContent>
+                        <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>{`"${item.text}"`}</Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                <Chip label={getRedactionTypeLabel(item.redaction_type)} size="small" />
+                                {isMerged && (
+                                    <Chip label={`merged (${ids.length})`} size="small" variant="outlined" />
+                                )}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">Source: {item.is_suggestion ? 'AI' : 'User'}</Typography>
+                        </Box>
+                        {item.justification && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Reason for rejection: {item.justification}</Typography>
+                        )}
+                    </CardContent>
+                    <CardActions sx={{ justifyContent: (sectionKey === 'accepted' || sectionKey === 'manual') ? 'space-between' : 'flex-end' }}>
+                        {(sectionKey === 'accepted' || sectionKey === 'manual') &&
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Button startIcon={item.context ? <EditIcon /> : <AddIcon />} variant="text" size='small' onClick={() => setEditingContextId(itemKey)}>
+                                    Context
+                                </Button>
+                                {item.context?.text && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>{`"${truncateText(item.context.text)}"`}</Typography>
+                                )}
+                            </Box>
+                        }
+                        {sectionKey === 'rejected' && (
+                            <Button size="small" color="primary" variant='outlined' onClick={() => onRemove(item.id || itemKey)}>Re-evaluate</Button>
+                        )}
+                        {(sectionKey === 'manual' || sectionKey === 'accepted') && (
+                            <Button size="small" color="error" variant='contained' onClick={() => onRemove(item.id || itemKey)}>Remove</Button>
+                        )}
+                        {sectionKey === 'pending' &&
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                {isMerged && (
+                                    <Tooltip title="Split into individual redactions">
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => onSplitMerge(ids.join(':'))}
+                                            aria-label="split merged redaction"
+                                        >
+                                            <CallSplitIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                )}
+                                {isMerged ? (
+                                    <>
+                                        <ButtonGroup variant="contained" color="error" size="small">
+                                            <Button onClick={() => onBulkReject(ids)}>Reject</Button>
+                                            <Button
+                                                aria-label="reject with reason"
+                                                aria-haspopup="menu"
+                                                onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids }); }}
+                                            >
+                                                <ArrowDropDownIcon />
+                                            </Button>
+                                        </ButtonGroup>
+                                        <ButtonGroup variant="contained" color="success" size="small">
+                                            <Button onClick={() => onBulkAccept(ids)}>Accept</Button>
+                                            <Button
+                                                aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
+                                                aria-expanded={menuAnchorEl ? 'true' : undefined}
+                                                aria-label="change redaction type and accept"
+                                                aria-haspopup="menu"
+                                                onClick={(e) => handleMenuClick(e, item)}
+                                            >
+                                                <ArrowDropDownIcon />
+                                            </Button>
+                                        </ButtonGroup>
+                                    </>
+                                ) : (
+                                    <>
+                                        <ButtonGroup variant="contained" color="error" size="small">
+                                            <Button onClick={() => onReject(item)}>Reject</Button>
+                                            <Button
+                                                aria-label="reject with reason"
+                                                aria-haspopup="menu"
+                                                onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids: [item.id || itemKey] }); }}
+                                            >
+                                                <ArrowDropDownIcon />
+                                            </Button>
+                                        </ButtonGroup>
+                                        <ButtonGroup variant="contained" color="success" size="small">
+                                            <Button onClick={() => onAccept(item.id || itemKey)}>Accept</Button>
+                                            <Button
+                                                aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
+                                                aria-expanded={menuAnchorEl ? 'true' : undefined}
+                                                aria-label="change redaction type and accept"
+                                                aria-haspopup="menu"
+                                                onClick={(e) => handleMenuClick(e, item)}
+                                            >
+                                                <ArrowDropDownIcon />
+                                            </Button>
+                                        </ButtonGroup>
+                                    </>
+                                )}
+                            </Box>
+                        }
+                    </CardActions>
+                    {(sectionKey === 'accepted' || sectionKey === 'manual') && (
+                        <div data-testid={`redaction-context-manager-${itemKey}`}>
+                            <RedactionContextManager
+                                redactionId={itemKey}
+                                context={item.context}
+                                isEditing={editingContextId === itemKey}
+                                onCancel={() => setEditingContextId(null)}
+                                onContextSave={onContextSave}
+                            />
+                        </div>
+                    )}
+                </Card>
+            </ListItem>
+        );
+    };
+
+    const hasItems = redactionSections.some(key => {
+        const sectionData = redactions[key];
+        const total = sectionData?.total ?? (Array.isArray(sectionData) ? sectionData.length : 0);
+        return total > 0;
+    });
 
     return (
         <Box sx={{ width: '100%', borderLeft: 1, borderColor: 'divider', height: 'calc(100vh - 64px)', overflowY: 'auto', bgcolor: 'background.default' }}>
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
                 <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
             </Box>
-            {(pending?.length > 0 || manual?.length > 0 || accepted?.length > 0 || rejected?.length > 0) ? (
+            {hasItems ? (
                 <Box sx={{ py: 2 }}>
                     {redactionSections.map((sectionKey) => {
-                        const items = redactions[sectionKey];
-                        if (items.length === 0) return null;
+                        const sectionData = redactions[sectionKey];
+                        const displayItems = sectionData?.items || (Array.isArray(sectionData) ? sectionData : []);
+                        const total = sectionData?.total ?? displayItems.length;
+
+                        if (total === 0) return null;
 
                         return (
                             <Accordion
@@ -117,68 +301,81 @@ export const RedactionSidebar = ({
                                 sx={{ '&:not(:last-child)': { mb: 1 } }}
                             >
                                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                                    <Typography sx={{ textTransform: 'capitalize' }}>{`${sectionKey} (${items.length})`}</Typography>
+                                    <Typography sx={{ textTransform: 'capitalize' }}>{`${sectionKey} (${total})`}</Typography>
                                 </AccordionSummary>
                                 <AccordionDetails>
                                     <List dense sx={{ p: 0 }}>
-                                        {items.map(item => (
-                                            <ListItem key={item.id} ref={el => (itemRefs.current[item.id] = el)} sx={{ px: 0, '&:not(:last-child)': { mb: 1 } }} onMouseEnter={() => onSuggestionMouseEnter(item.id)} onMouseLeave={onSuggestionMouseLeave}>
-                                                <Card variant="outlined" sx={{ width: '100%' }}>
-                                                    <CardContent>
-                                                        <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>{`"${item.text}"`}</Typography>
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <Chip label={getRedactionTypeLabel(item.redaction_type)} size="small" />
-                                                            <Typography variant="caption" color="text.secondary">Source: {item.is_suggestion ? 'AI' : 'User'}</Typography>
-                                                        </Box>
-                                                        {item.justification && (
-                                                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Reason for rejection: {item.justification}</Typography>
-                                                        )}
-                                                    </CardContent>
-                                                    <CardActions sx={{ justifyContent: (sectionKey === 'accepted' || sectionKey === 'manual') ? 'space-between' : 'flex-end' }}>
-                                                        {(sectionKey === 'accepted' || sectionKey === 'manual') &&
-                                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                                <Button startIcon={item.context ? <EditIcon /> : <AddIcon />} variant="text" size='small' onClick={() => setEditingContextId(item.id)}>
-                                                                    Context
-                                                                </Button>
-                                                                {item.context?.text && (
-                                                                    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>{`"${truncateText(item.context.text)}"`}</Typography>
-                                                                )}
-                                                            </Box>
-                                                        }
-                                                        {sectionKey === 'rejected' && (<Button size="small" color="primary" variant='outlined' onClick={() => onRemove(item.id)}>Re-evaluate</Button>)}
-                                                        {(sectionKey === 'manual' || sectionKey === 'accepted') && (<Button size="small" color="error" variant='contained' onClick={() => onRemove(item.id)}>Remove</Button>)}
-                                                        {sectionKey === 'pending' &&
-                                                            <Box sx={{ display: 'flex', gap: 1 }}>
-                                                                <Button size="small" variant='contained' color="error" onClick={() => onReject(item)}>Reject</Button>
-                                                                <ButtonGroup variant="contained" color="success" size="small">
-                                                                    <Button onClick={() => onAccept(item.id)}>Accept</Button>
-                                                                    <Button
-                                                                        aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
-                                                                        aria-expanded={menuAnchorEl ? 'true' : undefined}
-                                                                        aria-label="change redaction type and accept"
-                                                                        aria-haspopup="menu"
-                                                                        onClick={(e) => handleMenuClick(e, item)}
+                                        {displayItems.map(displayItem => {
+                                            if (displayItem.isGroup) {
+                                                const allIds = displayItem.items.flatMap(i => i.ids || [i.id]);
+                                                const isGroupExpanded = expandedGroups.has(displayItem.key);
+
+                                                return (
+                                                    <ListItem
+                                                        key={displayItem.key}
+                                                        ref={el => {
+                                                            displayItem.items.forEach(gi =>
+                                                                (gi.ids || [gi.id]).forEach(id => { itemRefs.current[id] = el; })
+                                                            );
+                                                        }}
+                                                        sx={{ px: 0, flexDirection: 'column', alignItems: 'stretch', '&:not(:last-child)': { mb: 1 } }}
+                                                    >
+                                                        <Card variant="outlined">
+                                                            <CardContent sx={{ pb: 1, '&:last-child': { pb: 1 } }}>
+                                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <Box>
+                                                                        <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{`"${displayItem.text}"`}</Typography>
+                                                                        <Typography variant="caption" color="text.secondary">
+                                                                            {getRedactionTypeLabel(displayItem.redaction_type)} · {displayItem.items.length} occurrences
+                                                                        </Typography>
+                                                                    </Box>
+                                                                    <IconButton
+                                                                        size="small"
+                                                                        onClick={() => toggleGroup(displayItem.key)}
+                                                                        aria-label={isGroupExpanded ? 'collapse group' : 'expand group'}
                                                                     >
-                                                                        <ArrowDropDownIcon />
-                                                                    </Button>
-                                                                </ButtonGroup>
-                                                            </Box>
-                                                        }
-                                                    </CardActions>
-                                                    {(sectionKey === 'accepted' || sectionKey === 'manual') && (
-                                                        <div data-testid={`redaction-context-manager-${item.id}`}>
-                                                        <RedactionContextManager
-                                                            redactionId={item.id}
-                                                            context={item.context}
-                                                            isEditing={editingContextId === item.id}
-                                                            onCancel={() => setEditingContextId(null)}
-                                                            onContextSave={onContextSave}
-                                                        />
-                                                        </div>
-                                                    )}
-                                                </Card>
-                                            </ListItem>
-                                        ))}
+                                                                        {isGroupExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                                                    </IconButton>
+                                                                </Box>
+                                                            </CardContent>
+                                                            {sectionKey === 'pending' && (
+                                                                <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+                                                                    <ButtonGroup variant="contained" color="error" size="small">
+                                                                        <Button onClick={() => onBulkReject(allIds)}>Reject All</Button>
+                                                                        <Button
+                                                                            aria-label="reject all with reason"
+                                                                            aria-haspopup="menu"
+                                                                            onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids: allIds }); }}
+                                                                        >
+                                                                            <ArrowDropDownIcon />
+                                                                        </Button>
+                                                                    </ButtonGroup>
+                                                                    <ButtonGroup variant="contained" color="success" size="small">
+                                                                        <Button onClick={() => onBulkAccept(allIds)}>Accept All</Button>
+                                                                        <Button
+                                                                            aria-controls={menuAnchorEl ? 'split-button-menu' : undefined}
+                                                                            aria-expanded={menuAnchorEl ? 'true' : undefined}
+                                                                            aria-label="change redaction type and accept all"
+                                                                            aria-haspopup="menu"
+                                                                            onClick={(e) => handleMenuClick(e, { ids: allIds, isMerged: true, redaction_type: displayItem.redaction_type })}
+                                                                        >
+                                                                            <ArrowDropDownIcon />
+                                                                        </Button>
+                                                                    </ButtonGroup>
+                                                                </CardActions>
+                                                            )}
+                                                            {isGroupExpanded && (
+                                                                <List dense sx={{ p: 0 }}>
+                                                                    {displayItem.items.map(gi => renderItem(gi, sectionKey))}
+                                                                </List>
+                                                            )}
+                                                        </Card>
+                                                    </ListItem>
+                                                );
+                                            }
+
+                                            return renderItem(displayItem, sectionKey);
+                                        })}
                                     </List>
                                 </AccordionDetails>
                             </Accordion>
@@ -197,6 +394,19 @@ export const RedactionSidebar = ({
                                     Accept as {REDACTION_TYPE_LABELS[typeKey]}
                                 </MenuItem>
                             ))}
+                    </Menu>
+                    <Menu
+                        anchorEl={rejectMenuAnchorEl}
+                        open={Boolean(rejectMenuAnchorEl)}
+                        onClose={() => { setRejectMenuAnchorEl(null); setCurrentItemForRejectMenu(null); }}
+                    >
+                        <MenuItem onClick={() => {
+                            onRejectAsDisclosable(currentItemForRejectMenu.ids);
+                            setRejectMenuAnchorEl(null);
+                            setCurrentItemForRejectMenu(null);
+                        }}>
+                            Reject as Disclosable
+                        </MenuItem>
                     </Menu>
                 </Box>
             ) : (

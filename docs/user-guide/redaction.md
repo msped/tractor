@@ -4,15 +4,16 @@ This guide covers the document redaction workflow in Tractor.
 
 ## Understanding Redaction Suggestions
 
-When a document is uploaded, Tractor automatically identifies potentially sensitive information using two models:
+When a document is uploaded, Tractor automatically identifies potentially sensitive information using three models working together:
 
-- A **built-in NER model** that recognises common entities like names, organisations, locations, and dates — these appear as **Third-Party PII** suggestions.
-- A **custom trained model** that identifies operational patterns like reference numbers and internal codes — these appear as **Operational Data** suggestions.
+- A **trained model** (SpanCat) built from your organisation's accepted redactions. Once trained, this identifies both **Operational Data** and **Third-Party PII** tailored to your organisation's documents. Until training data has been collected and a model trained, this step is skipped.
+- **GLiNER** — a zero-shot model that recognises common **Third-Party PII** such as names, organisations, addresses, and dates of birth. This works immediately without any training.
+- **Presidio** — a pattern-based engine that detects structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, National Insurance numbers) and structured **Operational Data** (crime reference numbers, collar numbers).
 
 Suggestions appear in the Redaction Sidebar for you to review.
 
 !!! info
-    The accuracy of operational data suggestions depends on the trained model. As more redactions are accepted and the model is retrained, suggestions should improve over time. Third-party PII detection works out of the box.
+    The trained model takes priority over the other two. As more redactions are accepted and the model is retrained, its suggestions will improve over time and better reflect your organisation's specific patterns.
 
 ### Data Subject Filtering
 
@@ -24,10 +25,25 @@ If you need to mark the data subject's information for redaction, you can still 
 
 Once a document has been processed, you can review it by clicking on the document in the case page.
 
-The **Redaction Sidebar** displays all suggested redactions. For each suggestion, you can:
+The **Redaction Sidebar** displays all suggested redactions grouped by status (Pending, Accepted, Rejected). For each suggestion, you can:
 
 - **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type if needed.
-- **Reject** - Click the reject button to dismiss the suggestion. You will be asked to provide a reason for rejection (this is for audit purposes, not used by the system).
+- **Reject** - Click the reject button to dismiss the suggestion. You will be asked to provide a reason for rejection (this is for audit purposes).
+
+### Merged Redactions
+
+Adjacent spans of the same type that appear close together in the text are automatically **merged** into a single item in the sidebar. For example, if "John" and "Smith" are detected separately, they will appear as one combined "John Smith" item.
+
+If you need to review or action the individual spans separately, click the **split** icon on a merged item to expand it back into its component parts.
+
+### Bulk Actions
+
+Items that share the same text and redaction type are grouped together in the sidebar. You can act on the entire group at once:
+
+- **Accept All** — accepts every item in the group in one click
+- **Reject All** — opens the rejection reason dialog and rejects all items in the group
+
+Individual items within a group can still be actioned separately by expanding the group.
 
 ## Redaction Types
 

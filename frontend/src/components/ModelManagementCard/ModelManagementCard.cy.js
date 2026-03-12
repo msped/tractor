@@ -110,7 +110,7 @@ describe('<ModelManagementCard />', () => {
 
             cy.wait('@getModels');
             cy.contains('h2', 'Active Redaction Model').should('be.visible');
-            cy.contains('Select the model to be used for suggesting redactions').should('be.visible');
+            cy.contains('Select the trained SpanCat model to use for OPERATIONAL entity detection. GLiNER handles THIRD_PARTY entities automatically.').should('be.visible');
         });
 
         it('displays all models in the table', () => {
