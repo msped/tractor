@@ -379,7 +379,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
-            <Container maxWidth={false} sx={{ my: 0, display: 'flex', flexDirection: 'column', flexGrow: 1, overflowY: currentDocument.status !== 'Completed' ? 'hidden' : 'auto' }}>
+            <Container maxWidth={false} sx={{ my: 0, display: 'flex', flexDirection: 'column', flexGrow: 1, overflowY: 'auto' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 2, borderBottom: 1, borderColor: 'divider' }}>
                     <Box>
                         <Button component={NextLink} href={`/cases/${currentDocument.case || currentDocument.id}`} variant="contained" color="primary">
