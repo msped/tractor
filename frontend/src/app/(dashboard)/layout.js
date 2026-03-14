@@ -19,7 +19,7 @@ function DashboardContent({ children }) {
                     minHeight: '100vh',
                     width: `calc(100% - ${width}px)`,
                     maxWidth: `calc(100% - ${width}px)`,
-                    overflow: 'hidden',
+                    overflowX: 'hidden',
                     transition: 'margin-left 0.2s ease-in-out, width 0.2s ease-in-out, max-width 0.2s ease-in-out',
                 }}
             >

@@ -10,6 +10,10 @@ from django_q.tasks import async_task
 from training.models import Model
 
 
+def case_export_upload_to(instance, filename):
+    return f"exports/{instance.id}/{filename}"
+
+
 def retention_review_date_default():
     """
     Calculates a date six years from the current time.
@@ -68,7 +72,7 @@ class Case(models.Model):
     # Export-related fields
     export_status = models.CharField(max_length=20, choices=ExportStatus.choices, default=ExportStatus.NONE)
     export_file = models.FileField(
-        upload_to=f"exports/{id}/", null=True, blank=True, help_text="The path to the generated ZIP export file."
+        upload_to=case_export_upload_to, null=True, blank=True, help_text="The path to the generated ZIP export file."
     )
     export_task_id = models.CharField(max_length=255, null=True, blank=True)
 

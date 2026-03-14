@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import zipfile
+from html import escape as html_escape
 
 import inflect
 from django.core.files.base import ContentFile
@@ -256,21 +257,36 @@ def _generate_pdf_from_document(document, mode="disclosure"):
 
     redactions = document.redactions.filter(is_accepted=True).select_related("context")
 
-    sorted_redactions = sorted(redactions, key=lambda r: r.start_char, reverse=True)
+    sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
+
+    # Build HTML by escaping plain text segments and inserting redaction spans verbatim.
+    # This prevents special characters in the source document (<, >, &) from being
+    # interpreted as HTML by WeasyPrint.
+    html_parts = []
+    prev_end = 0
 
     for r in sorted_redactions:
+        if r.start_char < prev_end:
+            continue
+
+        html_parts.append(html_escape(text[prev_end : r.start_char]))
+
         if mode == "disclosure":
-            block_text = "█" * len(r.text)
-            replacement_text = block_text
             if hasattr(r, "context"):
-                replacement = f'<span class="redaction disclosure-context">[{r.context.text}]</span>'
+                part = f'<span class="redaction disclosure-context">[{html_escape(r.context.text)}]</span>'
             else:
-                replacement = f'<span class="redaction">{replacement_text}</span>'
+                block_text = "█" * len(r.text)
+                part = f'<span class="redaction">{block_text}</span>'
         else:
-            replacement = f'<span class="redaction type-{r.redaction_type}">{r.text}</span>'
+            part = f'<span class="redaction type-{r.redaction_type}">{html_escape(r.text)}</span>'
             if hasattr(r, "context"):
-                replacement += f'<span class="internal-context-note">[Context: {r.context.text}]</span>'
-        text = text[: r.start_char] + replacement + text[r.end_char :]
+                part += f'<span class="internal-context-note">[Context: {html_escape(r.context.text)}]</span>'
+
+        html_parts.append(part)
+        prev_end = r.end_char
+
+    html_parts.append(html_escape(text[prev_end:]))
+    body_content = "".join(html_parts)
 
     # Note: table HTML replacement is not done here because redaction
     # substitutions above change character positions, invalidating ner_start/ner_end.
@@ -279,9 +295,9 @@ def _generate_pdf_from_document(document, mode="disclosure"):
     html_string = f"""
     <!DOCTYPE html>
     <html>
-    <head><title>{document.filename}</title></head>
+    <head><title>{html_escape(document.filename or "")}</title></head>
     <body style="font-family: Calibri, sans-serif; white-space: pre-wrap; word-wrap: break-word;">
-    {text}
+    {body_content}
     </body>
     </html>
     """
