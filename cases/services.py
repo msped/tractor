@@ -295,7 +295,7 @@ def _generate_pdf_from_document(document, mode="disclosure"):
     html_string = f"""
     <!DOCTYPE html>
     <html>
-    <head><title>{html_escape(document.filename)}</title></head>
+    <head><title>{html_escape(document.filename or "")}</title></head>
     <body style="font-family: Calibri, sans-serif; white-space: pre-wrap; word-wrap: break-word;">
     {body_content}
     </body>
