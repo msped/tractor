@@ -245,67 +245,181 @@ def find_and_flag_matching_text_in_case(redaction_id):
                 document.save(update_fields=["status"])
 
 
+def _apply_redactions_to_segment(full_text, start, end, sorted_redactions, mode):
+    """
+    Apply accepted redactions to a slice of full_text[start:end].
+    Returns an HTML string with redaction spans inserted.
+    """
+    parts = []
+    prev = start
+
+    for r in sorted_redactions:
+        if r.end_char <= start or r.start_char >= end:
+            continue
+
+        r_start = max(r.start_char, start)
+        r_end = min(r.end_char, end)
+
+        if r_start < prev:
+            continue
+
+        parts.append(html_escape(full_text[prev:r_start]))
+
+        # Use the clipped portion within this segment, not r.text, so that cross-cell
+        # redactions don't bleed the full text into both cells.
+        clipped_text = full_text[r_start:r_end]
+        is_redaction_start = r_start == r.start_char
+
+        if mode == "disclosure":
+            if is_redaction_start and hasattr(r, "context"):
+                part = f'<span class="redaction disclosure-context">[{html_escape(r.context.text)}]</span>'
+            else:
+                block_text = "█" * len(clipped_text)
+                part = f'<span class="redaction">{block_text}</span>'
+        else:
+            part = f'<span class="redaction type-{r.redaction_type}">{html_escape(clipped_text)}</span>'
+            if is_redaction_start and hasattr(r, "context"):
+                part += f'<span class="internal-context-note">[Context: {html_escape(r.context.text)}]</span>'
+
+        parts.append(part)
+        prev = r_end
+
+    parts.append(html_escape(full_text[prev:end]))
+    return "".join(parts)
+
+
+def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode):
+    """
+    Render a table as an HTML <table> with redactions applied within each cell.
+    Falls back to escaped plain text if no cell data is available.
+    """
+    cells = table_data.get("cells", [])
+
+    if not cells:
+        return html_escape(table_data.get("text", ""))
+
+    col_widths = table_data.get("colWidths", [])
+    has_merge_info = any("isMergedContinuation" in c for c in cells)
+
+    rows_dict = {}
+    for cell in cells:
+        row_idx = cell["row"]
+        if row_idx not in rows_dict:
+            rows_dict[row_idx] = {}
+        rows_dict[row_idx][cell["col"]] = cell
+
+    # For documents processed before merge detection was added, apply a heuristic:
+    # adjacent cells in the same row with identical non-empty text are likely merged.
+    if not has_merge_info:
+        for row_cells in rows_dict.values():
+            prev_cell = None
+            for col_idx in sorted(row_cells.keys()):
+                cell = row_cells[col_idx]
+                cell_text = cell["text"].strip()
+                prev_text = prev_cell["text"].strip() if prev_cell is not None else None
+                if prev_cell is not None and cell_text and cell_text == prev_text:
+                    cell["isMergedContinuation"] = True
+                    prev_cell["colspan"] = prev_cell.get("colspan", 1) + 1
+                else:
+                    cell.setdefault("isMergedContinuation", False)
+                    cell.setdefault("colspan", 1)
+                    cell.setdefault("rowspan", 1)
+                    prev_cell = cell
+    else:
+        for cell in cells:
+            cell.setdefault("colspan", 1)
+            cell.setdefault("rowspan", 1)
+
+    # Derive equal fallback widths from physical column count (including merge cols)
+    if not col_widths:
+        num_cols = max((cell["col"] for cell in cells), default=0) + 1
+        col_widths = [round(100 / num_cols, 2)] * num_cols
+
+    table_html = '<table style="border-collapse: collapse; width: 100%; margin: 1em 0; table-layout: fixed;">'
+    table_html += "<colgroup>"
+    for w in col_widths:
+        table_html += f'<col style="width: {w}%;">' if w is not None else "<col>"
+    table_html += "</colgroup>"
+
+    for row_idx in sorted(rows_dict.keys()):
+        row_cells = rows_dict[row_idx]
+        table_html += "<tr>"
+        for col_idx in sorted(row_cells.keys()):
+            cell = row_cells[col_idx]
+            if cell.get("isMergedContinuation", False):
+                continue
+            colspan = cell.get("colspan", 1)
+            rowspan = cell.get("rowspan", 1)
+            cell_style = cell.get("style", "padding: 6px 8px;")
+            cell_content = _apply_redactions_to_segment(full_text, cell["start"], cell["end"], sorted_redactions, mode)
+            span_attrs = ""
+            if colspan > 1:
+                span_attrs += f' colspan="{colspan}"'
+            if rowspan > 1:
+                span_attrs += f' rowspan="{rowspan}"'
+            table_html += f'<td{span_attrs} style="{cell_style}">{cell_content}</td>'
+        table_html += "</tr>"
+
+    table_html += "</table>"
+    return table_html
+
+
 def _generate_pdf_from_document(document, mode="disclosure"):
     """
     Generates a PDF for a single document.
     mode: 'disclosure' (black boxes) or 'redacted' (color highlights)
-    Table placeholders are replaced with HTML from extracted_tables.
+    DOCX tables are rendered as HTML tables with redactions applied per-cell.
     """
     text = document.extracted_text
     if not text:
         return None
 
     redactions = document.redactions.filter(is_accepted=True).select_related("context")
-
     sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
 
-    # Build HTML by escaping plain text segments and inserting redaction spans verbatim.
-    # This prevents special characters in the source document (<, >, &) from being
-    # interpreted as HTML by WeasyPrint.
+    tables = document.extracted_tables or []
+    sorted_tables = sorted(tables, key=lambda t: t["ner_start"])
+
+    # Split the document into table regions and plain text regions, rendering each
+    # appropriately. Table cells are rendered as <td> elements with redactions applied
+    # within the cell bounds. Plain text segments use html_escape to prevent the
+    # document's own <, >, & characters being interpreted as HTML.
     html_parts = []
-    prev_end = 0
+    prev_pos = 0
 
-    for r in sorted_redactions:
-        if r.start_char < prev_end:
-            continue
+    for table in sorted_tables:
+        ner_start = table["ner_start"]
+        ner_end = table["ner_end"]
 
-        html_parts.append(html_escape(text[prev_end : r.start_char]))
+        if prev_pos < ner_start:
+            segment = _apply_redactions_to_segment(text, prev_pos, ner_start, sorted_redactions, mode)
+            html_parts.append(f'<div class="text-block">{segment}</div>')
 
-        if mode == "disclosure":
-            if hasattr(r, "context"):
-                part = f'<span class="redaction disclosure-context">[{html_escape(r.context.text)}]</span>'
-            else:
-                block_text = "█" * len(r.text)
-                part = f'<span class="redaction">{block_text}</span>'
-        else:
-            part = f'<span class="redaction type-{r.redaction_type}">{html_escape(r.text)}</span>'
-            if hasattr(r, "context"):
-                part += f'<span class="internal-context-note">[Context: {html_escape(r.context.text)}]</span>'
+        html_parts.append(_render_table_with_redactions(table, text, sorted_redactions, mode))
+        prev_pos = ner_end + 1  # +1 to skip the newline separator after the table
 
-        html_parts.append(part)
-        prev_end = r.end_char
+    if prev_pos < len(text):
+        segment = _apply_redactions_to_segment(text, prev_pos, len(text), sorted_redactions, mode)
+        html_parts.append(f'<div class="text-block">{segment}</div>')
 
-    html_parts.append(html_escape(text[prev_end:]))
     body_content = "".join(html_parts)
-
-    # Note: table HTML replacement is not done here because redaction
-    # substitutions above change character positions, invalidating ner_start/ner_end.
-    # Tables render as tab-separated text in the PDF, which is functional.
 
     html_string = f"""
     <!DOCTYPE html>
     <html>
     <head><title>{html_escape(document.filename or "")}</title></head>
-    <body style="font-family: Calibri, sans-serif; white-space: pre-wrap; word-wrap: break-word;">
+    <body style="font-family: Calibri, sans-serif;">
     {body_content}
     </body>
     </html>
     """
 
     css_string = """
+    @page { size: A4; margin: 2cm; }
     body { line-height: 1.4; }
-    table { border-collapse: collapse; width: 100%; margin: 1em 0; white-space: normal; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    .text-block { white-space: pre-wrap; word-wrap: break-word; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    td { padding: 4px 6px; text-align: left; white-space: normal; overflow-wrap: break-word; word-wrap: break-word; vertical-align: top; }
     th { background-color: #f2f2f2; font-weight: bold; }
     .redaction { background-color: black; color: black; }
     .disclosure-context { background-color: initial; color: initial; font-style: italic; }
