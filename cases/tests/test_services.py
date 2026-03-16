@@ -132,9 +132,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
     @patch("cases.services.extract_entities_from_text")
-    def test_process_document_extraction_fails(
-        self, mock_extract_entities, mock_gliner_manager, mock_spancat_manager
-    ):
+    def test_process_document_extraction_fails(self, mock_extract_entities, mock_gliner_manager, mock_spancat_manager):
         """Test document processing when text extraction returns nothing."""
         mock_extract_entities.return_value = (None, [], [], None)
         mock_gliner_manager.get_instance.return_value = MagicMock()
