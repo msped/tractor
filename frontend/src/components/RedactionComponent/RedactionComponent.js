@@ -98,6 +98,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, []);
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
+        setScrollToId(null);
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId, { is_accepted: true },
@@ -112,6 +113,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, [session?.access_token]);
 
     const handleBulkAccept = useCallback(async (ids) => {
+        setScrollToId(null);
         try {
             const updatedRedactions = await bulkUpdateRedactions(
                 document.id, ids, true, null, session?.access_token
@@ -126,6 +128,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, [document.id, session?.access_token]);
 
     const handleRejectAsDisclosable = useCallback(async (ids) => {
+        setScrollToId(null);
         const DISCLOSABLE = 'Disclosable';
         try {
             if (ids.length === 1) {
@@ -148,6 +151,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, [document.id, session?.access_token]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
+        setScrollToId(null);
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId,
@@ -167,6 +171,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, [session?.access_token]);
 
     const handleBulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
+        setScrollToId(null);
         try {
             const updates = await Promise.all(
                 ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
@@ -194,6 +199,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, []);
 
     const handleRejectConfirm = useCallback(async (redactionId, reason) => {
+        setScrollToId(null);
         if (bulkRejectIds.length > 0) {
             try {
                 const updatedRedactions = await bulkUpdateRedactions(
