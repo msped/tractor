@@ -604,6 +604,78 @@ describe('<RedactionComponent />', () => {
         });
     });
 
+    context('Manual Redaction Overlap Handling', () => {
+        beforeEach(() => {
+            mountRedactionComponent();
+        });
+
+        it('does not create a duplicate when selecting text already redacted with the same type', () => {
+            // r4: DS_INFO, accepted, chars 10–22 — first highlighted span in the viewer
+            cy.get('[data-testid="document-viewer"] span').first().then($span => {
+                const textNode = $span[0].firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, 4);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            // Popover opens — select DS_INFO (same type as r4)
+            cy.get('[role="presentation"]').should('be.visible');
+            cy.get('[role="combobox"]').click();
+            cy.get('[role="listbox"]').contains('li', 'Data Subject Information').click();
+            cy.contains('button', 'Redact').click();
+
+            cy.contains('This text is already redacted with this classification.').should('be.visible');
+            cy.get('@createRedaction.all').should('have.length', 0);
+        });
+
+        it('updates the existing redaction type when selecting already-redacted text with a different type', () => {
+            // r4: DS_INFO, accepted, chars 10–22 — first highlighted span in the viewer
+            cy.get('[data-testid="document-viewer"] span').first().then($span => {
+                const textNode = $span[0].firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, 4);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            // Popover opens — default type is PII (different from r4's DS_INFO)
+            cy.get('[role="presentation"]').should('be.visible');
+            cy.contains('button', 'Redact').click();
+
+            cy.wait('@updateRedaction').its('request.body').should('deep.include', {
+                redaction_type: 'PII',
+                is_accepted: true,
+                is_suggestion: false,
+            });
+            cy.contains('Redaction classification updated.').should('be.visible');
+            cy.get('@createRedaction.all').should('have.length', 0);
+        });
+
+        it('creates a new redaction for a selection with no overlap', () => {
+            // "This" (chars 0–4) — not covered by any existing redaction
+            cy.get('[data-testid="document-viewer"]').then($paper => {
+                const textNode = $paper[0].firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, 4);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            cy.get('[role="presentation"]').should('be.visible');
+            cy.contains('button', 'Redact').click();
+
+            cy.wait('@createRedaction');
+            cy.contains('Redaction created successfully.').should('be.visible');
+        });
+    });
+
     context('Error Handling', () => {
         it('shows error toast when accept fails', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedUpdate');
