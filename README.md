@@ -43,9 +43,9 @@ The simplist hosting solution is to use [Docker](https://www.docker.com/) to hos
 
 The service uses a three-model hybrid pipeline to perform Named Entity Recognition (NER) on user-submitted text:
 
-- **SpanCat (spaCy)** — a custom trained model that identifies both **Operational Data** and **Third-Party PII** based on your organisation's accepted redactions. This takes highest priority in the pipeline. If no model has been trained yet, the system falls back to the other two models.
-- **GLiNER** — a zero-shot NER model downloaded from HuggingFace. It identifies **Third-Party PII** such as names, organisations, addresses, and dates of birth without requiring training data.
-- **Microsoft Presidio** — a rule-based PII detection framework. It identifies structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, NI numbers) and structured **Operational Data** (crime reference numbers, collar numbers) using pattern recognisers.
+* **SpanCat (spaCy)** — a custom trained model that identifies both **Operational Data** and **Third-Party PII** based on your organisation's accepted redactions. This takes highest priority in the pipeline. If no model has been trained yet, the system falls back to the other two models.
+* **GLiNER** — a zero-shot NER model downloaded from HuggingFace. It identifies **Third-Party PII** such as names, organisations, addresses, and dates of birth without requiring training data.
+* **Microsoft Presidio** — a rule-based PII detection framework. It identifies structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, NI numbers) and structured **Operational Data** (crime reference numbers, collar numbers) using pattern recognisers.
 
 The SpanCat model improves over time as more redactions are accepted and the model is retrained.
 

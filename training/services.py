@@ -57,14 +57,80 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
     Returns (html, cells) where:
     - html: Pre-rendered HTML for fallback
     - cells: List of cell data with text, styling, and character positions for highlighting
+
+    Merged cells (colspan/rowspan) are detected via python-docx _tc element identity.
+    Continuation cells have isMergedContinuation=True; the first occurrence carries
+    colspan/rowspan attributes. Positions are still tracked for all cells to maintain
+    NER text compatibility with stored redaction positions.
     """
     html = '<table style="border-collapse: collapse; width: 100%;">'
     cells = []
     position = table_start_position
 
+    # Pre-compute horizontal colspan: count how many times each _tc appears per row.
+    # Use lxml elements directly as dict keys — their __hash__/__eq__ are based on the
+    # underlying C-level node pointer, which is stable even if Python proxies are GC'd.
+    row_tc_colspan = []
+    for row in table.rows:
+        tc_count = {}
+        for cell in row.cells:
+            tc = cell._tc
+            tc_count[tc] = tc_count.get(tc, 0) + 1
+        row_tc_colspan.append(tc_count)
+
+    # Pre-compute vertical rowspan: count distinct rows each _tc appears in
+    tc_first_row = {}
+    tc_rowspan = {}
+    for row_idx, row in enumerate(table.rows):
+        seen_in_row = set()
+        for cell in row.cells:
+            tc = cell._tc
+            if tc not in seen_in_row:
+                seen_in_row.add(tc)
+                if tc not in tc_first_row:
+                    tc_first_row[tc] = row_idx
+                    tc_rowspan[tc] = 1
+                else:
+                    tc_rowspan[tc] += 1
+
     for row_idx, row in enumerate(table.rows):
         html += "<tr>"
+        seen_tc_in_row = set()
+
         for col_idx, cell in enumerate(row.cells):
+            tc = cell._tc
+            is_h_continuation = tc in seen_tc_in_row
+            is_v_continuation = tc_first_row.get(tc) != row_idx
+            is_continuation = is_h_continuation or is_v_continuation
+            seen_tc_in_row.add(tc)
+
+            colspan = row_tc_colspan[row_idx].get(tc, 1)
+            rowspan = tc_rowspan.get(tc, 1)
+
+            # Always extract text and advance position to keep NER offsets valid
+            cell_text = cell.text.replace("\n", " ")
+            cell_start = position
+            cell_end = position + len(cell_text)
+            position = cell_end + 1
+
+            if is_continuation:
+                cells.append(
+                    {
+                        "row": row_idx,
+                        "col": col_idx,
+                        "text": cell_text,
+                        "start": cell_start,
+                        "end": cell_end,
+                        "style": "",
+                        "bgColor": None,
+                        "runs": [],
+                        "colspan": colspan,
+                        "rowspan": rowspan,
+                        "isMergedContinuation": True,
+                    }
+                )
+                continue
+
             # Get cell shading (background color)
             tc_pr = cell._tc.get_or_add_tcPr()
             shading = tc_pr.find(qn("w:shd"))
@@ -78,9 +144,6 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
             cell_style = "border: 1px solid #000; padding: 6px 8px;" if has_borders else "padding: 6px 8px;"
             if bg_color:
                 cell_style += f" background-color: {bg_color};"
-
-            # Get cell text (plain, for NER matching)
-            cell_text = cell.text.replace("\n", " ")
 
             # Get text with run formatting for HTML
             cell_html = ""
@@ -106,25 +169,29 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
                         cell_html += text
                 cell_html += "<br>"
 
-            # Store cell data with position info
-            cell_end = position + len(cell_text)
             cells.append(
                 {
                     "row": row_idx,
                     "col": col_idx,
                     "text": cell_text,
-                    "start": position,
+                    "start": cell_start,
                     "end": cell_end,
                     "style": cell_style,
                     "bgColor": bg_color,
                     "runs": text_runs,
+                    "colspan": colspan,
+                    "rowspan": rowspan,
+                    "isMergedContinuation": False,
                 }
             )
 
-            # Move position: +1 for tab separator (or newline at end of row)
-            position = cell_end + 1
+            span_attrs = ""
+            if colspan > 1:
+                span_attrs += f' colspan="{colspan}"'
+            if rowspan > 1:
+                span_attrs += f' rowspan="{rowspan}"'
+            html += f'<td{span_attrs} style="{cell_style}">{cell_html.rstrip("<br>")}</td>'
 
-            html += f'<td style="{cell_style}">{cell_html.rstrip("<br>")}</td>'
         html += "</tr>"
 
     html += "</table>"
@@ -205,6 +272,16 @@ def extract_document_structure(path):
                     # Extract styled HTML and cell data with positions
                     html, cells = extract_table_with_styling(tbl, position, has_borders)
 
+                    # Extract column widths from DOCX XML as percentages of total table width
+                    col_widths = []
+                    try:
+                        raw_widths = [col.width for col in tbl.columns]
+                        total = sum(w for w in raw_widths if w)
+                        if total:
+                            col_widths = [round(w / total * 100, 2) if w else None for w in raw_widths]
+                    except Exception:
+                        pass
+
                     tables_data.append(
                         {
                             "id": table_index,
@@ -212,6 +289,7 @@ def extract_document_structure(path):
                             "text": table_text,
                             "cells": cells,
                             "hasBorders": has_borders,
+                            "colWidths": col_widths,
                             "ner_start": position,
                             "ner_end": position + len(table_text),
                         }
