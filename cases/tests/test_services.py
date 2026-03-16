@@ -55,14 +55,19 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
 
     @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
-    def test_process_document_and_create_redactions_success(self, mock_spacy_manager, mock_extract_entities):
+    def test_process_document_and_create_redactions_success(
+        self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
+    ):
         """Test successful processing of a document and
         creation of redactions with correct redaction types from entity labels."""
-        # Mock the GLiNERModelManager
-        mock_manager_instance = MagicMock()
-        mock_manager_instance.get_model_entry.return_value = self.spacy_model
-        mock_spacy_manager.get_instance.return_value = mock_manager_instance
+        mock_gliner_instance = MagicMock()
+        mock_gliner_manager.get_instance.return_value = mock_gliner_instance
+
+        mock_spancat_instance = MagicMock()
+        mock_spancat_instance.get_model_entry.return_value = self.spacy_model
+        mock_spancat_manager.get_instance.return_value = mock_spancat_instance
 
         # Mock the entity extraction with different entity labels
         extracted_text = "This text contains PII like a name and operational data."
@@ -101,12 +106,14 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         mock_extract_entities.assert_called_once_with(self.document.original_file.path)
 
     @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
-    def test_process_document_unknown_label_uses_fallback(self, mock_spacy_manager, mock_extract_entities):
+    def test_process_document_unknown_label_uses_fallback(
+        self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
+    ):
         """Test that unknown entity labels fall back to THIRD_PARTY_PII."""
-        mock_manager_instance = MagicMock()
-        mock_manager_instance.get_model_entry.return_value = self.spacy_model
-        mock_spacy_manager.get_instance.return_value = mock_manager_instance
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(get_model_entry=MagicMock(return_value=None))
 
         extracted_text = "This has an unknown entity."
         suggestions = [
@@ -122,15 +129,14 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         redaction = self.document.redactions.first()
         self.assertEqual(redaction.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII)
 
+    @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
     @patch("cases.services.extract_entities_from_text")
-    def test_process_document_extraction_fails(self, mock_extract_entities, mock_spacy_manager):
+    def test_process_document_extraction_fails(self, mock_extract_entities, mock_gliner_manager, mock_spancat_manager):
         """Test document processing when text extraction returns nothing."""
         mock_extract_entities.return_value = (None, [], [], None)
-        # Mock the GLiNERModelManager to prevent it from trying to load a model
-        mock_manager_instance = MagicMock()
-        mock_manager_instance.get_model_entry.return_value = self.spacy_model
-        mock_spacy_manager.get_instance.return_value = mock_manager_instance
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(get_model_entry=MagicMock(return_value=None))
 
         process_document_and_create_redactions(self.document.id)
 
@@ -377,12 +383,14 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(redactions[1].text, "parties")
 
     @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
-    def test_process_document_filters_data_subject_entities(self, mock_spacy_manager, mock_extract_entities):
+    def test_process_document_filters_data_subject_entities(
+        self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
+    ):
         """Test that entities matching the data subject name/DOB are excluded."""
-        mock_manager_instance = MagicMock()
-        mock_manager_instance.get_model_entry.return_value = self.spacy_model
-        mock_spacy_manager.get_instance.return_value = mock_manager_instance
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(get_model_entry=MagicMock(return_value=None))
 
         extracted_text = "John Doe lives in London. DOB: 01/01/1990."
         suggestions = [
