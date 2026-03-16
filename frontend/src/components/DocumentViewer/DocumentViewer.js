@@ -345,11 +345,16 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                 }
             });
             if (pendingRedaction) {
-                marksToRender.push({
-                    ...pendingRedaction,
-                    id: 'pending-redaction',
-                    mark_type: 'pending',
-                });
+                const overlapsExisting = marksToRender.some(
+                    m => m.start_char < pendingRedaction.end_char && m.end_char > pendingRedaction.start_char
+                );
+                if (!overlapsExisting) {
+                    marksToRender.push({
+                        ...pendingRedaction,
+                        id: 'pending-redaction',
+                        mark_type: 'pending',
+                    });
+                }
             }
         } else {
             marksToRender = redactions.map(r => ({ ...r, mark_type: 'accepted' }));
@@ -543,6 +548,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                 height: '100%',
             }}
             ref={viewerRef}
+            data-testid="document-viewer"
             // Only attach mouseup listener if onTextSelect is provided (i.e., in review mode)
             onMouseUp={onTextSelect ? handleMouseUp : undefined}
         >
