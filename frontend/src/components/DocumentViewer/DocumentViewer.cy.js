@@ -120,32 +120,6 @@ describe('<DocumentViewer />', () => {
             cy.contains('span', 'This')
                 .should('have.css', 'background-color', 'rgba(255, 214, 10, 0.6)');
         });
-
-        it('suppresses the pending redaction highlight when it overlaps an existing mark', () => {
-            const overlappingPending = {
-                start_char: 19, // overlaps with redaction-1 (PII, accepted, 19–22)
-                end_char: 22,
-                text: 'PII',
-            };
-            cy.mount(
-                <DocumentViewer
-                    text={text}
-                    redactions={redactions}
-                    pendingRedaction={overlappingPending}
-                />
-            );
-
-            // Existing accepted mark still shown with its colour
-            cy.contains('span', 'PII').should('have.css', 'background-color', 'rgba(46, 204, 113, 0.7)');
-
-            // No yellow pending highlight should exist (suppressed due to overlap)
-            cy.document().then(doc => {
-                const yellowSpans = [...doc.querySelectorAll('span')].filter(
-                    s => getComputedStyle(s).backgroundColor === 'rgba(255, 214, 10, 0.6)'
-                );
-                expect(yellowSpans).to.have.length(0);
-            });
-        });
     });
 
     context('Final Mode', () => {

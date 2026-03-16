@@ -291,38 +291,6 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
     const handleCreateManualRedaction = useCallback(async (redactionType) => {
         if (!newSelection) return;
-
-        // Find any existing redactions that overlap with the selection
-        const overlapping = redactions.filter(r =>
-            r.start_char < newSelection.end_char && r.end_char > newSelection.start_char
-        );
-
-        if (overlapping.length > 0) {
-            const sameType = overlapping.every(r => r.redaction_type === redactionType);
-            if (sameType) {
-                // Already redacted with this classification — don't duplicate
-                handleCloseManualRedactionPopover();
-                toast("This text is already redacted with this classification.");
-                return;
-            }
-            // Different classification — overwrite the existing redaction(s)
-            try {
-                const updates = await Promise.all(
-                    overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
-                );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updates.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
-                handleCloseManualRedactionPopover();
-                toast.success("Redaction classification updated.");
-            } catch (error) {
-                handleCloseManualRedactionPopover();
-                toast.error("Failed to update redaction. Please try again.");
-            }
-            return;
-        }
-
         const newRedaction = {
             ...newSelection,
             document: document.id,
@@ -335,12 +303,13 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
             toast.success("Redaction created successfully.");
+
         } catch (error) {
             handleCloseManualRedactionPopover();
             toast.error("Failed to create redaction. Please try again.");
         }
 
-    }, [newSelection, document.id, handleCloseManualRedactionPopover, session?.access_token, redactions]);
+    }, [newSelection, document.id, handleCloseManualRedactionPopover, session?.access_token]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);
