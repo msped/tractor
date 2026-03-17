@@ -16,9 +16,12 @@ import {
     TableBody,
     TableRow,
     TableCell,
+    IconButton,
 } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useSession } from 'next-auth/react';
-import { getModels, setActiveModel } from '@/services/trainingService';
+import { getModels, setActiveModel, deleteModel } from '@/services/trainingService';
+import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
 
 const formatScore = (score) => {
@@ -35,6 +38,7 @@ export const ModelManagementCard = () => {
         ([key, token]) => getModels(token)
     );
     const [isSubmitting, setIsSubmitting] = useState(null);
+    const [confirmDeleteModel, setConfirmDeleteModel] = useState(null);
 
     const handleSetActive = async (modelId) => {
         setIsSubmitting(modelId);
@@ -50,7 +54,32 @@ export const ModelManagementCard = () => {
         }
     };
 
+    const handleDeleteConfirm = async () => {
+        const modelId = confirmDeleteModel.id;
+        setConfirmDeleteModel(null);
+        setIsSubmitting(modelId);
+        try {
+            await deleteModel(modelId, session?.access_token);
+            toast.success('Model deleted successfully.');
+            await mutate();
+        } catch (e) {
+            toast.error(e.message || 'Failed to delete model.');
+        } finally {
+            setIsSubmitting(null);
+        }
+    };
+
     return (
+        <>
+        <ConfirmationDialog
+            open={!!confirmDeleteModel}
+            onClose={() => setConfirmDeleteModel(null)}
+            onConfirm={handleDeleteConfirm}
+            title="Delete Model"
+            description={`Are you sure you want to delete "${confirmDeleteModel?.name}"? This will also remove the model files from disk and cannot be undone.`}
+            confirmLabel="Delete"
+            confirmColor="error"
+        />
         <Card>
             <CardContent>
                 <Typography variant="h5" component="h2" gutterBottom>
@@ -88,14 +117,25 @@ export const ModelManagementCard = () => {
                                         <TableCell>{formatScore(model.recall)}</TableCell>
                                         <TableCell>{formatScore(model.f1_score)}</TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="contained"
-                                                onClick={() => handleSetActive(model.id)}
-                                                disabled={model.is_active || isSubmitting !== null || !session?.access_token}
-                                                size="small"
-                                            >
-                                                {isSubmitting === model.id ? <CircularProgress color="inherit" size={20} /> : 'Set Active'}
-                                            </Button>
+                                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                                <Button
+                                                    variant="contained"
+                                                    onClick={() => handleSetActive(model.id)}
+                                                    disabled={model.is_active || isSubmitting !== null || !session?.access_token}
+                                                    size="small"
+                                                >
+                                                    {isSubmitting === model.id ? <CircularProgress color="inherit" size={20} /> : 'Set Active'}
+                                                </Button>
+                                                <IconButton
+                                                    aria-label="delete model"
+                                                    color="error"
+                                                    onClick={() => setConfirmDeleteModel(model)}
+                                                    disabled={isSubmitting !== null || !session?.access_token}
+                                                    size="small"
+                                                >
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </Box>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -107,5 +147,6 @@ export const ModelManagementCard = () => {
                 )}
             </CardContent>
         </Card>
+        </>
     );
 }

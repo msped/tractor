@@ -29,6 +29,20 @@ export const setActiveModel = async (modelId, accessToken) => {
     }
 };
 
+export const deleteModel = async (modelId, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
+
+    try {
+        await apiClient.delete(`/models/${modelId}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+    } catch (error) {
+        console.error("Failed to delete model:", error.response?.data || error.message);
+        const errorMessage = error.response?.data?.detail || "Failed to delete model.";
+        throw new Error(errorMessage);
+    }
+};
+
 export const getTrainingDocs = async (accessToken) => {
     if (!accessToken) throw new Error("Not authenticated");
 
