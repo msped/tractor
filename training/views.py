@@ -32,6 +32,15 @@ class ModelDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = ModelSerializer
     lookup_field = "pk"
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.document_set.exists():
+            return Response(
+                {"detail": "Cannot delete a model that has been used to process documents."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class ModelSetActiveView(APIView):
     """API view to set a model as active."""

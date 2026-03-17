@@ -367,11 +367,36 @@ describe('<ModelManagementCard />', () => {
                 .should('be.disabled');
         });
 
+        it('re-enables delete buttons while one activation is submitting', () => {
+            cy.intercept('POST', '**/models/model-2/set-active', {
+                delay: 1000,
+                statusCode: 200,
+                body: {},
+            }).as('setActive');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v2')
+                .contains('button', 'Set Active')
+                .click();
+
+            cy.contains('tr', 'Redaction Model v3')
+                .find('button[aria-label="delete model"]')
+                .should('be.disabled');
+        });
+
         it('re-enables buttons after activation completes', () => {
             const updatedModels = mockModels.map(m => ({
                 ...m,
                 is_active: m.id === 'model-2',
             }));
+
 
             cy.intercept('GET', '**/models', { body: mockModels }).as('getModelsInitial');
 
@@ -405,6 +430,117 @@ describe('<ModelManagementCard />', () => {
             cy.contains('tr', 'Redaction Model v3')
                 .contains('button', 'Set Active')
                 .should('not.be.disabled');
+        });
+    });
+
+    context('Delete Model', () => {
+        beforeEach(() => {
+            cy.intercept('GET', '**/models', { body: mockModels }).as('getModels');
+        });
+
+        it('shows confirmation dialog when delete icon is clicked', () => {
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v2')
+                .find('button[aria-label="delete model"]')
+                .click();
+
+            cy.contains('Delete Model').should('be.visible');
+            cy.contains('"Redaction Model v2"').should('be.visible');
+            cy.contains('button', 'Delete').should('be.visible');
+            cy.contains('button', 'Cancel').should('be.visible');
+        });
+
+        it('closes the dialog without calling the API when Cancel is clicked', () => {
+            cy.intercept('DELETE', '**/models/**').as('deleteRequest');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v2')
+                .find('button[aria-label="delete model"]')
+                .click();
+
+            cy.contains('button', 'Cancel').click();
+            cy.contains('Delete Model').should('not.exist');
+            cy.get('@deleteRequest.all').should('have.length', 0);
+        });
+
+        it('calls delete API and shows success toast on confirm', () => {
+            cy.intercept('DELETE', '**/models/model-2', { statusCode: 204 }).as('deleteRequest');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v2')
+                .find('button[aria-label="delete model"]')
+                .click();
+
+            cy.get('[role="dialog"]').contains('button', 'Delete').click();
+
+            cy.wait('@deleteRequest');
+            cy.contains('Model deleted successfully.').should('be.visible');
+        });
+
+        it('shows error toast when model is in use (409)', () => {
+            cy.intercept('DELETE', '**/models/model-2', {
+                statusCode: 409,
+                body: { detail: 'Cannot delete a model that has been used to process documents.' },
+            }).as('deleteRequest');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v2')
+                .find('button[aria-label="delete model"]')
+                .click();
+
+            cy.get('[role="dialog"]').contains('button', 'Delete').click();
+
+            cy.wait('@deleteRequest');
+            cy.contains('Cannot delete a model that has been used to process documents.').should('be.visible');
+        });
+
+        it('shows error toast when delete fails', () => {
+            cy.intercept('DELETE', '**/models/model-2', { statusCode: 500 }).as('deleteRequest');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('tr', 'Redaction Model v2')
+                .find('button[aria-label="delete model"]')
+                .click();
+
+            cy.get('[role="dialog"]').contains('button', 'Delete').click();
+
+            cy.wait('@deleteRequest');
+            cy.contains('Failed to delete model.').should('be.visible');
         });
     });
 });

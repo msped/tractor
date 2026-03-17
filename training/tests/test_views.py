@@ -9,6 +9,8 @@ from django_q.models import Schedule
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase, override_settings
 
+from cases.models import Case, Document
+
 from ..models import Model, TrainingDocument
 from .base import NetworkBlockerMixin
 
@@ -81,12 +83,31 @@ class ModelViewTests(BaseTrainingAPITestCase):
         self.assertEqual(Model.objects.count(), 2)
 
     def test_delete_model_as_admin(self):
-        """Admin can delete a model entry."""
+        """Admin can delete a model entry not referenced by any documents."""
         self.client.force_authenticate(user=self.admin_user)
         url = reverse("model-detail", kwargs={"pk": self.model.pk})
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Model.objects.count(), 0)
+
+    def test_delete_model_blocked_when_used_by_documents(self):
+        """Admin cannot delete a model that has been used to process documents."""
+        case = Case.objects.create(
+            case_reference="T001",
+            data_subject_name="Test Subject",
+            created_by=self.admin_user,
+        )
+        Document.objects.create(
+            case=case,
+            original_file=SimpleUploadedFile("doc.docx", b"content"),
+            spacy_model=self.model,
+        )
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse("model-detail", kwargs={"pk": self.model.pk})
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("Cannot delete", response.data["detail"])
+        self.assertEqual(Model.objects.count(), 1)
 
     @patch("training.views.SpanCatModelManager")
     def test_set_active_model_as_admin(self, mock_spancat_manager):

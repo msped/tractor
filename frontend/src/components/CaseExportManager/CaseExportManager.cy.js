@@ -27,7 +27,36 @@ describe('<CaseExportManager />', () => {
     };
 
     context('when status is NONE', () => {
-        it('renders the generate button and calls the API on click', () => {
+        it('shows a confirmation dialog when Generate Disclosure Package is clicked', () => {
+            const testCaseData = { ...baseCaseData, documents: [{ id: 'doc-1', status: 'Completed' }] };
+            cy.fullMount(
+                <CaseExportManager caseData={testCaseData} onUpdate={() => {}} />,
+                mountOptions
+            );
+
+            cy.contains('button', 'Generate Disclosure Package').should('be.visible').and('be.enabled').click();
+            cy.contains('Generate Disclosure Package').should('be.visible');
+            cy.contains('This will lock the case once complete.').should('be.visible');
+            cy.contains('button', 'Generate').should('be.visible');
+            cy.contains('button', 'Cancel').should('be.visible');
+        });
+
+        it('does not call the API when confirmation is cancelled', () => {
+            cy.intercept('POST', `**/cases/${baseCaseData.id}/export`).as('postExport');
+            const testCaseData = { ...baseCaseData, documents: [{ id: 'doc-1', status: 'Completed' }] };
+            cy.fullMount(
+                <CaseExportManager caseData={testCaseData} onUpdate={() => {}} />,
+                mountOptions
+            );
+
+            cy.contains('button', 'Generate Disclosure Package').click();
+            cy.contains('button', 'Cancel').click();
+
+            cy.get('[role="dialog"]').should('not.exist');
+            cy.get('@postExport.all').should('have.length', 0);
+        });
+
+        it('calls the API and onUpdate after confirming', () => {
             const onUpdateSpy = cy.spy().as('onUpdateSpy');
             cy.intercept('POST', `**/cases/${baseCaseData.id}/export`, {
                 statusCode: 200,
@@ -39,9 +68,9 @@ describe('<CaseExportManager />', () => {
                 mountOptions
             );
 
-            cy.contains('button', 'Generate Disclosure Package').should('be.visible').and('be.enabled');
             cy.contains('button', 'Generate Disclosure Package').click();
-            cy.contains('button', 'Generate Disclosure Package').should('be.disabled');
+            cy.get('[role="dialog"]').contains('button', 'Generate').click();
+
             cy.wait('@postExport');
             cy.get('@onUpdateSpy').should('have.been.calledOnce');
         });
@@ -55,6 +84,7 @@ describe('<CaseExportManager />', () => {
             );
 
             cy.contains('button', 'Generate Disclosure Package').click();
+            cy.get('[role="dialog"]').contains('button', 'Generate').click();
             cy.wait('@postExportError');
             cy.contains('Failed to start export process.').should('be.visible');
             cy.contains('button', 'Generate Disclosure Package').should('be.enabled');
@@ -88,12 +118,13 @@ describe('<CaseExportManager />', () => {
     });
 
     context('when status is ERROR', () => {
-        it('renders a retry button that re-triggers the export', () => {
+        it('renders a retry button that opens confirmation before re-triggering the export', () => {
             cy.intercept('POST', `**/cases/${baseCaseData.id}/export`).as('postExport');
             const errorCase = { ...baseCaseData, export_status: 'ERROR', documents: [{ id: 'doc-1', status: 'Completed' }] };
             cy.fullMount(<CaseExportManager caseData={errorCase} />, mountOptions);
 
             cy.contains('button', 'Retry Export').should('be.visible').click();
+            cy.get('[role="dialog"]').contains('button', 'Generate').click();
             cy.wait('@postExport');
         });
     });
