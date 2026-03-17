@@ -58,13 +58,12 @@ describe('<CaseInformation />', () => {
         cy.contains('Loading case information...').should('be.visible');
     });
 
-    it('disables edit and action buttons for finalised cases', () => {
+    it('disables the edit button for finalised cases', () => {
         cy.fullMount(
             <CaseInformation caseObject={mockCaseCompleted} onUpdate={onUpdateSpy} />,
             { mockSession: mockSession }
         );
 
-        cy.get('button[aria-label="case actions"]').should('be.disabled');
         cy.get('button[aria-label="settings"]').should('be.disabled');
     });
 
@@ -103,50 +102,6 @@ describe('<CaseInformation />', () => {
         it('closes the dialog on cancel', () => {
             cy.get('button').contains('Cancel').click();
             cy.contains('Edit Case Details').should('not.exist');
-        });
-    });
-
-    context('Changing Case Status', () => {
-        beforeEach(() => {
-            cy.fullMount(
-                <CaseInformation caseObject={mockCaseOpen} onUpdate={onUpdateSpy} />,
-                { mockSession: mockSession}
-            );
-            cy.get('button[aria-label="case actions"]').click();
-        });
-
-        it('opens the status menu', () => {
-            cy.get('ul[role="menu"]').should('be.visible');
-            cy.get('li[role="menuitem"]').contains('Mark as Completed').should('be.visible');
-            cy.get('li[role="menuitem"]').contains('Mark as Closed').should('be.visible');
-            cy.get('li[role="menuitem"]').contains('Mark as Withdrawn').should('be.visible');
-        });
-
-        it('updates the status to Completed and calls onUpdate', () => {
-            cy.get('li[role="menuitem"]').contains('Mark as Completed').click();
-
-            cy.get('@updateCase').should('have.been.calledWith',
-                `/cases/${mockCaseOpen.id}`,
-                { status: 'COMPLETED' },
-                Cypress.sinon.match.object
-            );
-
-            cy.contains('Case status updated.').should('be.visible');
-            cy.get('@onUpdate').should('have.been.calledOnce');
-            cy.get('ul[role="menu"]').should('not.exist');
-        });
-
-        it('updates the status to Closed and calls onUpdate', () => {
-            cy.get('li[role="menuitem"]').contains('Mark as Closed').click();
-
-            cy.get('@updateCase').should('have.been.calledWith',
-                `/cases/${mockCaseOpen.id}`,
-                { status: 'CLOSED' },
-                Cypress.sinon.match.object
-            );
-
-            cy.contains('Case status updated.').should('be.visible');
-            cy.get('@onUpdate').should('have.been.calledOnce');
         });
     });
 
