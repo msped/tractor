@@ -171,6 +171,33 @@ describe('<CaseDocuments />', () => {
       cy.contains('Failed to upload document(s): Server is on fire').should('be.visible');
     });
 
+    it('shows confirmation dialog when delete is clicked', () => {
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.contains('li', 'document_beta.docx').find('button[aria-label="delete"]').click();
+
+      cy.contains('Delete Document').should('be.visible');
+      cy.contains('"document_beta.docx"').should('be.visible');
+      cy.contains('button', 'Delete').should('be.visible');
+      cy.contains('button', 'Cancel').should('be.visible');
+    });
+
+    it('does not delete when confirmation is cancelled', () => {
+      cy.intercept('DELETE', '/api/cases/documents/*').as('deleteRequest');
+
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.contains('li', 'document_beta.docx').find('button[aria-label="delete"]').click();
+      cy.contains('button', 'Cancel').click();
+
+      cy.contains('Delete Document').should('not.exist');
+      cy.get('@deleteRequest.all').should('have.length', 0);
+    });
+
     it('deletes a document successfully and calls onUpdate', () => {
       cy.intercept('DELETE', '/api/cases/documents/*', { statusCode: 204 }).as('deleteRequest');
       const onUpdate = cy.stub().as('onUpdate');
@@ -179,6 +206,7 @@ describe('<CaseDocuments />', () => {
           mountOpts
       );
       cy.get('li').first().find('button[aria-label="delete"]').click();
+      cy.get('[role="dialog"]').contains('button', 'Delete').click();
 
       cy.wait('@deleteRequest');
       cy.get('@onUpdate').should('have.been.calledOnce');
@@ -187,13 +215,15 @@ describe('<CaseDocuments />', () => {
 
     it('shows delete error toast when service rejects', () => {
       cy.intercept('DELETE', '/api/cases/documents/*', { statusCode: 500 }).as('deleteRequest');
-      
+
       cy.fullMount(
           <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
           mountOpts
       );
       cy.get('li').last().find('button[aria-label="delete"]').click();
+      cy.get('[role="dialog"]').contains('button', 'Delete').click();
 
+      cy.wait('@deleteRequest');
       cy.contains('Failed to delete document. Please try again.').should('be.visible');
     });
 

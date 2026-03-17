@@ -5,17 +5,20 @@ import { Box, Button, CircularProgress } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { createCaseExport } from '@/services/caseService';
 import { useSession } from 'next-auth/react';
+import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
 
 export const CaseExportManager = ({ caseData, onUpdate }) => {
     const { data: session } = useSession();
     const [isProcessing, setIsProcessing] = useState(false);
+    const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const prevExportStatusRef = useRef(caseData.export_status);
 
     const hasIncompleteDocuments = caseData.documents?.some(doc => doc.status !== 'Completed');
     const isButtonDisabled = caseData.documents === undefined ? true : isProcessing || caseData.export_status === 'PROCESSING' || caseData.documents.length === 0 || hasIncompleteDocuments;
 
     const handleGenerateExport = async () => {
+        setConfirmExportOpen(false);
         setIsProcessing(true);
         try {
             await createCaseExport(caseData.id, session.access_token);
@@ -78,19 +81,31 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
                 );
             case 'ERROR':
                 return (
-                    <Button variant="contained" color="error" onClick={handleGenerateExport} disabled={isButtonDisabled}>
+                    <Button variant="contained" color="error" onClick={() => setConfirmExportOpen(true)} disabled={isButtonDisabled}>
                         Retry Export
                     </Button>
                 );
             case 'NONE':
             default:
                 return (
-                    <Button variant="contained" color="primary" onClick={handleGenerateExport} disabled={isButtonDisabled}>
+                    <Button variant="contained" color="primary" onClick={() => setConfirmExportOpen(true)} disabled={isButtonDisabled}>
                         Generate Disclosure Package
                     </Button>
                 );
         }
     };
 
-    return <Box>{renderContent()}</Box>;
+    return (
+        <>
+            <ConfirmationDialog
+                open={confirmExportOpen}
+                onClose={() => setConfirmExportOpen(false)}
+                onConfirm={handleGenerateExport}
+                title="Generate Disclosure Package"
+                description="Are you sure you want to generate the disclosure package? This will lock the case once complete."
+                confirmLabel="Generate"
+            />
+            <Box>{renderContent()}</Box>
+        </>
+    );
 }

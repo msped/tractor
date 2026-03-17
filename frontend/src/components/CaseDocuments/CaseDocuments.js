@@ -27,6 +27,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { uploadDocuments, deleteDocument, resubmitDocument, cancelProcessing } from '@/services/documentService';
 import { DocumentListItem } from '@/components/DocumentListItem';
+import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
 
 
@@ -34,6 +35,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
+    const [pendingDeleteDoc, setPendingDeleteDoc] = useState(null);
     const fileInputRef = useRef(null);
     const { data: session } = useSession();
 
@@ -98,8 +100,10 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         setSelectedFiles(prevFiles => prevFiles.filter(f => f.id !== id));
     };
 
-    const handleDeleteDocument = async (docId) => {
-        if (!caseId) return;
+    const handleDeleteDocument = async () => {
+        if (!caseId || !pendingDeleteDoc) return;
+        const docId = pendingDeleteDoc.id;
+        setPendingDeleteDoc(null);
 
         try {
             await deleteDocument(docId, session?.access_token);
@@ -156,6 +160,15 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
 
     return (
         <>
+            <ConfirmationDialog
+                open={!!pendingDeleteDoc}
+                onClose={() => setPendingDeleteDoc(null)}
+                onConfirm={handleDeleteDocument}
+                title="Delete Document"
+                description={`Are you sure you want to delete "${pendingDeleteDoc?.filename}"? This cannot be undone.`}
+                confirmLabel="Delete"
+                confirmColor="error"
+            />
             <Card variant="outlined">
                 <CardHeader
                     title="Documents"
@@ -183,7 +196,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
                                     key={doc.id}
                                     doc={doc}
                                     caseId={caseId}
-                                    onDelete={handleDeleteDocument}
+                                    onDelete={(docId) => setPendingDeleteDoc(documents.find(d => d.id === docId))}
                                     onResubmit={handleResubmitDocument}
                                     onCancelProcessing={handleCancelProcessing}
                                     handleDocumentUpdate={onUpdate}
