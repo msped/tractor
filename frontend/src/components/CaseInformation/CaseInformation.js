@@ -16,10 +16,9 @@ import {
     DialogContentText,
     DialogTitle,
     Grid, IconButton, TextField, Typography,
-    Menu, MenuItem, Tooltip
+    Tooltip
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { deleteCase, updateCase } from '@/services/caseService';
 import toast from 'react-hot-toast';
 
@@ -68,7 +67,6 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
     const { data: session } = useSession();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [confirmDeleteDialogOpen, setConfirmDeleteDialogOpen] = useState(false);
-    const [statusMenuAnchorEl, setStatusMenuAnchorEl] = useState(null);
     const [editableCase, setEditableCase] = useState(null);
 
     const handleOpenEditDialog = () => {
@@ -83,14 +81,6 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
     const handleCloseEditDialog = () => {
         setEditDialogOpen(false);
         setEditableCase(null);
-    };
-
-    const handleStatusMenuOpen = (event) => {
-        setStatusMenuAnchorEl(event.currentTarget);
-    };
-
-    const handleStatusMenuClose = () => {
-        setStatusMenuAnchorEl(null);
     };
 
     const handleInputChange = (e) => {
@@ -108,20 +98,6 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
             if (onUpdate) onUpdate(); else router.refresh();
         } catch (error) {
             toast.error('Failed to update case. Please try again.');
-        }
-    };
-
-    const handleStatusChange = async (newStatus) => {
-        handleStatusMenuClose();
-        if (!caseObject || !session) return;
-
-        const toastId = toast.loading(`Updating status...`);
-        try {
-            await updateCase(caseObject.id, { status: newStatus }, session?.access_token);
-            toast.success('Case status updated.', { id: toastId });
-            if (onUpdate) onUpdate();
-        } catch (error) {
-            toast.error('Failed to update case status.', { id: toastId });
         }
     };
 
@@ -143,14 +119,7 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
         return <Typography>Loading case information...</Typography>;
     }
 
-    const finalStatuses = ['COMPLETED', 'CLOSED', 'WITHDRAWN'];
-    const isFinalStatus = finalStatuses.includes(caseObject.status);
-
-    const availableStatuses = {
-        'COMPLETED': 'Completed',
-        'CLOSED': 'Closed',
-        'WITHDRAWN': 'Withdrawn',
-    };
+    const isFinalStatus = ['COMPLETED', 'CLOSED', 'WITHDRAWN'].includes(caseObject.status);
 
     return (
         <>
@@ -158,30 +127,17 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
                 <CardHeader
                     title="Case Details"
                     action={
-                        <>
-                            <Tooltip title="Case Actions">
-                                <span>
-                                    <IconButton
-                                        aria-label="case actions"
-                                        onClick={handleStatusMenuOpen}
-                                        disabled={isFinalStatus}
-                                    >
-                                        <MoreVertIcon />
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
-                            <Tooltip title={isFinalStatus ? "This case is finalised and cannot be edited." : "Edit Details"}>
-                                <span>
-                                    <IconButton
-                                        aria-label="settings"
-                                        onClick={handleOpenEditDialog}
-                                        disabled={isFinalStatus}
-                                    >
-                                        <SettingsIcon />
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
-                        </>
+                        <Tooltip title={isFinalStatus ? "This case is finalised and cannot be edited." : "Edit Details"}>
+                            <span>
+                                <IconButton
+                                    aria-label="settings"
+                                    onClick={handleOpenEditDialog}
+                                    disabled={isFinalStatus}
+                                >
+                                    <SettingsIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
                     }
                     slotProps={{ title: { variant: 'h5', fontWeight: 600 }}}
                 />
@@ -198,22 +154,6 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
                     </Grid>
                 </CardContent>
             </Card>
-
-            <Menu
-                anchorEl={statusMenuAnchorEl}
-                open={Boolean(statusMenuAnchorEl)}
-                onClose={handleStatusMenuClose}
-            >
-                {Object.entries(availableStatuses).map(([statusKey, statusLabel]) => (
-                    <MenuItem
-                        key={statusKey}
-                        onClick={() => handleStatusChange(statusKey)}
-                        disabled={caseObject.status === statusKey}
-                    >
-                        Mark as {statusLabel}
-                    </MenuItem>
-                ))}
-            </Menu>
 
             {/* Edit Case Dialog */}
             <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} fullWidth maxWidth="sm">
