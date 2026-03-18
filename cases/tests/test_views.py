@@ -13,7 +13,7 @@ from rest_framework.test import APIClient, APITestCase, override_settings
 
 from training.tests.base import NetworkBlockerMixin
 
-from ..models import Case, Document, Redaction, RedactionContext
+from ..models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
@@ -484,6 +484,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             "redaction-detail": {"method": "get", "kwargs": {"pk": self.redaction.id}},
             "document-resubmit": {"method": "post", "kwargs": {"document_id": self.document.id}},
             "document-cancel": {"method": "post", "kwargs": {"document_id": self.document.id}},
+            "exemption-template-list": {"method": "get", "kwargs": {}},
         }
 
         for name, details in endpoints.items():
@@ -598,4 +599,101 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         self.client.logout()
         url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
         response = self.client.patch(url, {"ids": [], "is_accepted": True}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username="exemptuser", password="password")
+        self.client.force_authenticate(user=self.user)
+
+        self.active = ExemptionTemplate.objects.create(name="S.40 - Personal Information", is_active=True)
+        self.inactive = ExemptionTemplate.objects.create(name="S.41 - Deprecated", is_active=False)
+
+    def test_list_returns_only_active_templates(self):
+        """GET returns only active templates."""
+        url = reverse("exemption-template-list")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [t["name"] for t in response.data]
+        self.assertIn("S.40 - Personal Information", names)
+        self.assertNotIn("S.41 - Deprecated", names)
+
+    def test_list_returns_expected_fields(self):
+        """GET response includes id, name, and description."""
+        url = reverse("exemption-template-list")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = response.data[0]
+        self.assertIn("id", item)
+        self.assertIn("name", item)
+        self.assertIn("description", item)
+
+    def test_create_exemption_template(self):
+        """POST creates a new active template."""
+        url = reverse("exemption-template-list")
+        data = {"name": "S.42 - Legal Privilege", "description": "Legal advice exemption"}
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "S.42 - Legal Privilege")
+        self.assertEqual(response.data["description"], "Legal advice exemption")
+        self.assertTrue(ExemptionTemplate.objects.filter(name="S.42 - Legal Privilege").exists())
+
+    def test_create_duplicate_name_fails(self):
+        """POST with a duplicate name returns 400."""
+        url = reverse("exemption-template-list")
+        data = {"name": "S.40 - Personal Information"}
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
+
+    def test_create_missing_name_fails(self):
+        """POST without a name returns 400."""
+        url = reverse("exemption-template-list")
+        response = self.client.post(url, {})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_delete_exemption_template(self):
+        """DELETE removes the template."""
+        url = reverse("exemption-template-detail", kwargs={"pk": self.active.pk})
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(ExemptionTemplate.objects.filter(pk=self.active.pk).exists())
+
+    def test_delete_nonexistent_template_returns_404(self):
+        """DELETE on a non-existent pk returns 404."""
+        url = reverse("exemption-template-detail", kwargs={"pk": 99999})
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_unauthenticated(self):
+        """Unauthenticated GET is rejected."""
+        self.client.logout()
+        url = reverse("exemption-template-list")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_create_unauthenticated(self):
+        """Unauthenticated POST is rejected."""
+        self.client.logout()
+        url = reverse("exemption-template-list")
+        response = self.client.post(url, {"name": "S.99"})
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_delete_unauthenticated(self):
+        """Unauthenticated DELETE is rejected."""
+        self.client.logout()
+        url = reverse("exemption-template-detail", kwargs={"pk": self.active.pk})
+        response = self.client.delete(url)
+
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

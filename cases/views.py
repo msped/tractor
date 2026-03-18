@@ -7,15 +7,37 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Case, Document, Redaction, RedactionContext
+from .models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
 from .serializers import (
     CaseDetailSerializer,
     CaseSerializer,
     DocumentReviewSerializer,
     DocumentSerializer,
+    ExemptionTemplateSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
 )
+
+
+class ExemptionTemplateListView(ListCreateAPIView):
+    """
+    GET: Returns all active exemption templates for use in the rejection dialog.
+    POST: Creates a new exemption template.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExemptionTemplateSerializer
+    queryset = ExemptionTemplate.objects.filter(is_active=True)
+
+
+class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    GET/PATCH/DELETE a single exemption template.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExemptionTemplateSerializer
+    queryset = ExemptionTemplate.objects.all()
 
 
 class CaseExportView(APIView):

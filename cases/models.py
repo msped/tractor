@@ -225,6 +225,25 @@ class RedactionContext(models.Model):
     text = models.TextField(help_text="User-provided context for the redaction.")
 
 
+class ExemptionTemplate(models.Model):
+    """
+    A reusable rejection reason (e.g. "S.40 - Personal Information") that
+    admins configure and users select when rejecting redaction suggestions.
+    """
+
+    name = models.CharField(max_length=255, unique=True, help_text="The exemption label shown to users.")
+    description = models.TextField(blank=True, help_text="Optional longer description of this exemption.")
+    is_active = models.BooleanField(default=True, help_text="Inactive templates are hidden from the UI.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ["name"]
+
+
 auditlog.register(Case)
 auditlog.register(Document)
 auditlog.register(Redaction)
+auditlog.register(ExemptionTemplate)

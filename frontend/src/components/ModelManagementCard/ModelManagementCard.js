@@ -82,10 +82,10 @@ export const ModelManagementCard = () => {
         />
         <Card>
             <CardContent>
-                <Typography variant="h5" component="h2" gutterBottom>
+                <Typography variant="h6" component="h2" gutterBottom>
                     Active Redaction Model
                 </Typography>
-                <Typography color="text.secondary" sx={{ mb: 3 }}>
+                <Typography color="text.secondary" variant='body2' sx={{ mb: 3 }}>
                     Select the trained SpanCat model to use for OPERATIONAL entity detection. GLiNER handles THIRD_PARTY entities automatically.
                 </Typography>
                 {isLoading && <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}><CircularProgress /></Box>}

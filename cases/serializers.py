@@ -2,7 +2,7 @@ import os
 
 from rest_framework import serializers
 
-from .models import Case, Document, Redaction, RedactionContext
+from .models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
 
 
 class CaseSerializer(serializers.ModelSerializer):
@@ -117,6 +117,12 @@ class RedactionSerializer(serializers.ModelSerializer):
             "context",
         ]
         read_only_fields = ["id", "created_at"]
+
+
+class ExemptionTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExemptionTemplate
+        fields = ["id", "name", "description"]
 
 
 class DocumentReviewSerializer(serializers.ModelSerializer):

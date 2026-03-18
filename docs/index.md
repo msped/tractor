@@ -16,6 +16,7 @@ Tractor is a document redaction application with ML-powered Named Entity Recogni
 
 - [Getting Started](user-guide/getting-started.md) - Set up and start using Tractor
 - [Redacting Documents](user-guide/redaction.md) - Learn how to redact documents
+- [Settings](user-guide/settings.md) - Configure exemption templates and other settings
 - [Developer Setup](dev/setup.md) - Set up your development environment
 - [Architecture](dev/architecture.md) - Understand how Tractor works
 

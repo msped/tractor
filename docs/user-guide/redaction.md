@@ -29,6 +29,7 @@ The **Redaction Sidebar** displays all suggested redactions grouped by status (P
 
 - **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type if needed.
 - **Reject** - Click the reject button to dismiss the suggestion. You will be asked to provide a reason for rejection (this is for audit purposes).
+- **Reject with exemption** - Click the dropdown arrow on the Reject button to select a pre-configured exemption reason (e.g. "S.40 - Personal Information"). You can type to search the list. Selecting an exemption rejects the suggestion immediately without opening the dialog.
 
 ### Merged Redactions
 

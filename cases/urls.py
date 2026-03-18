@@ -10,12 +10,16 @@ from .views import (
     DocumentListCreateView,
     DocumentResubmitView,
     DocumentReviewView,
+    ExemptionTemplateDetailView,
+    ExemptionTemplateListView,
     RedactionContextView,
     RedactionDetailView,
     RedactionListCreateView,
 )
 
 urlpatterns = [
+    path("cases/exemptions", ExemptionTemplateListView.as_view(), name="exemption-template-list"),
+    path("cases/exemptions/<int:pk>", ExemptionTemplateDetailView.as_view(), name="exemption-template-detail"),
     path("cases", CaseListCreateView.as_view(), name="case-list-create"),
     path("cases/<uuid:case_id>", CaseDetailView.as_view(), name="case-detail"),
     path("cases/<uuid:case_id>/export", CaseExportView.as_view(), name="case-export"),

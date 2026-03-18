@@ -6,11 +6,15 @@ import {
     Grid,
 } from '@mui/material';
 import { ModelManagementCard } from '@/components/ModelManagementCard';
+import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 
 export default function SettingsPage() {
     return (
         <Container maxWidth="lg" sx={{ mt: 4 }}>
             <Grid container spacing={3} sx={{ mt: 2 }}>
+                <Grid size={{xs: 12, md: 8}}>
+                    <ExemptionTemplatesCard />
+                </Grid>
                 <Grid size={{xs: 12}}>
                     <ModelManagementCard />
                 </Grid>
