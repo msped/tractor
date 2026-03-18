@@ -6,13 +6,11 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { createCaseExport, updateCase } from '@/services/caseService';
 import { useSession } from 'next-auth/react';
-import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
 
 export const CaseExportManager = ({ caseData, onUpdate }) => {
     const { data: session } = useSession();
     const [isProcessing, setIsProcessing] = useState(false);
-    const [confirmExportOpen, setConfirmExportOpen] = useState(false);
     const [lockMenuAnchorEl, setLockMenuAnchorEl] = useState(null);
     const prevExportStatusRef = useRef(caseData.export_status);
 
@@ -23,7 +21,6 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
     const isFinalStatus = ['COMPLETED', 'CLOSED', 'WITHDRAWN'].includes(caseData.status);
 
     const handleGenerateExport = async () => {
-        setConfirmExportOpen(false);
         setIsProcessing(true);
         try {
             await createCaseExport(caseData.id, session.access_token);
@@ -119,14 +116,14 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
                 );
             case 'ERROR':
                 return (
-                    <Button variant="contained" color="error" onClick={() => setConfirmExportOpen(true)} disabled={isButtonDisabled}>
+                    <Button variant="contained" color="error" onClick={handleGenerateExport} disabled={isButtonDisabled}>
                         Retry Export
                     </Button>
                 );
             case 'NONE':
             default:
                 return (
-                    <Button variant="contained" color="primary" onClick={() => setConfirmExportOpen(true)} disabled={isButtonDisabled}>
+                    <Button variant="contained" color="primary" onClick={handleGenerateExport} disabled={isButtonDisabled}>
                         Generate Disclosure Package
                     </Button>
                 );
@@ -134,16 +131,6 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
     };
 
     return (
-        <>
-            <ConfirmationDialog
-                open={confirmExportOpen}
-                onClose={() => setConfirmExportOpen(false)}
-                onConfirm={handleGenerateExport}
-                title="Generate Disclosure Package"
-                description="Are you sure you want to generate the disclosure package? This will lock the case once complete."
-                confirmLabel="Generate"
-            />
-            <Box>{renderContent()}</Box>
-        </>
+        <Box>{renderContent()}</Box>
     );
 }

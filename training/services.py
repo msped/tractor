@@ -6,6 +6,23 @@ from pypdf import PdfReader
 
 from .loader import GLiNERModelManager, SpanCatModelManager
 
+_PREFIX_CHARS = {"#"}
+
+
+def _expand_prefix_symbols(entities, text):
+    """
+    Expand entity start positions to include immediately preceding prefix symbols
+    (e.g. '#' before a crime reference number or collar number).
+
+    Modifies each entity dict in-place and returns the list.
+    """
+    for ent in entities:
+        start = ent["start_char"]
+        if start > 0 and text[start - 1] in _PREFIX_CHARS:
+            ent["start_char"] = start - 1
+            ent["text"] = text[ent["start_char"] : ent["end_char"]]
+    return entities
+
 
 def _deduplicate_entities(primary_entities, secondary_entities):
     """
@@ -380,6 +397,7 @@ def extract_entities_from_text(path):
         # SpanCat > GLiNER > Presidio
         combined = _deduplicate_entities(spancat_results, gliner_results)
         combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
+        combined = _expand_prefix_symbols(combined, ner_text)
 
         return ner_text, combined, tables, structure
 
@@ -400,6 +418,7 @@ def extract_entities_from_text(path):
     # SpanCat > GLiNER > Presidio
     combined = _deduplicate_entities(spancat_results, gliner_results)
     combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
+    combined = _expand_prefix_symbols(combined, ner_text)
 
     # For non-DOCX files, no tables and no structure (fallback to plain text rendering)
     return ner_text, combined, [], None
