@@ -10,12 +10,13 @@ from freezegun import freeze_time
 
 from training.tests.base import NetworkBlockerMixin
 
-from ..models import Case, Document, Redaction, RedactionContext
+from ..models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
 from ..serializers import (
     CaseDetailSerializer,
     CaseSerializer,
     DocumentReviewSerializer,
     DocumentSerializer,
+    ExemptionTemplateSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
 )
@@ -254,6 +255,57 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(RedactionContext.objects.count(), 1)
         self.assertEqual(instance.redaction, self.redaction)
         self.assertEqual(instance.text, "New context for redaction.")
+
+    def test_exemption_template_serializer_read(self):
+        """Test serialization of an ExemptionTemplate instance."""
+        template = ExemptionTemplate.objects.create(
+            name="S.40 - Personal Information",
+            description="Personal data exemption",
+        )
+        serializer = ExemptionTemplateSerializer(instance=template)
+        data = serializer.data
+
+        self.assertEqual(data["id"], template.pk)
+        self.assertEqual(data["name"], "S.40 - Personal Information")
+        self.assertEqual(data["description"], "Personal data exemption")
+        self.assertEqual(set(data.keys()), {"id", "name", "description"})
+
+    def test_exemption_template_serializer_create(self):
+        """Test deserialization and creation of an ExemptionTemplate."""
+        data = {"name": "S.42 - Legal Privilege", "description": "Legal advice"}
+        serializer = ExemptionTemplateSerializer(data=data)
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        instance = serializer.save()
+
+        self.assertIsInstance(instance, ExemptionTemplate)
+        self.assertEqual(instance.name, "S.42 - Legal Privilege")
+        self.assertEqual(instance.description, "Legal advice")
+        self.assertTrue(instance.is_active)
+
+    def test_exemption_template_serializer_description_optional(self):
+        """Description field is optional — omitting it is valid."""
+        data = {"name": "S.43 - National Security"}
+        serializer = ExemptionTemplateSerializer(data=data)
+        self.assertTrue(serializer.is_valid())
+        instance = serializer.save()
+
+        self.assertEqual(instance.description, "")
+
+    def test_exemption_template_serializer_duplicate_name_invalid(self):
+        """A duplicate name must fail validation."""
+        ExemptionTemplate.objects.create(name="S.40 - Personal Information")
+        data = {"name": "S.40 - Personal Information"}
+        serializer = ExemptionTemplateSerializer(data=data)
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("name", serializer.errors)
+
+    def test_exemption_template_serializer_missing_name_invalid(self):
+        """Name is required — omitting it must fail validation."""
+        serializer = ExemptionTemplateSerializer(data={})
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("name", serializer.errors)
 
     def test_redaction_serializer_includes_context(self):
         """

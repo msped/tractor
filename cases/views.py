@@ -7,15 +7,37 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Case, Document, Redaction, RedactionContext
+from .models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
 from .serializers import (
     CaseDetailSerializer,
     CaseSerializer,
     DocumentReviewSerializer,
     DocumentSerializer,
+    ExemptionTemplateSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
 )
+
+
+class ExemptionTemplateListView(ListCreateAPIView):
+    """
+    GET: Returns all active exemption templates for use in the rejection dialog.
+    POST: Creates a new exemption template.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExemptionTemplateSerializer
+    queryset = ExemptionTemplate.objects.filter(is_active=True)
+
+
+class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
+    """
+    GET/PATCH/DELETE a single exemption template.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExemptionTemplateSerializer
+    queryset = ExemptionTemplate.objects.all()
 
 
 class CaseExportView(APIView):
@@ -136,7 +158,8 @@ class DocumentResubmitView(APIView):
             document.redactions.all().delete()
             document.status = Document.Status.PROCESSING
             document.save(update_fields=["status"])
-            async_task("cases.services.process_document_and_create_redactions", document.id)
+            async_task(
+                "cases.services.process_document_and_create_redactions", document.id)
             return Response(status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -251,7 +274,8 @@ class RedactionContextView(APIView):
         # Use update_or_create to handle both creation of a new context
         # and update of an existing one.
         context, created = RedactionContext.objects.update_or_create(
-            redaction=redaction, defaults={"text": serializer.validated_data["text"]}
+            redaction=redaction, defaults={
+                "text": serializer.validated_data["text"]}
         )
 
         status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
