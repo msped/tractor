@@ -6,7 +6,6 @@ from pypdf import PdfReader
 
 from .loader import GLiNERModelManager, SpanCatModelManager
 
-
 _PREFIX_CHARS = {"#"}
 
 
