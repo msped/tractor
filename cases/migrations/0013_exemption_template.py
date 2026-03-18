@@ -6,28 +6,41 @@ import cases.models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0012_document_processing_task_id_alter_document_status'),
+        ("cases", "0012_document_processing_task_id_alter_document_status"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ExemptionTemplate',
+            name="ExemptionTemplate",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(help_text='The exemption label shown to users.', max_length=255, unique=True)),
-                ('description', models.TextField(blank=True, help_text='Optional longer description of this exemption.')),
-                ('is_active', models.BooleanField(default=True, help_text='Inactive templates are hidden from the UI.')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "name",
+                    models.CharField(help_text="The exemption label shown to users.", max_length=255, unique=True),
+                ),
+                (
+                    "description",
+                    models.TextField(blank=True, help_text="Optional longer description of this exemption."),
+                ),
+                (
+                    "is_active",
+                    models.BooleanField(default=True, help_text="Inactive templates are hidden from the UI."),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
             options={
-                'ordering': ['name'],
+                "ordering": ["name"],
             },
         ),
         migrations.AlterField(
-            model_name='case',
-            name='export_file',
-            field=models.FileField(blank=True, help_text='The path to the generated ZIP export file.', null=True, upload_to=cases.models.case_export_upload_to),
+            model_name="case",
+            name="export_file",
+            field=models.FileField(
+                blank=True,
+                help_text="The path to the generated ZIP export file.",
+                null=True,
+                upload_to=cases.models.case_export_upload_to,
+            ),
         ),
     ]

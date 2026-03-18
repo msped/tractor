@@ -24,8 +24,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         """Set up test data and authenticate a user for all view tests."""
         self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="testuser", password="password")
+        self.user = User.objects.create_user(username="testuser", password="password")
         self.client.force_authenticate(user=self.user)
 
         self.case = Case.objects.create(
@@ -34,8 +33,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             data_subject_dob=date(1990, 1, 1),
             created_by=self.user,
         )
-        self.test_file = SimpleUploadedFile(
-            "document.pdf", b"This is a test file.", "application/pdf")
+        self.test_file = SimpleUploadedFile("document.pdf", b"This is a test file.", "application/pdf")
         self.document = Document.objects.create(
             case=self.case,
             original_file=self.test_file,
@@ -67,8 +65,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(response.data["task_id"], "test-task-id")
 
-        mock_async_task.assert_called_once_with(
-            "cases.services.export_case_documents", self.case.id)
+        mock_async_task.assert_called_once_with("cases.services.export_case_documents", self.case.id)
         self.case.refresh_from_db()
         self.assertEqual(self.case.export_status, Case.ExportStatus.PROCESSING)
         self.assertEqual(self.case.export_task_id, "test-task-id")
@@ -83,8 +80,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_case_export_no_documents(self):
         """Test that exporting a case with no documents returns 400."""
-        empty_case = Case.objects.create(
-            case_reference="EMPTY1", data_subject_name="Empty Case", created_by=self.user)
+        empty_case = Case.objects.create(case_reference="EMPTY1", data_subject_name="Empty Case", created_by=self.user)
         url = reverse("case-export", kwargs={"case_id": empty_case.id})
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -144,8 +140,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], str(self.case.id))
         self.assertEqual(len(response.data["documents"]), 1)
-        self.assertEqual(response.data["documents"]
-                         [0]["id"], str(self.document.id))
+        self.assertEqual(response.data["documents"][0]["id"], str(self.document.id))
 
     def test_update_case_detail(self):
         """Test updating a case."""
@@ -194,19 +189,16 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_retrieve_document_detail(self):
         """Test retrieving a single document's details."""
-        url = reverse("document-detail",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-detail", kwargs={"document_id": self.document.id})
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], str(self.document.id))
-        self.assertEqual(os.path.basename(
-            response.data["original_file"]), "document.pdf")
+        self.assertEqual(os.path.basename(response.data["original_file"]), "document.pdf")
 
     def test_update_document_status(self):
         """Test updating a document's status."""
-        url = reverse("document-detail",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-detail", kwargs={"document_id": self.document.id})
         data = {"new_status": Document.Status.COMPLETED}
         response = self.client.patch(url, data)
 
@@ -216,8 +208,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_delete_document(self):
         """Test deleting a document."""
-        url = reverse("document-detail",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-detail", kwargs={"document_id": self.document.id})
         response = self.client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -238,8 +229,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_list_redactions_for_document(self):
         """Test listing all redactions for a specific document."""
-        url = reverse("redaction-list-create",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("redaction-list-create", kwargs={"document_id": self.document.id})
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -248,8 +238,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_create_redaction_for_document(self):
         """Test creating a new manual redaction for a document."""
-        url = reverse("redaction-list-create",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("redaction-list-create", kwargs={"document_id": self.document.id})
         data = {
             "document": self.document.id,
             "start_char": 0,
@@ -288,8 +277,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.redaction.refresh_from_db()
         self.assertTrue(self.redaction.is_accepted)
-        self.assertEqual(self.redaction.justification,
-                         "User accepted this suggestion.")
+        self.assertEqual(self.redaction.justification, "User accepted this suggestion.")
 
     def test_delete_redaction(self):
         """Test deleting a redaction."""
@@ -297,29 +285,24 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         response = self.client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Redaction.objects.filter(
-            id=self.redaction.id).exists())
+        self.assertFalse(Redaction.objects.filter(id=self.redaction.id).exists())
 
     def test_create_redaction_context(self):
         """Test creating a context for a redaction."""
-        url = reverse("redaction-context",
-                      kwargs={"redaction_id": self.redaction.id})
+        url = reverse("redaction-context", kwargs={"redaction_id": self.redaction.id})
         data = {"text": "This is some context."}
         response = self.client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["text"], "This is some context.")
-        self.assertTrue(RedactionContext.objects.filter(
-            redaction=self.redaction).exists())
+        self.assertTrue(RedactionContext.objects.filter(redaction=self.redaction).exists())
 
     def test_update_redaction_context(self):
         """Test updating an existing context for a redaction."""
         # First, create a context
-        RedactionContext.objects.create(
-            redaction=self.redaction, text="Initial context.")
+        RedactionContext.objects.create(redaction=self.redaction, text="Initial context.")
 
-        url = reverse("redaction-context",
-                      kwargs={"redaction_id": self.redaction.id})
+        url = reverse("redaction-context", kwargs={"redaction_id": self.redaction.id})
         data = {"text": "Updated context."}
         response = self.client.post(url, data)
 
@@ -330,18 +313,14 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_delete_redaction_context(self):
         """Test deleting an existing context for a redaction."""
-        RedactionContext.objects.create(
-            redaction=self.redaction, text="Context to be deleted.")
-        self.assertTrue(RedactionContext.objects.filter(
-            redaction=self.redaction).exists())
+        RedactionContext.objects.create(redaction=self.redaction, text="Context to be deleted.")
+        self.assertTrue(RedactionContext.objects.filter(redaction=self.redaction).exists())
 
-        url = reverse("redaction-context",
-                      kwargs={"redaction_id": self.redaction.id})
+        url = reverse("redaction-context", kwargs={"redaction_id": self.redaction.id})
         response = self.client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(RedactionContext.objects.filter(
-            redaction=self.redaction).exists())
+        self.assertFalse(RedactionContext.objects.filter(redaction=self.redaction).exists())
 
     @patch("cases.views.async_task")
     def test_resubmit_document_success(self, mock_async_task):
@@ -349,8 +328,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.status = Document.Status.ERROR
         self.document.save()
 
-        url = reverse("document-resubmit",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -366,8 +344,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.status = Document.Status.READY_FOR_REVIEW
         self.document.save()
 
-        url = reverse("document-resubmit",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -383,8 +360,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.status = Document.Status.COMPLETED
         self.document.save()
 
-        url = reverse("document-resubmit",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -401,8 +377,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         # Verify redaction exists before resubmit
         self.assertEqual(self.document.redactions.count(), 1)
 
-        url = reverse("document-resubmit",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -412,8 +387,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     def test_resubmit_document_not_found(self):
         """Test resubmitting a non-existent document returns 404."""
         non_existent_uuid = uuid.uuid4()
-        url = reverse("document-resubmit",
-                      kwargs={"document_id": non_existent_uuid})
+        url = reverse("document-resubmit", kwargs={"document_id": non_existent_uuid})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -424,8 +398,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.processing_task_id = "test-task-id"
         self.document.save()
 
-        url = reverse("document-cancel",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-cancel", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -442,20 +415,17 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.status = Document.Status.READY_FOR_REVIEW
         self.document.save()
 
-        url = reverse("document-cancel",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-cancel", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.document.refresh_from_db()
-        self.assertEqual(self.document.status,
-                         Document.Status.READY_FOR_REVIEW)
+        self.assertEqual(self.document.status, Document.Status.READY_FOR_REVIEW)
 
     def test_cancel_processing_not_found(self):
         """Test cancelling a non-existent document returns 404."""
         non_existent_uuid = uuid.uuid4()
-        url = reverse("document-cancel",
-                      kwargs={"document_id": non_existent_uuid})
+        url = reverse("document-cancel", kwargs={"document_id": non_existent_uuid})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -468,8 +438,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         # Verify redaction exists before cancel
         self.assertEqual(self.document.redactions.count(), 1)
 
-        url = reverse("document-cancel",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-cancel", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -481,8 +450,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.status = Document.Status.UNPROCESSED
         self.document.save()
 
-        url = reverse("document-resubmit",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("document-resubmit", kwargs={"document_id": self.document.id})
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -524,8 +492,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
                 url = reverse(name, kwargs=details["kwargs"])
                 method = getattr(self.client, details["method"])
                 response = method(url)
-                self.assertEqual(response.status_code,
-                                 status.HTTP_401_UNAUTHORIZED)
+                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_access_non_existent_resource_fails(self):
         """Test that accessing a non-existent resource returns a 404."""
@@ -539,8 +506,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
 class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="bulkuser", password="password")
+        self.user = User.objects.create_user(username="bulkuser", password="password")
         self.client.force_authenticate(user=self.user)
 
         self.case = Case.objects.create(
@@ -548,10 +514,8 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
             data_subject_name="Bulk Test",
             created_by=self.user,
         )
-        test_file = SimpleUploadedFile(
-            "bulk.pdf", b"bulk content", "application/pdf")
-        self.document = Document.objects.create(
-            case=self.case, original_file=test_file)
+        test_file = SimpleUploadedFile("bulk.pdf", b"bulk content", "application/pdf")
+        self.document = Document.objects.create(case=self.case, original_file=test_file)
         self.r1 = Redaction.objects.create(
             document=self.document,
             start_char=0,
@@ -572,8 +536,7 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_bulk_accept_redactions(self):
         """Test accepting multiple redactions in a single request."""
-        url = reverse("bulk-redaction-update",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
         data = {"ids": [str(self.r1.id), str(self.r2.id)], "is_accepted": True}
         response = self.client.patch(url, data, format="json")
 
@@ -586,8 +549,7 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_bulk_reject_with_justification(self):
         """Test rejecting multiple redactions with a shared justification."""
-        url = reverse("bulk-redaction-update",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
         data = {
             "ids": [str(self.r1.id), str(self.r2.id)],
             "is_accepted": False,
@@ -604,10 +566,8 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_bulk_update_filters_by_document(self):
         """Redactions belonging to a different document are not updated."""
-        other_file = SimpleUploadedFile(
-            "other.pdf", b"other", "application/pdf")
-        other_doc = Document.objects.create(
-            case=self.case, original_file=other_file)
+        other_file = SimpleUploadedFile("other.pdf", b"other", "application/pdf")
+        other_doc = Document.objects.create(case=self.case, original_file=other_file)
         other_r = Redaction.objects.create(
             document=other_doc,
             start_char=0,
@@ -616,8 +576,7 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
         )
 
-        url = reverse("bulk-redaction-update",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
         data = {"ids": [str(other_r.id)], "is_accepted": True}
         response = self.client.patch(url, data, format="json")
 
@@ -628,8 +587,7 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_bulk_update_empty_ids(self):
         """An empty ids list returns an empty 200 response."""
-        url = reverse("bulk-redaction-update",
-                      kwargs={"document_id": self.document.id})
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
         data = {"ids": [], "is_accepted": True}
         response = self.client.patch(url, data, format="json")
 
@@ -639,24 +597,19 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
     def test_bulk_update_unauthenticated(self):
         """Unauthenticated requests are rejected."""
         self.client.logout()
-        url = reverse("bulk-redaction-update",
-                      kwargs={"document_id": self.document.id})
-        response = self.client.patch(
-            url, {"ids": [], "is_accepted": True}, format="json")
+        url = reverse("bulk-redaction-update", kwargs={"document_id": self.document.id})
+        response = self.client.patch(url, {"ids": [], "is_accepted": True}, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="exemptuser", password="password")
+        self.user = User.objects.create_user(username="exemptuser", password="password")
         self.client.force_authenticate(user=self.user)
 
-        self.active = ExemptionTemplate.objects.create(
-            name="S.40 - Personal Information", is_active=True)
-        self.inactive = ExemptionTemplate.objects.create(
-            name="S.41 - Deprecated", is_active=False)
+        self.active = ExemptionTemplate.objects.create(name="S.40 - Personal Information", is_active=True)
+        self.inactive = ExemptionTemplate.objects.create(name="S.41 - Deprecated", is_active=False)
 
     def test_list_returns_only_active_templates(self):
         """GET returns only active templates."""
@@ -682,16 +635,13 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_exemption_template(self):
         """POST creates a new active template."""
         url = reverse("exemption-template-list")
-        data = {"name": "S.42 - Legal Privilege",
-                "description": "Legal advice exemption"}
+        data = {"name": "S.42 - Legal Privilege", "description": "Legal advice exemption"}
         response = self.client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["name"], "S.42 - Legal Privilege")
-        self.assertEqual(
-            response.data["description"], "Legal advice exemption")
-        self.assertTrue(ExemptionTemplate.objects.filter(
-            name="S.42 - Legal Privilege").exists())
+        self.assertEqual(response.data["description"], "Legal advice exemption")
+        self.assertTrue(ExemptionTemplate.objects.filter(name="S.42 - Legal Privilege").exists())
 
     def test_create_duplicate_name_fails(self):
         """POST with a duplicate name returns 400."""
@@ -711,13 +661,11 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
 
     def test_delete_exemption_template(self):
         """DELETE removes the template."""
-        url = reverse("exemption-template-detail",
-                      kwargs={"pk": self.active.pk})
+        url = reverse("exemption-template-detail", kwargs={"pk": self.active.pk})
         response = self.client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(ExemptionTemplate.objects.filter(
-            pk=self.active.pk).exists())
+        self.assertFalse(ExemptionTemplate.objects.filter(pk=self.active.pk).exists())
 
     def test_delete_nonexistent_template_returns_404(self):
         """DELETE on a non-existent pk returns 404."""
@@ -745,8 +693,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_delete_unauthenticated(self):
         """Unauthenticated DELETE is rejected."""
         self.client.logout()
-        url = reverse("exemption-template-detail",
-                      kwargs={"pk": self.active.pk})
+        url = reverse("exemption-template-detail", kwargs={"pk": self.active.pk})
         response = self.client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

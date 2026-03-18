@@ -6,10 +6,8 @@ from .models import Case, Document, ExemptionTemplate, Redaction, RedactionConte
 
 
 class CaseSerializer(serializers.ModelSerializer):
-    status_display = serializers.CharField(
-        source="get_status_display", read_only=True)
-    created_by = serializers.CharField(
-        source="created_by.username", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    created_by = serializers.CharField(source="created_by.username", read_only=True)
 
     class Meta:
         model = Case
@@ -27,14 +25,11 @@ class CaseSerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
-    case = serializers.PrimaryKeyRelatedField(
-        queryset=Case.objects.all(), write_only=True)
+    case = serializers.PrimaryKeyRelatedField(queryset=Case.objects.all(), write_only=True)
     status = serializers.CharField(source="get_status_display", read_only=True)
     # Add a write-only field for updating the status
-    new_status = serializers.ChoiceField(
-        choices=Document.Status, write_only=True, required=False, source="status")
-    redactions = serializers.SerializerMethodField(
-        read_only=True, source="redaction_set")
+    new_status = serializers.ChoiceField(choices=Document.Status, write_only=True, required=False, source="status")
+    redactions = serializers.SerializerMethodField(read_only=True, source="redaction_set")
 
     def get_redactions(self, obj):
         """
@@ -73,8 +68,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         Override to handle file uploads and set the filename and file_type.
         """
         original_file = validated_data.pop("original_file")
-        instance = Document.objects.create(
-            original_file=original_file, **validated_data)
+        instance = Document.objects.create(original_file=original_file, **validated_data)
 
         # Set filename and file_type based on the uploaded file
         instance.filename = original_file.name
@@ -88,8 +82,7 @@ class CaseDetailSerializer(CaseSerializer):
     documents = DocumentSerializer(many=True, read_only=True)
 
     class Meta(CaseSerializer.Meta):
-        fields = CaseSerializer.Meta.fields + \
-            ["documents", "export_status", "export_file", "export_task_id"]
+        fields = CaseSerializer.Meta.fields + ["documents", "export_status", "export_file", "export_task_id"]
         read_only_fields = ["export_status", "export_file", "export_task_id"]
 
 
@@ -105,8 +98,7 @@ class RedactionContextSerializer(serializers.ModelSerializer):
 
 
 class RedactionSerializer(serializers.ModelSerializer):
-    document = serializers.PrimaryKeyRelatedField(
-        queryset=Document.objects.all(), write_only=True)
+    document = serializers.PrimaryKeyRelatedField(queryset=Document.objects.all(), write_only=True)
     context = RedactionContextSerializer(read_only=True)
 
     class Meta:
