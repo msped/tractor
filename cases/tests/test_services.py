@@ -293,6 +293,33 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         page_text = pdf.pages[0].extract_text()
         self.assertIn(context_text, page_text)
 
+    def test_generate_pdf_redacts_hash_prefix_not_in_stored_span(self):
+        """
+        A '#' immediately before a stored redaction span should be redacted in the PDF
+        even if the span itself does not include it (handles documents processed before
+        the extraction-layer fix).
+        """
+        self.document.extracted_text = "Crime ref #42/12345/24 was recorded."
+        self.document.save()
+        # Stored span starts at 11 (the '4'), not 10 (the '#')
+        Redaction.objects.create(
+            document=self.document,
+            start_char=11,
+            end_char=22,
+            text="42/12345/24",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+        )
+
+        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        self.assertIsNotNone(pdf_content)
+        bytes_content = io.BytesIO(pdf_content)
+        pdf = PdfReader(bytes_content)
+        page_text = pdf.pages[0].extract_text()
+        # The '#' and the crime ref should both be absent from the extracted text
+        self.assertNotIn("#42/12345/24", page_text)
+        self.assertNotIn("#", page_text)
+
     def test_generate_pdf_no_text(self):
         """Test PDF generation for a document with no extracted text."""
         self.document.extracted_text = ""

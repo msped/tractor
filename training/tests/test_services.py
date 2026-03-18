@@ -8,6 +8,7 @@ from lxml import etree
 
 from ..services import (
     _deduplicate_entities,
+    _expand_prefix_symbols,
     _extract_text_from_pdf,
     _table_has_borders,
     extract_document_structure,
@@ -323,6 +324,46 @@ class DeduplicateEntitiesTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(_deduplicate_entities(primary, [])), 1)
         secondary = [{"text": "b", "label": "THIRD_PARTY", "start_char": 5, "end_char": 6}]
         self.assertEqual(len(_deduplicate_entities([], secondary)), 1)
+
+
+class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
+    def test_hash_prefix_expands_start_char(self):
+        text = "Crime ref #42/12345/24 was recorded."
+        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 11, "end_char": 22}]
+        result = _expand_prefix_symbols(entities, text)
+        self.assertEqual(result[0]["start_char"], 10)
+        self.assertEqual(result[0]["text"], "#42/12345/24")
+
+    def test_no_prefix_leaves_entity_unchanged(self):
+        text = "Crime ref 42/12345/24 was recorded."
+        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 10, "end_char": 21}]
+        result = _expand_prefix_symbols(entities, text)
+        self.assertEqual(result[0]["start_char"], 10)
+        self.assertEqual(result[0]["text"], "42/12345/24")
+
+    def test_entity_at_start_of_text_not_expanded(self):
+        text = "42/12345/24 was recorded."
+        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 0, "end_char": 11}]
+        result = _expand_prefix_symbols(entities, text)
+        self.assertEqual(result[0]["start_char"], 0)
+
+    def test_non_hash_prefix_not_expanded(self):
+        text = "ref:42/12345/24 was recorded."
+        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 4, "end_char": 15}]
+        result = _expand_prefix_symbols(entities, text)
+        self.assertEqual(result[0]["start_char"], 4)
+
+    def test_multiple_entities_expanded_independently(self):
+        text = "refs #42/12345/24 and 43/67890/24"
+        entities = [
+            {"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 6, "end_char": 17},
+            {"text": "43/67890/24", "label": "OPERATIONAL", "start_char": 22, "end_char": 33},
+        ]
+        result = _expand_prefix_symbols(entities, text)
+        self.assertEqual(result[0]["start_char"], 5)
+        self.assertEqual(result[0]["text"], "#42/12345/24")
+        self.assertEqual(result[1]["start_char"], 22)
+        self.assertEqual(result[1]["text"], "43/67890/24")
 
 
 class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):

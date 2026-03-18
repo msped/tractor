@@ -263,6 +263,12 @@ def _apply_redactions_to_segment(full_text, start, end, sorted_redactions, mode)
         if r_start < prev:
             continue
 
+        # Expand backwards to include any immediately preceding prefix symbol (e.g. '#')
+        # that was not captured in the stored span (handles documents processed before
+        # the extraction-layer fix).
+        while r_start > prev and full_text[r_start - 1] in {"#"}:
+            r_start -= 1
+
         parts.append(html_escape(full_text[prev:r_start]))
 
         # Use the clipped portion within this segment, not r.text, so that cross-cell
