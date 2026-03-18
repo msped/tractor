@@ -90,13 +90,13 @@ export const ExemptionTemplatesCard = () => {
             />
             <Card>
                 <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                         <Box>
-                            <Typography variant="h5" component="h2" gutterBottom>
+                            <Typography variant="h6" component="h2">
                                 Exemption Templates
                             </Typography>
-                            <Typography color="text.secondary" sx={{ mb: 3 }}>
-                                Configurable rejection reasons shown to reviewers when rejecting redaction suggestions.
+                            <Typography variant="body2" color="text.secondary">
+                                Configurable rejection reasons shown to reviewers.
                             </Typography>
                         </Box>
                         <Button

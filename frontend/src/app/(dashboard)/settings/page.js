@@ -12,11 +12,11 @@ export default function SettingsPage() {
     return (
         <Container maxWidth="lg" sx={{ mt: 4 }}>
             <Grid container spacing={3} sx={{ mt: 2 }}>
-                <Grid size={{xs: 12}}>
-                    <ModelManagementCard />
+                <Grid size={{xs: 12, md: 8}}>
+                    <ExemptionTemplatesCard />
                 </Grid>
                 <Grid size={{xs: 12}}>
-                    <ExemptionTemplatesCard />
+                    <ModelManagementCard />
                 </Grid>
             </Grid>
         </Container>
