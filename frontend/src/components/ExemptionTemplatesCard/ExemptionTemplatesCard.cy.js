@@ -1,6 +1,14 @@
 import React from 'react';
+import { SWRConfig } from 'swr';
 import { ExemptionTemplatesCard } from './ExemptionTemplatesCard';
-import * as redactionService from '@/services/redactionService';
+
+const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+
+const TestWrapper = ({ children }) => (
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        {children}
+    </SWRConfig>
+);
 
 const mockTemplates = [
     { id: 1, name: 'S.40 - Personal Information', description: 'Personal data exemption' },
@@ -9,19 +17,19 @@ const mockTemplates = [
 
 describe('<ExemptionTemplatesCard />', () => {
     beforeEach(() => {
-        cy.stub(redactionService, 'getExemptionTemplates').resolves(mockTemplates);
-        cy.stub(redactionService, 'createExemptionTemplate').resolves({ id: 3, name: 'S.43 - National Security', description: '' });
-        cy.stub(redactionService, 'deleteExemptionTemplate').resolves(true);
+        cy.intercept('GET', '**/cases/exemptions', { body: mockTemplates }).as('getTemplates');
     });
 
     it('renders the card title and description', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.contains('Exemption Templates').should('be.visible');
         cy.contains('Configurable rejection reasons').should('be.visible');
     });
 
     it('displays templates returned from the API', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.contains('S.40 - Personal Information').should('be.visible');
         cy.contains('Personal data exemption').should('be.visible');
         cy.contains('S.42 - Legal Privilege').should('be.visible');
@@ -29,13 +37,15 @@ describe('<ExemptionTemplatesCard />', () => {
     });
 
     it('shows empty state when no templates exist', () => {
-        redactionService.getExemptionTemplates.resolves([]);
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.intercept('GET', '**/cases/exemptions', { body: [] }).as('getTemplatesEmpty');
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplatesEmpty');
         cy.contains('No exemption templates configured.').should('be.visible');
     });
 
     it('shows the add form when Add is clicked', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.get('button').contains('Add').click();
         cy.get('input[aria-label="template name"]').should('be.visible');
         cy.get('input[aria-label="template description"]').should('be.visible');
@@ -43,7 +53,8 @@ describe('<ExemptionTemplatesCard />', () => {
     });
 
     it('enables Save only when name is entered', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.get('button').contains('Add').click();
         cy.get('button').contains('Save').should('be.disabled');
         cy.get('input[aria-label="template name"]').type('S.43 - National Security');
@@ -51,34 +62,47 @@ describe('<ExemptionTemplatesCard />', () => {
     });
 
     it('submits the new template and closes the form', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.intercept('POST', '**/cases/exemptions', {
+            statusCode: 201,
+            body: { id: 3, name: 'S.43 - National Security', description: '' },
+        }).as('createTemplate');
+
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.get('button').contains('Add').click();
         cy.get('input[aria-label="template name"]').type('S.43 - National Security');
         cy.get('button').contains('Save').click();
-        cy.wrap(redactionService.createExemptionTemplate).should('have.been.calledOnce');
+        cy.wait('@createTemplate');
         cy.get('input[aria-label="template name"]').should('not.exist');
     });
 
     it('cancels the add form without submitting', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.intercept('POST', '**/cases/exemptions').as('createTemplate');
+
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.get('button').contains('Add').click();
         cy.get('input[aria-label="template name"]').type('Something');
         cy.get('button').contains('Cancel').click();
         cy.get('input[aria-label="template name"]').should('not.exist');
-        cy.wrap(redactionService.createExemptionTemplate).should('not.have.been.called');
+        cy.get('@createTemplate.all').should('have.length', 0);
     });
 
     it('opens a confirmation dialog before deleting', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.get(`button[aria-label="delete S.40 - Personal Information"]`).click();
         cy.contains('Delete Exemption Template').should('be.visible');
         cy.contains('S.40 - Personal Information').should('be.visible');
     });
 
     it('deletes a template after confirmation', () => {
-        cy.mount(<ExemptionTemplatesCard />);
+        cy.intercept('DELETE', '**/cases/exemptions/1', { statusCode: 204 }).as('deleteTemplate');
+
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
         cy.get(`button[aria-label="delete S.40 - Personal Information"]`).click();
         cy.get('button').contains('Delete').last().click();
-        cy.wrap(redactionService.deleteExemptionTemplate).should('have.been.calledOnceWith', 1);
+        cy.wait('@deleteTemplate');
     });
 });
