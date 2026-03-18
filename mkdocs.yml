@@ -43,6 +43,7 @@ nav:
   - User Guide:
       - Getting Started: user-guide/getting-started.md
       - Redacting Documents: user-guide/redaction.md
+      - System Settings: user-guide/settings.md
   - Developer Guide:
       - Development Setup: dev/setup.md
       - Production Deployment: dev/deployment.md
