@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Case, Document, Redaction
+from .models import Case, Document, ExemptionTemplate, Redaction
 
 
 @admin.register(Case)
@@ -25,3 +25,11 @@ class RedactionAdmin(admin.ModelAdmin):
     search_fields = ("document__filename", "redaction_type")
     list_filter = ("redaction_type", "created_at")
     ordering = ("-created_at",)
+
+
+@admin.register(ExemptionTemplate)
+class ExemptionTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active", "created_at")
+    search_fields = ("name", "description")
+    list_filter = ("is_active",)
+    ordering = ("name",)
