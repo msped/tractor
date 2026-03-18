@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     Box, Typography, Accordion, AccordionSummary, AccordionDetails,
     List, ListItem, Card, CardContent, CardActions, Button, Chip,
-    ButtonGroup, Menu, MenuItem, IconButton, Tooltip,
+    ButtonGroup, Menu, MenuItem, IconButton, Tooltip, TextField, Divider,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -43,6 +43,7 @@ export const RedactionSidebar = ({
     scrollToId,
     removeScrollId,
     onContextSave,
+    exemptionTemplates = [],
 }) => {
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
@@ -75,6 +76,7 @@ export const RedactionSidebar = ({
     const [currentItemForMenu, setCurrentItemForMenu] = useState(null);
     const [rejectMenuAnchorEl, setRejectMenuAnchorEl] = useState(null);
     const [currentItemForRejectMenu, setCurrentItemForRejectMenu] = useState(null);
+    const [exemptionSearch, setExemptionSearch] = useState('');
 
     const handleMenuClick = (event, item) => {
         setMenuAnchorEl(event.currentTarget);
@@ -398,15 +400,40 @@ export const RedactionSidebar = ({
                     <Menu
                         anchorEl={rejectMenuAnchorEl}
                         open={Boolean(rejectMenuAnchorEl)}
-                        onClose={() => { setRejectMenuAnchorEl(null); setCurrentItemForRejectMenu(null); }}
+                        onClose={() => { setRejectMenuAnchorEl(null); setCurrentItemForRejectMenu(null); setExemptionSearch(''); }}
+                        slotProps={{ paper: { sx: { width: 280 } } }}
                     >
-                        <MenuItem onClick={() => {
-                            onRejectAsDisclosable(currentItemForRejectMenu.ids);
-                            setRejectMenuAnchorEl(null);
-                            setCurrentItemForRejectMenu(null);
-                        }}>
-                            Reject as Disclosable
-                        </MenuItem>
+                        <Box sx={{ px: 1, pb: 1 }}>
+                            <TextField
+                                size="small"
+                                placeholder="Search exemptions..."
+                                value={exemptionSearch}
+                                onChange={(e) => setExemptionSearch(e.target.value)}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                autoFocus
+                                fullWidth
+                            />
+                        </Box>
+                        <Divider />
+                        {exemptionTemplates
+                            .filter(t => t.name.toLowerCase().includes(exemptionSearch.toLowerCase()))
+                            .map(t => (
+                                <MenuItem
+                                    key={t.id}
+                                    onClick={() => {
+                                        onRejectAsDisclosable(currentItemForRejectMenu.ids, t.name);
+                                        setRejectMenuAnchorEl(null);
+                                        setCurrentItemForRejectMenu(null);
+                                        setExemptionSearch('');
+                                    }}
+                                >
+                                    {t.name}
+                                </MenuItem>
+                            ))
+                        }
+                        {exemptionTemplates.filter(t => t.name.toLowerCase().includes(exemptionSearch.toLowerCase())).length === 0 && (
+                            <MenuItem disabled>No exemptions found</MenuItem>
+                        )}
                     </Menu>
                 </Box>
             ) : (

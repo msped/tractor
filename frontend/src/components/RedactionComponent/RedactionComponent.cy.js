@@ -114,6 +114,14 @@ const mountRedactionComponent = (document = mockDocument, redactions = mockRedac
 
 describe('<RedactionComponent />', () => {
     beforeEach(() => {
+        cy.intercept('GET', '**/cases/exemptions', {
+            statusCode: 200,
+            body: [
+                { id: 1, name: 'S.40 - Personal Information', description: '' },
+                { id: 2, name: 'S.42 - Legal Privilege', description: '' },
+            ],
+        }).as('getExemptions');
+
         cy.intercept('PATCH', '**/cases/document/redaction/*', (req) => {
             const id = req.url.split('/').pop();
             const existing = mockRedactions.find(r => r.id === id) || {};
@@ -562,45 +570,62 @@ describe('<RedactionComponent />', () => {
         });
     });
 
-    context('Disclosable Quick-Reject', () => {
-        it('calls updateRedaction with Disclosable justification for a single item', () => {
+    context('Exemption Template Quick-Reject', () => {
+        it('calls updateRedaction with the selected template name as justification', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
                 req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: req.body.justification } });
-            }).as('disclosableUpdate');
+            }).as('exemptionUpdate');
 
             mountRedactionComponent();
 
             cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'Reject as Disclosable').click();
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
 
-            cy.wait('@disclosableUpdate').its('request.body').should('deep.include', {
+            cy.wait('@exemptionUpdate').its('request.body').should('deep.include', {
                 is_accepted: false,
-                justification: 'Disclosable',
+                justification: 'S.40 - Personal Information',
             });
         });
 
-        it('calls bulk API with Disclosable justification for merged items', () => {
+        it('calls bulk API with selected template justification for merged items', () => {
             mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
 
             cy.get('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'Reject as Disclosable').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
             cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
                 is_accepted: false,
-                justification: 'Disclosable',
+                justification: 'S.42 - Legal Privilege',
                 ids: ['adj1', 'adj2'],
             });
         });
 
-        it('shows error toast when disclosable reject fails', () => {
-            cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedDisclosable');
+        it('filters templates by search input before selecting', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: req.body.justification } });
+            }).as('exemptionUpdate');
+
             mountRedactionComponent();
 
             cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'Reject as Disclosable').click();
+            cy.get('input[placeholder="Search exemptions..."]').type('Legal');
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
-            cy.wait('@failedDisclosable');
-            cy.contains('Failed to mark as disclosable. Please try again.').should('be.visible');
+            cy.wait('@exemptionUpdate').its('request.body').should('deep.include', {
+                justification: 'S.42 - Legal Privilege',
+            });
+        });
+
+        it('shows error toast when exemption reject fails', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedExemption');
+            mountRedactionComponent();
+
+            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+
+            cy.wait('@failedExemption');
+            cy.contains('Failed to reject suggestion. Please try again.').should('be.visible');
         });
     });
 

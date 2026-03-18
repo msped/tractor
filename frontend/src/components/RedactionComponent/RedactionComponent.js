@@ -11,7 +11,7 @@ import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { markAsComplete, resubmitDocument } from '@/services/documentService'
-import { createRedaction, updateRedaction, deleteRedaction, bulkUpdateRedactions } from '@/services/redactionService';
+import { createRedaction, updateRedaction, deleteRedaction, bulkUpdateRedactions, getExemptionTemplates } from '@/services/redactionService';
 import { mergeAdjacentSpans, groupByTextAndType } from '@/utils/mergeRedactionSpans';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -47,6 +47,16 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // State for resubmit confirmation dialog
     const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
     const [isResubmitting, setIsResubmitting] = useState(false);
+
+    // Exemption templates for the reject dropdown
+    const [exemptionTemplates, setExemptionTemplates] = useState([]);
+
+    useEffect(() => {
+        if (!session?.access_token) return;
+        getExemptionTemplates(session.access_token)
+            .then(setExemptionTemplates)
+            .catch(() => {});
+    }, [session?.access_token]);
 
     // State for merged span splits (display-only)
     const [splitMerges, setSplitMerges] = useState(new Set());
@@ -127,18 +137,17 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [document.id, session?.access_token]);
 
-    const handleRejectAsDisclosable = useCallback(async (ids) => {
+    const handleRejectAsDisclosable = useCallback(async (ids, justification) => {
         setScrollToId(null);
-        const DISCLOSABLE = 'Disclosable';
         try {
             if (ids.length === 1) {
                 const updated = await updateRedaction(
-                    ids[0], { is_accepted: false, justification: DISCLOSABLE }, session?.access_token
+                    ids[0], { is_accepted: false, justification }, session?.access_token
                 );
                 setRedactions(prev => prev.map(r => r.id === ids[0] ? updated : r));
             } else {
                 const updatedList = await bulkUpdateRedactions(
-                    document.id, ids, false, DISCLOSABLE, session?.access_token
+                    document.id, ids, false, justification, session?.access_token
                 );
                 setRedactions(prev => {
                     const updatedMap = new Map(updatedList.map(r => [r.id, r]));
@@ -146,7 +155,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 });
             }
         } catch (error) {
-            toast.error("Failed to mark as disclosable. Please try again.");
+            toast.error("Failed to reject suggestion. Please try again.");
         }
     }, [document.id, session?.access_token]);
 
@@ -532,6 +541,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     scrollToId={scrollToId}
                     removeScrollId={handleRemoveScrollId}
                     onContextSave={handleOnContextSave}
+                    exemptionTemplates={exemptionTemplates}
                 />
             </Box>
 

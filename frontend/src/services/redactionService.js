@@ -109,6 +109,56 @@ export const updateRedactionContext = async (redactionId, contextData, accessTok
     }
 };
 
+export const getExemptionTemplates = async (accessToken) => {
+    try {
+        const response = await apiClient.get(
+            'cases/exemptions',
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to load exemption templates: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to load exemption templates. Please try again.');
+        }
+    }
+};
+
+export const createExemptionTemplate = async (data, accessToken) => {
+    try {
+        const response = await apiClient.post(
+            'cases/exemptions',
+            data,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            const detail = error.response.data.name?.[0] || error.response.data.detail || 'Unknown error';
+            throw new Error(`Failed to create exemption template: ${detail}`);
+        } else {
+            throw new Error('Failed to create exemption template. Please try again.');
+        }
+    }
+};
+
+export const deleteExemptionTemplate = async (templateId, accessToken) => {
+    try {
+        await apiClient.delete(
+            `cases/exemptions/${templateId}`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        return true;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to delete exemption template: ${error.response.data.detail || 'Unknown error'}`);
+        } else {
+            throw new Error('Failed to delete exemption template. Please try again.');
+        }
+    }
+};
+
 export const deleteRedactionContext = async (redactionId, accessToken) => {
 
     try {

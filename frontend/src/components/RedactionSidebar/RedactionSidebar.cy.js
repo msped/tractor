@@ -33,6 +33,11 @@ describe('<RedactionSidebar />', () => {
         },
     };
 
+    const mockExemptionTemplates = [
+        { id: 1, name: 'S.40 - Personal Information', description: '' },
+        { id: 2, name: 'S.42 - Legal Privilege', description: '' },
+    ];
+
     let baseProps;
 
     beforeEach(() => {
@@ -50,6 +55,7 @@ describe('<RedactionSidebar />', () => {
             scrollToId: null,
             removeScrollId: cy.stub().as('removeScrollId'),
             onContextSave: cy.stub().as('onContextSave'),
+            exemptionTemplates: mockExemptionTemplates,
         };
     });
 
@@ -146,10 +152,38 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onRemove').should('have.been.calledOnceWith', 'r1');
         });
 
-        it('shows "Reject as Disclosable" in dropdown and calls onRejectAsDisclosable', () => {
+        it('shows exemption templates in the reject dropdown', () => {
             cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'Reject as Disclosable').should('be.visible').click();
-            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['p1']);
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
+        });
+
+        it('calls onRejectAsDisclosable with template name when a template is selected', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['p1'], 'S.40 - Personal Information');
+        });
+
+        it('filters templates by search input', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.get('input[placeholder="Search exemptions..."]').type('Legal');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
+        });
+
+        it('shows "No exemptions found" when search matches nothing', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.get('input[placeholder="Search exemptions..."]').type('zzz');
+            cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
+        });
+
+        it('shows "No exemptions found" when no templates are configured', () => {
+            cy.fullMount(
+                <RedactionSidebar {...baseProps} redactions={mockRedactions} exemptionTemplates={[]} />,
+                mountOpts
+            );
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
         });
     });
 
@@ -306,10 +340,10 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onBulkReject').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
         });
 
-        it('shows "Reject as Disclosable" in group header dropdown and calls onRejectAsDisclosable', () => {
+        it('shows exemption templates in group header dropdown and calls onRejectAsDisclosable', () => {
             cy.get('button[aria-label="reject all with reason"]').click();
-            cy.contains('[role="menuitem"]', 'Reject as Disclosable').should('be.visible').click();
-            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible').click();
+            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'S.40 - Personal Information');
         });
 
         it('expands group to show individual items when expand icon is clicked', () => {
@@ -382,10 +416,10 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onBulkReject').should('have.been.calledOnceWith', ['merge1', 'merge2']);
         });
 
-        it('shows "Reject as Disclosable" in merged item dropdown and calls onRejectAsDisclosable', () => {
+        it('shows exemption templates in merged item dropdown and calls onRejectAsDisclosable', () => {
             cy.get('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'Reject as Disclosable').should('be.visible').click();
-            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['merge1', 'merge2']);
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible').click();
+            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'S.40 - Personal Information');
         });
 
         it('does not show the change-type dropdown for merged items', () => {
