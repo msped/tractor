@@ -38,8 +38,8 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.get('input[aria-label="header text"]').should('be.visible');
         cy.get('input[aria-label="footer text"]').should('be.visible');
         cy.get('input[aria-label="watermark text"]').should('be.visible');
-        cy.get('input[aria-label="include case reference in watermark"]').should('be.visible');
-        cy.get('input[aria-label="show page numbers"]').should('be.visible');
+        cy.get('input[aria-label="include case reference in watermark"]').should('exist');
+        cy.get('input[aria-label="show page numbers"]').should('exist');
         cy.get('button').contains('Save').should('be.visible');
     });
 

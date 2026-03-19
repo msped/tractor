@@ -112,7 +112,7 @@ export const DocumentExportSettingsCard = () => {
                                     checked={watermarkIncludeCaseRef}
                                     onChange={(e) => setWatermarkIncludeCaseRef(e.target.checked)}
                                     disabled={!watermarkText}
-                                    slotProps={{ 'htmlInput': { 'aria-label': 'include case reference in watermark' } }}
+                                    slotProps={{ input: { 'aria-label': 'include case reference in watermark' } }}
                                 />
                             }
                             label="Include case reference in watermark"
@@ -122,7 +122,7 @@ export const DocumentExportSettingsCard = () => {
                                 <Switch
                                     checked={pageNumbersEnabled}
                                     onChange={(e) => setPageNumbersEnabled(e.target.checked)}
-                                    slotProps={{ 'htmlInput': { 'aria-label': 'show page numbers' } }}
+                                    slotProps={{ input: { 'aria-label': 'show page numbers' } }}
                                 />
                             }
                             label="Show page numbers"
