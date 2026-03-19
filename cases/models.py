@@ -243,6 +243,27 @@ class ExemptionTemplate(models.Model):
         ordering = ["name"]
 
 
+class DocumentExportSettings(models.Model):
+    header_text = models.CharField(max_length=500, blank=True, default="")
+    footer_text = models.CharField(max_length=500, blank=True, default="")
+    watermark_text = models.CharField(max_length=200, blank=True, default="")
+    watermark_include_case_ref = models.BooleanField(default=False)
+    page_numbers_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Document Export Settings"
+        verbose_name_plural = "Document Export Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 auditlog.register(Case)
 auditlog.register(Document)
 auditlog.register(Redaction)
