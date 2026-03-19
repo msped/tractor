@@ -587,27 +587,37 @@ class BuildExportCssTests(NetworkBlockerMixin, TestCase):
         css = _build_export_css(self._make_settings())
         self.assertIn("margin: 2cm 2cm 2cm 2cm", css)
         self.assertNotIn("@top-center", css)
-        self.assertNotIn("@bottom-left", css)
-        self.assertNotIn("@bottom-right", css)
+        self.assertNotIn("@bottom-center", css)
         self.assertNotIn("watermark", css)
 
-    def test_header_increases_top_margin(self):
+    def test_header_increases_top_margin_and_zeroes_companions(self):
         css = _build_export_css(self._make_settings(header_text="OFFICIAL"))
         self.assertIn("margin: 2.5cm 2cm 2cm 2cm", css)
         self.assertIn("@top-center", css)
         self.assertIn("OFFICIAL", css)
+        self.assertIn("@top-left", css)
+        self.assertIn("@top-right", css)
 
-    def test_footer_increases_bottom_margin(self):
+    def test_footer_increases_bottom_margin_and_zeroes_companions(self):
         css = _build_export_css(self._make_settings(footer_text="Confidential"))
         self.assertIn("margin: 2cm 2cm 2.5cm 2cm", css)
-        self.assertIn("@bottom-left", css)
+        self.assertIn("@bottom-center", css)
         self.assertIn("Confidential", css)
+        self.assertIn("@bottom-left", css)
+        self.assertIn("@bottom-right", css)
 
     def test_page_numbers_in_output(self):
         css = _build_export_css(self._make_settings(page_numbers_enabled=True))
         self.assertIn("counter(page)", css)
         self.assertIn("counter(pages)", css)
-        self.assertIn("@bottom-right", css)
+        self.assertIn("@bottom-center", css)
+
+    def test_footer_and_page_numbers_combined_in_bottom_center(self):
+        css = _build_export_css(self._make_settings(footer_text="Confidential", page_numbers_enabled=True))
+        self.assertIn("@bottom-center", css)
+        self.assertIn("Confidential", css)
+        self.assertIn("counter(page)", css)
+        self.assertIn(r"\A", css)
 
     def test_watermark_css_emitted_when_watermark_text_set(self):
         css = _build_export_css(

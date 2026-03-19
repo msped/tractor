@@ -373,8 +373,9 @@ def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode
 def _build_export_css(settings, case_reference=""):
     """
     Dynamically build the WeasyPrint CSS string from DocumentExportSettings.
-    Adds @page margin-box content for header/footer/page numbers and a
-    diagonal watermark div when configured.
+    Header/footer use @page margin boxes. Companion left/right boxes are
+    explicitly zeroed (width: 0; content: "") so the center box gets the full
+    available width and long text wraps correctly rather than overflowing.
     """
     has_header = bool(settings.header_text)
     has_footer = bool(settings.footer_text)
@@ -386,13 +387,34 @@ def _build_export_css(settings, case_reference=""):
     page_rules = ""
     if has_header:
         escaped = settings.header_text.replace('"', '\\"')
-        page_rules += f'  @top-center {{ content: "{escaped}"; font-size: 9pt; color: #555; }}\n'
-    if has_footer:
-        escaped = settings.footer_text.replace('"', '\\"')
-        page_rules += f'  @bottom-left {{ content: "{escaped}"; font-size: 9pt; color: #555; }}\n'
-    if has_page_numbers:
         page_rules += (
-            '  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9pt; color: #555; }\n'
+            '  @top-left { content: ""; width: 0; }\n'
+            f'  @top-center {{ content: "{escaped}"; font-size: 9pt; color: #555;'
+            f" text-align: center; white-space: normal; }}\n"
+            '  @top-right { content: ""; width: 0; }\n'
+        )
+    if has_footer and has_page_numbers:
+        escaped = settings.footer_text.replace('"', '\\"')
+        page_rules += (
+            '  @bottom-left { content: ""; width: 0; }\n'
+            f'  @bottom-center {{ content: "{escaped}\\A Page " counter(page) " of " counter(pages);'
+            f" font-size: 9pt; color: #555; text-align: center; white-space: pre-wrap; }}\n"
+            '  @bottom-right { content: ""; width: 0; }\n'
+        )
+    elif has_footer:
+        escaped = settings.footer_text.replace('"', '\\"')
+        page_rules += (
+            '  @bottom-left { content: ""; width: 0; }\n'
+            f'  @bottom-center {{ content: "{escaped}"; font-size: 9pt; color: #555;'
+            f" text-align: center; white-space: normal; }}\n"
+            '  @bottom-right { content: ""; width: 0; }\n'
+        )
+    elif has_page_numbers:
+        page_rules += (
+            '  @bottom-left { content: ""; width: 0; }\n'
+            '  @bottom-center { content: "Page " counter(page) " of " counter(pages);'
+            " font-size: 9pt; color: #555; text-align: center; }\n"
+            '  @bottom-right { content: ""; width: 0; }\n'
         )
 
     watermark_label = settings.watermark_text
@@ -419,7 +441,8 @@ def _build_export_css(settings, case_reference=""):
         ".type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }\n"
         ".type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }\n"
         ".type-DS_INFO { background-color: rgba(177, 156, 217, 0.8); color: initial; }\n"
-        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n" + watermark_css
+        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n"
+        + watermark_css
     )
 
 
