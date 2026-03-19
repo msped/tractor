@@ -10,7 +10,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
-from cases.models import Case, Document, Redaction, RedactionContext
+from cases.models import Case, Document, DocumentExportSettings, Redaction, RedactionContext
 from training.models import Model
 from training.tests.base import NetworkBlockerMixin
 
@@ -198,3 +198,31 @@ class RedactionContextModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(RedactionContext.objects.count(), 1)
         self.assertEqual(context.redaction, self.redaction)
         self.assertEqual(context.text, "This is context.")
+
+
+class DocumentExportSettingsModelTests(NetworkBlockerMixin, TestCase):
+    def test_get_creates_default_row(self):
+        self.assertEqual(DocumentExportSettings.objects.count(), 0)
+        obj = DocumentExportSettings.get()
+        self.assertEqual(DocumentExportSettings.objects.count(), 1)
+        self.assertEqual(obj.pk, 1)
+
+    def test_get_returns_same_row_on_repeat_calls(self):
+        obj1 = DocumentExportSettings.get()
+        obj2 = DocumentExportSettings.get()
+        self.assertEqual(obj1.pk, obj2.pk)
+        self.assertEqual(DocumentExportSettings.objects.count(), 1)
+
+    def test_save_forces_pk_1(self):
+        obj = DocumentExportSettings(header_text="TEST")
+        obj.save()
+        self.assertEqual(obj.pk, 1)
+        self.assertEqual(DocumentExportSettings.objects.count(), 1)
+
+    def test_default_field_values(self):
+        obj = DocumentExportSettings.get()
+        self.assertEqual(obj.header_text, "")
+        self.assertEqual(obj.footer_text, "")
+        self.assertEqual(obj.watermark_text, "")
+        self.assertFalse(obj.watermark_include_case_ref)
+        self.assertFalse(obj.page_numbers_enabled)

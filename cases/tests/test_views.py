@@ -13,7 +13,7 @@ from rest_framework.test import APIClient, APITestCase, override_settings
 
 from training.tests.base import NetworkBlockerMixin
 
-from ..models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
+from ..models import Case, Document, DocumentExportSettings, ExemptionTemplate, Redaction, RedactionContext
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
@@ -696,4 +696,42 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
         url = reverse("exemption-template-detail", kwargs={"pk": self.active.pk})
         response = self.client.delete(url)
 
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ExportSettingsViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(username="admin", password="password")
+        self.user = User.objects.create_user(username="regularuser", password="password")
+        self.url = reverse("export-settings")
+
+    def test_admin_get_returns_default_values(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["header_text"], "")
+        self.assertEqual(response.data["footer_text"], "")
+        self.assertEqual(response.data["watermark_text"], "")
+        self.assertFalse(response.data["watermark_include_case_ref"])
+        self.assertFalse(response.data["page_numbers_enabled"])
+
+    def test_admin_patch_updates_and_returns_new_values(self):
+        self.client.force_authenticate(user=self.admin)
+        payload = {"header_text": "OFFICIAL", "page_numbers_enabled": True}
+        response = self.client.patch(self.url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["header_text"], "OFFICIAL")
+        self.assertTrue(response.data["page_numbers_enabled"])
+        obj = DocumentExportSettings.get()
+        self.assertEqual(obj.header_text, "OFFICIAL")
+        self.assertTrue(obj.page_numbers_enabled)
+
+    def test_non_admin_receives_403(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_receives_401(self):
+        response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

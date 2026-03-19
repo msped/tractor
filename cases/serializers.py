@@ -2,7 +2,7 @@ import os
 
 from rest_framework import serializers
 
-from .models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
+from .models import Case, Document, DocumentExportSettings, ExemptionTemplate, Redaction, RedactionContext
 
 
 class CaseSerializer(serializers.ModelSerializer):
@@ -123,6 +123,12 @@ class ExemptionTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExemptionTemplate
         fields = ["id", "name", "description"]
+
+
+class DocumentExportSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentExportSettings
+        fields = ["header_text", "footer_text", "watermark_text", "watermark_include_case_ref", "page_numbers_enabled"]
 
 
 class DocumentReviewSerializer(serializers.ModelSerializer):

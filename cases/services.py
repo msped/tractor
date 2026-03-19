@@ -15,7 +15,7 @@ from weasyprint.text.fonts import FontConfiguration
 from training.loader import DEFAULT_GLINER_MODEL, GLiNERModelManager, SpanCatModelManager
 from training.services import extract_entities_from_text
 
-from .models import Case, Document, Redaction
+from .models import Case, Document, DocumentExportSettings, Redaction
 
 logger = logging.getLogger(__name__)
 
@@ -370,12 +370,68 @@ def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode
     return table_html
 
 
-def _generate_pdf_from_document(document, mode="disclosure"):
+def _build_export_css(settings, case_reference=""):
+    """
+    Dynamically build the WeasyPrint CSS string from DocumentExportSettings.
+    Adds @page margin-box content for header/footer/page numbers and a
+    diagonal watermark div when configured.
+    """
+    has_header = bool(settings.header_text)
+    has_footer = bool(settings.footer_text)
+    has_page_numbers = settings.page_numbers_enabled
+
+    top_margin = "2.5cm" if has_header else "2cm"
+    bottom_margin = "2.5cm" if (has_footer or has_page_numbers) else "2cm"
+
+    page_rules = ""
+    if has_header:
+        escaped = settings.header_text.replace('"', '\\"')
+        page_rules += f'  @top-center {{ content: "{escaped}"; font-size: 9pt; color: #555; }}\n'
+    if has_footer:
+        escaped = settings.footer_text.replace('"', '\\"')
+        page_rules += f'  @bottom-left {{ content: "{escaped}"; font-size: 9pt; color: #555; }}\n'
+    if has_page_numbers:
+        page_rules += (
+            '  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9pt; color: #555; }\n'
+        )
+
+    watermark_label = settings.watermark_text
+    if settings.watermark_include_case_ref and case_reference:
+        watermark_label = f"{watermark_label} {case_reference}" if watermark_label else case_reference
+
+    watermark_css = ""
+    if watermark_label:
+        watermark_css = (
+            ".watermark { position: fixed; top: 45%; left: 50%; "
+            "transform: translate(-50%, -50%) rotate(-45deg); "
+            "font-size: 72pt; color: rgba(200,200,200,0.35); white-space: nowrap; }\n"
+        )
+
+    return (
+        f"@page {{ size: A4; margin: {top_margin} 2cm {bottom_margin} 2cm;\n{page_rules}}}\n"
+        "body { line-height: 1.4; }\n"
+        ".text-block { white-space: pre-wrap; word-wrap: break-word; }\n"
+        "table { border-collapse: collapse; width: 100%; margin: 1em 0; }\n"
+        "td { padding: 4px 6px; text-align: left; white-space: normal; overflow-wrap: break-word; word-wrap: break-word; vertical-align: top; }\n"
+        "th { background-color: #f2f2f2; font-weight: bold; }\n"
+        ".redaction { background-color: black; color: black; }\n"
+        ".disclosure-context { background-color: initial; color: initial; font-style: italic; }\n"
+        ".type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }\n"
+        ".type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }\n"
+        ".type-DS_INFO { background-color: rgba(177, 156, 217, 0.8); color: initial; }\n"
+        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n" + watermark_css
+    )
+
+
+def _generate_pdf_from_document(document, mode="disclosure", export_settings=None, case_reference=""):
     """
     Generates a PDF for a single document.
     mode: 'disclosure' (black boxes) or 'redacted' (color highlights)
     DOCX tables are rendered as HTML tables with redactions applied per-cell.
     """
+    if export_settings is None:
+        export_settings = DocumentExportSettings.get()
+
     text = document.extracted_text
     if not text:
         return None
@@ -410,30 +466,23 @@ def _generate_pdf_from_document(document, mode="disclosure"):
 
     body_content = "".join(html_parts)
 
+    watermark_label = export_settings.watermark_text
+    if export_settings.watermark_include_case_ref and case_reference:
+        watermark_label = f"{watermark_label} {case_reference}" if watermark_label else case_reference
+    watermark_html = f'<div class="watermark">{html_escape(watermark_label)}</div>' if watermark_label else ""
+
     html_string = f"""
     <!DOCTYPE html>
     <html>
     <head><title>{html_escape(document.filename or "")}</title></head>
     <body style="font-family: Calibri, sans-serif;">
+    {watermark_html}
     {body_content}
     </body>
     </html>
     """
 
-    css_string = """
-    @page { size: A4; margin: 2cm; }
-    body { line-height: 1.4; }
-    .text-block { white-space: pre-wrap; word-wrap: break-word; }
-    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-    td { padding: 4px 6px; text-align: left; white-space: normal; overflow-wrap: break-word; word-wrap: break-word; vertical-align: top; }
-    th { background-color: #f2f2f2; font-weight: bold; }
-    .redaction { background-color: black; color: black; }
-    .disclosure-context { background-color: initial; color: initial; font-style: italic; }
-    .type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }
-    .type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }
-    .type-DS_INFO { background-color: rgba(177, 156, 217, 0.8); color: initial; }
-    .internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }
-    """
+    css_string = _build_export_css(export_settings, case_reference)
 
     font_config = FontConfiguration()
     return HTML(string=html_string).write_pdf(
@@ -463,18 +512,23 @@ def export_case_documents(case_id):
     os.makedirs(redacted_dir)
     os.makedirs(disclosure_dir)
 
+    export_settings = DocumentExportSettings.get()
     documents = case.documents.all()
 
     for doc in documents:
         if doc.original_file:
             shutil.copy(doc.original_file.path, os.path.join(unedited_dir, doc.original_file.name.split("/")[-1]))
 
-        redacted_pdf_content = _generate_pdf_from_document(doc, mode="redacted")
+        redacted_pdf_content = _generate_pdf_from_document(
+            doc, mode="redacted", export_settings=export_settings, case_reference=case.case_reference
+        )
         if redacted_pdf_content:
             with open(os.path.join(redacted_dir, f"{doc.filename}.pdf"), "wb") as f:
                 f.write(redacted_pdf_content)
 
-        disclosure_pdf_content = _generate_pdf_from_document(doc, mode="disclosure")
+        disclosure_pdf_content = _generate_pdf_from_document(
+            doc, mode="disclosure", export_settings=export_settings, case_reference=case.case_reference
+        )
         if disclosure_pdf_content:
             with open(os.path.join(disclosure_dir, f"{doc.filename}.pdf"), "wb") as f:
                 f.write(disclosure_pdf_content)
