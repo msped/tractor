@@ -373,6 +373,21 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         setScrollToId(null);
     }, []);
 
+    const [scrollToDocumentId, setScrollToDocumentId] = useState(null);
+
+    const handleCardClick = useCallback((redactionId) => {
+        setScrollToDocumentId(redactionId);
+    }, []);
+
+    useEffect(() => {
+        if (!scrollToDocumentId) return;
+        const el = window.document.querySelector(`[data-redaction-id="${scrollToDocumentId}"]`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        setScrollToDocumentId(null);
+    }, [scrollToDocumentId]);
+
     const handleMarkAsComplete = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -541,6 +556,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     scrollToId={scrollToId}
                     removeScrollId={handleRemoveScrollId}
                     onContextSave={handleOnContextSave}
+                    onCardClick={handleCardClick}
                     exemptionTemplates={exemptionTemplates}
                 />
             </Box>
