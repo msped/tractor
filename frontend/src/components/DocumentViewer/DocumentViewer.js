@@ -245,6 +245,7 @@ const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hovere
                     cursor: viewMode === 'review' ? 'pointer' : 'default',
                 }}
                 key={`mark-${mark.id}-${index}`}
+                data-redaction-id={mark.id}
                 onClick={viewMode === 'review' && onHighlightClick ? () => onHighlightClick(mark.id) : undefined}
             >
                 {elementText.substring(localStart, localEnd)}
@@ -515,6 +516,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                         cursor: viewMode === 'review' ? 'pointer' : 'default',
                     }}
                     key={key}
+                    data-redaction-id={mark.id}
                     onClick={viewMode === 'review' && onHighlightClick ? () => onHighlightClick(mark.id) : undefined}
                 >
                     {markText}

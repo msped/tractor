@@ -43,6 +43,7 @@ export const RedactionSidebar = ({
     scrollToId,
     removeScrollId,
     onContextSave,
+    onCardClick = () => {},
     exemptionTemplates = [],
 }) => {
     const redactionSections = Object.keys(redactions);
@@ -159,7 +160,7 @@ export const RedactionSidebar = ({
                 onMouseLeave={onSuggestionMouseLeave}
             >
                 <Card variant="outlined" sx={{ width: '100%' }}>
-                    <CardContent>
+                    <CardContent onClick={() => onCardClick(ids[0])} sx={{ cursor: 'pointer' }}>
                         <Typography variant="body2" sx={{ fontStyle: 'italic', mb: 2 }}>{`"${item.text}"`}</Typography>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
@@ -323,7 +324,7 @@ export const RedactionSidebar = ({
                                                         sx={{ px: 0, flexDirection: 'column', alignItems: 'stretch', '&:not(:last-child)': { mb: 1 } }}
                                                     >
                                                         <Card variant="outlined">
-                                                            <CardContent sx={{ pb: 1, '&:last-child': { pb: 1 } }}>
+                                                            <CardContent sx={{ pb: 1, '&:last-child': { pb: 1 }, cursor: 'pointer' }} onClick={() => onCardClick(allIds[0])}>
                                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                     <Box>
                                                                         <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{`"${displayItem.text}"`}</Typography>
@@ -333,7 +334,7 @@ export const RedactionSidebar = ({
                                                                     </Box>
                                                                     <IconButton
                                                                         size="small"
-                                                                        onClick={() => toggleGroup(displayItem.key)}
+                                                                        onClick={(e) => { e.stopPropagation(); toggleGroup(displayItem.key); }}
                                                                         aria-label={isGroupExpanded ? 'collapse group' : 'expand group'}
                                                                     >
                                                                         {isGroupExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -367,9 +368,11 @@ export const RedactionSidebar = ({
                                                                 </CardActions>
                                                             )}
                                                             {isGroupExpanded && (
-                                                                <List dense sx={{ p: 0 }}>
-                                                                    {displayItem.items.map(gi => renderItem(gi, sectionKey))}
-                                                                </List>
+                                                                <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 1, pt: 0.5, pb: 0.5 }}>
+                                                                    <List dense sx={{ p: 0 }}>
+                                                                        {displayItem.items.map(gi => renderItem(gi, sectionKey))}
+                                                                    </List>
+                                                                </Box>
                                                             )}
                                                         </Card>
                                                     </ListItem>

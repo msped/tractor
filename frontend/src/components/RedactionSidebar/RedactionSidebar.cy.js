@@ -55,6 +55,7 @@ describe('<RedactionSidebar />', () => {
             scrollToId: null,
             removeScrollId: cy.stub().as('removeScrollId'),
             onContextSave: cy.stub().as('onContextSave'),
+            onCardClick: cy.stub().as('onCardClick'),
             exemptionTemplates: mockExemptionTemplates,
         };
     });
@@ -184,6 +185,11 @@ describe('<RedactionSidebar />', () => {
             );
             cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
             cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
+        });
+
+        it('calls onCardClick with the item id when card content is clicked', () => {
+            cy.contains('li', 'pending text').contains('"pending text"').click();
+            cy.get('@onCardClick').should('have.been.calledOnceWith', 'p1');
         });
     });
 
@@ -361,6 +367,16 @@ describe('<RedactionSidebar />', () => {
             cy.get('button[aria-label="expand group"]').click();
             cy.get('button[aria-label="collapse group"]').should('be.visible').click();
             cy.get('button[aria-label="expand group"]').should('be.visible');
+        });
+
+        it('calls onCardClick with first group id when group card content is clicked', () => {
+            cy.contains('"John Doe"').click();
+            cy.get('@onCardClick').should('have.been.calledOnceWith', 'g1');
+        });
+
+        it('does not call onCardClick when the expand/collapse icon is clicked', () => {
+            cy.get('button[aria-label="expand group"]').click();
+            cy.get('@onCardClick').should('not.have.been.called');
         });
     });
 
