@@ -46,6 +46,31 @@ Items that share the same text and redaction type are grouped together in the si
 
 Individual items within a group can still be actioned separately by expanding the group.
 
+## Manual Redactions
+
+If the AI has missed something, or you need to redact text that falls outside the automatic suggestions, you can create manual redactions yourself. There are two ways to do this.
+
+### Highlight Tool
+
+The Redaction Sidebar contains three colour-coded buttons at the top — one for each redaction type:
+
+| Button | Type |
+|--------|------|
+| **PII** | Third-Party PII |
+| **Op. Data** | Operational Data |
+| **DS Info** | Data Subject Information |
+
+Click a button to activate that type as your active highlight tool. The button will appear bold to indicate it is active. Then select any text in the document — the redaction is applied immediately in that type's colour with no extra steps.
+
+- Click the active button again, or press **Escape**, to deactivate the tool.
+- When a tool is active, selecting text that already contains AI suggestions will **accept** those suggestions and apply the chosen type, creating new redactions for any uncovered gaps in your selection.
+
+### Popover (Select and Choose)
+
+If no highlight tool is active, selecting text will open a small popover. Choose the redaction type from the popover to create the redaction.
+
+This method is useful when you want to consciously pick the type for each individual piece of text rather than painting with a pre-selected colour.
+
 ## Redaction Types
 
 Tractor currently supports the following redaction types:

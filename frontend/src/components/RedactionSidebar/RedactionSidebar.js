@@ -27,6 +27,12 @@ const truncateText = (text, maxLength = 23) => {
     return text.substring(0, maxLength) + '...';
 };
 
+const HIGHLIGHT_TOOLS = [
+    { type: 'PII',     label: 'PII',        fullLabel: 'Third-Party PII',         color: 'rgb(46, 204, 113)'  },
+    { type: 'OP_DATA', label: 'Op. Data',   fullLabel: 'Operational Data',         color: 'rgb(0, 221, 255)'   },
+    { type: 'DS_INFO', label: 'DS Info',    fullLabel: 'Data Subject Information', color: 'rgb(177, 156, 217)' },
+];
+
 export const RedactionSidebar = ({
     redactions,
     onAccept,
@@ -45,6 +51,9 @@ export const RedactionSidebar = ({
     onContextSave,
     onCardClick = () => {},
     exemptionTemplates = [],
+    activeHighlightType = null,
+    onToggleHighlightTool = () => {},
+    documentCompleted = false,
 }) => {
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
@@ -285,6 +294,39 @@ export const RedactionSidebar = ({
         <Box sx={{ width: '100%', borderLeft: 1, borderColor: 'divider', height: 'calc(100vh - 64px)', overflowY: 'auto', bgcolor: 'background.default' }}>
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
                 <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
+                {!documentCompleted && (
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+                        {HIGHLIGHT_TOOLS.map(({ type, label, fullLabel, color }) => {
+                            const isActive = activeHighlightType === type;
+                            return (
+                                <Tooltip key={type} title={isActive ? `Deactivate: ${fullLabel}` : `Highlight as: ${fullLabel}`}>
+                                    <Button
+                                        size="small"
+                                        variant="contained"
+                                        onClick={() => onToggleHighlightTool(type)}
+                                        sx={{
+                                            flex: 1,
+                                            backgroundColor: color,
+                                            color: 'rgba(0,0,0,0.75)',
+                                            opacity: isActive ? 1 : 0.45,
+                                            outline: isActive ? `3px solid rgba(0,0,0,0.4)` : 'none',
+                                            outlineOffset: '1px',
+                                            fontWeight: isActive ? 'bold' : 'normal',
+                                            '&:hover': {
+                                                backgroundColor: color,
+                                                opacity: 0.85,
+                                            },
+                                            boxShadow: 'none',
+                                            minWidth: 0,
+                                        }}
+                                    >
+                                        {label}
+                                    </Button>
+                                </Tooltip>
+                            );
+                        })}
+                    </Box>
+                )}
             </Box>
             {hasItems ? (
                 <Box sx={{ py: 2 }}>

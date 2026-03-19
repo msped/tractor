@@ -266,7 +266,7 @@ const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hovere
     return parts.length > 0 ? parts : elementText;
 };
 
-export const DocumentViewer = ({ text, tables, structure, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick, reviewComplete, viewMode = 'review', baseFontSize = 1 }) => {
+export const DocumentViewer = ({ text, tables, structure, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick, reviewComplete, viewMode = 'review', baseFontSize = 1, activeHighlightType = null }) => {
     const viewerRef = useRef(null);
     const tableRegions = useMemo(() => buildTableRegions(tables), [tables]);
     const scaledFontSize = `${baseFontSize}rem`;
@@ -548,6 +548,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                 flexGrow: 1,
                 overflowY: 'auto',
                 height: '100%',
+                cursor: activeHighlightType ? 'text' : 'auto',
             }}
             ref={viewerRef}
             data-testid="document-viewer"

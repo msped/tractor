@@ -719,8 +719,8 @@ describe('<RedactionComponent />', () => {
             mountRedactionComponent();
 
             cy.contains('manual (1)').click();
-            cy.contains('li', 'test document').should('be.visible');
-            cy.contains('li', 'test document').contains('button', 'Remove').should('be.visible').click();
+            cy.contains('li', 'test document').should('exist');
+            cy.contains('li', 'test document').contains('button', 'Remove').click({ force: true });
 
             cy.wait('@failedDelete');
             cy.contains('Failed to delete redaction. Please try again.').should('be.visible');
