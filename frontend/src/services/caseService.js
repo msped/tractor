@@ -74,6 +74,34 @@ export const getCases = async (accessToken) => {
     }
 };
 
+export const getExportSettings = async (accessToken) => {
+    try {
+        const response = await apiClient.get('/cases/settings/export', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to get export settings:", error.response?.data || error.message);
+        throw new Error("Failed to get export settings. Please try again.");
+    }
+};
+
+export const updateExportSettings = async (data, accessToken) => {
+    try {
+        const response = await apiClient.patch('/cases/settings/export', data, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to update export settings:", error.response?.data || error.message);
+        throw new Error("Failed to update export settings. Please try again.");
+    }
+};
+
 export const createCaseExport = async (caseId, accessToken) => {
     try {
         const response = await apiClient.post(`/cases/${caseId}/export`, {}, {
