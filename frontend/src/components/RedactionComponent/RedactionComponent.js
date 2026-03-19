@@ -61,6 +61,19 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // State for merged span splits (display-only)
     const [splitMerges, setSplitMerges] = useState(new Set());
 
+    // State for active highlight tool (null | 'PII' | 'OP_DATA' | 'DS_INFO')
+    const [activeHighlightType, setActiveHighlightType] = useState(null);
+
+    const handleToggleHighlightTool = useCallback((type) => {
+        setActiveHighlightType(prev => prev === type ? null : type);
+    }, []);
+
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape') setActiveHighlightType(null); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
+
     // Font size controls
     const [fontSizeIndex, setFontSizeIndex] = useState(2);
     const baseFontSize = FONT_SIZE_STEPS[fontSizeIndex];
@@ -280,13 +293,6 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
     }, [redactions, session?.access_token]);
 
-    const handleTextSelect = useCallback((selection, rect) => {
-        setNewSelection(selection);
-        setPendingRedaction(selection);
-        const virtualEl = { getBoundingClientRect: () => rect, nodeType: 1 };
-        setManualRedactionAnchor(virtualEl);
-    }, []);
-
     const handleCloseManualRedactionPopover = useCallback(() => {
         setManualRedactionAnchor(null);
         setNewSelection(null);
@@ -304,18 +310,77 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         );
     }, []);
 
-    const handleCreateManualRedaction = useCallback(async (redactionType) => {
-        if (!newSelection) return;
+    const handleCreateManualRedaction = useCallback(async (redactionType, selectionOverride = null) => {
+        const sel = selectionOverride ?? newSelection;
+        const isToolMode = selectionOverride !== null;
+        if (!sel) return;
 
         // Find any existing redactions that overlap with the selection
         const overlapping = redactions.filter(r =>
-            r.start_char < newSelection.end_char && r.end_char > newSelection.start_char
+            r.start_char < sel.end_char && r.end_char > sel.start_char
         );
 
         if (overlapping.length > 0) {
+            if (isToolMode) {
+                // Tool mode: accept/update every overlapping redaction, preserving is_suggestion,
+                // then create new user redactions for any uncovered gaps within the selection.
+                try {
+                    const updates = await Promise.all(
+                        overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true }, session?.access_token))
+                    );
+                    setRedactions(prev => {
+                        const updatedMap = new Map(updates.map(r => [r.id, r]));
+                        return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
+                    });
+                } catch (error) {
+                    handleCloseManualRedactionPopover();
+                    toast.error("Failed to update redactions. Please try again.");
+                    return;
+                }
+
+                // Find gaps within the selection not covered by any overlapping redaction
+                const sorted = [...overlapping].sort((a, b) => a.start_char - b.start_char);
+                const gaps = [];
+                let cursor = sel.start_char;
+                for (const r of sorted) {
+                    const rStart = Math.max(r.start_char, sel.start_char);
+                    if (rStart > cursor) gaps.push({ start_char: cursor, end_char: rStart });
+                    cursor = Math.max(cursor, Math.min(r.end_char, sel.end_char));
+                }
+                if (cursor < sel.end_char) gaps.push({ start_char: cursor, end_char: sel.end_char });
+
+                if (gaps.length > 0) {
+                    const docText = document.extracted_text || '';
+                    const substantiveGaps = gaps.filter(gap =>
+                        docText.substring(gap.start_char, gap.end_char).trim().length > 0
+                    );
+                    if (substantiveGaps.length > 0) {
+                        try {
+                            const created = await Promise.all(
+                                substantiveGaps.map(gap => createRedaction(document.id, {
+                                    text: docText.substring(gap.start_char, gap.end_char),
+                                    start_char: gap.start_char,
+                                    end_char: gap.end_char,
+                                    document: document.id,
+                                    redaction_type: redactionType,
+                                    is_suggestion: false,
+                                    is_accepted: true,
+                                }, session?.access_token))
+                            );
+                            setRedactions(prev => [...prev, ...created]);
+                        } catch (error) {
+                            toast.error("Failed to redact uncovered areas. Please try again.");
+                        }
+                    }
+                }
+
+                handleCloseManualRedactionPopover();
+                return;
+            }
+
+            // Popover mode
             const sameType = overlapping.every(r => r.redaction_type === redactionType);
             if (sameType) {
-                // Already redacted with this classification — don't duplicate
                 handleCloseManualRedactionPopover();
                 toast("This text is already redacted with this classification.");
                 return;
@@ -339,7 +404,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         }
 
         const newRedaction = {
-            ...newSelection,
+            ...sel,
             document: document.id,
             redaction_type: redactionType,
             is_suggestion: false,
@@ -355,7 +420,20 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             toast.error("Failed to create redaction. Please try again.");
         }
 
-    }, [newSelection, document.id, handleCloseManualRedactionPopover, session?.access_token, redactions]);
+    }, [newSelection, document.id, document.extracted_text, handleCloseManualRedactionPopover, session?.access_token, redactions]);
+
+    const handleTextSelect = useCallback((selection, rect) => {
+        if (activeHighlightType) {
+            setNewSelection(selection);
+            setPendingRedaction(selection);
+            handleCreateManualRedaction(activeHighlightType, selection);
+            return;
+        }
+        setNewSelection(selection);
+        setPendingRedaction(selection);
+        const virtualEl = { getBoundingClientRect: () => rect, nodeType: 1 };
+        setManualRedactionAnchor(virtualEl);
+    }, [activeHighlightType, handleCreateManualRedaction]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);
@@ -525,6 +603,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     onHighlightClick={handleHighlightClick}
                     reviewComplete={pendingCount === 0}
                     baseFontSize={baseFontSize}
+                    activeHighlightType={activeHighlightType}
                 />
             </Container>
 
@@ -558,6 +637,9 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     onContextSave={handleOnContextSave}
                     onCardClick={handleCardClick}
                     exemptionTemplates={exemptionTemplates}
+                    activeHighlightType={activeHighlightType}
+                    onToggleHighlightTool={handleToggleHighlightTool}
+                    documentCompleted={currentDocument.status === 'Completed'}
                 />
             </Box>
 

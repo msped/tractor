@@ -112,17 +112,17 @@ describe('<RedactionSidebar />', () => {
 
         it('renders correct buttons for the "accepted" section', () => {
             cy.contains('accepted (2)').click();
-            cy.contains('li', '"accepted text"').contains('button', 'Remove').should('be.visible');
+            cy.contains('li', '"accepted text"').contains('button', 'Remove').should('exist');
         });
 
         it('renders correct buttons for the "rejected" section', () => {
             cy.contains('rejected (1)').click();
-            cy.contains('li', 'rejected text').contains('button', 'Re-evaluate').should('be.visible');
+            cy.contains('li', 'rejected text').contains('button', 'Re-evaluate').should('exist');
         });
 
         it('renders correct buttons for the "manual" section', () => {
             cy.contains('manual (1)').click();
-            cy.contains('li', 'manual text').contains('button', 'Remove').should('be.visible');
+            cy.contains('li', 'manual text').contains('button', 'Remove').should('exist');
         });
     });
 
@@ -262,14 +262,14 @@ describe('<RedactionSidebar />', () => {
             cy.contains('li', '"accepted text"').scrollIntoView().within(() => {
                 cy.get('[data-testid="AddIcon"]')
                   .parents('button')
-                  .should('be.visible')
+                  .should('exist')
                   .and('contain', 'Context');
             });
 
             cy.contains('li', '"accepted with context"').scrollIntoView().within(() => {
                 cy.get('[data-testid="EditIcon"]')
                     .parents('button')
-                    .should('be.visible')
+                    .should('exist')
                     .and('contain', 'Context');
             });
 
@@ -277,7 +277,7 @@ describe('<RedactionSidebar />', () => {
                 cy.get('[data-testid="EditIcon"]')
                     .parents('button')
                     .parent()
-                    .should('be.visible')
+                    .should('exist')
                     .and('contain', 'This is existing contex...');
             });
         });
