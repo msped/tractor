@@ -441,8 +441,7 @@ def _build_export_css(settings, case_reference=""):
         ".type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }\n"
         ".type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }\n"
         ".type-DS_INFO { background-color: rgba(177, 156, 217, 0.8); color: initial; }\n"
-        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n"
-        + watermark_css
+        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n" + watermark_css
     )
 
 
