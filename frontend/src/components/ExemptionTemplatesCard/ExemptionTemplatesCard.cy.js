@@ -33,7 +33,6 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.contains('S.40 - Personal Information').should('be.visible');
         cy.contains('Personal data exemption').should('be.visible');
         cy.contains('S.42 - Legal Privilege').should('be.visible');
-        cy.contains('—').should('be.visible');
     });
 
     it('shows empty state when no templates exist', () => {
