@@ -65,8 +65,12 @@ export const DocumentExportSettingsCard = () => {
     return (
         <Card>
             <CardContent>
-                <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
+                <Typography variant="h6" component="h2">
                     Document Export Settings
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Applied to every exported PDF. Header and footer text appear in the page margins on each page.
+                    The watermark is shown diagonally across the page and can optionally include the case reference.
                 </Typography>
 
                 {isLoading && (
