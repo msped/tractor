@@ -244,11 +244,31 @@ class ExemptionTemplate(models.Model):
 
 
 class DocumentExportSettings(models.Model):
+    class FontFamily(models.TextChoices):
+        ARIAL = "arial", "Arial"
+        TIMES_NEW_ROMAN = "times_new_roman", "Times New Roman"
+        COURIER_NEW = "courier_new", "Courier New"
+        GEORGIA = "georgia", "Georgia"
+        VERDANA = "verdana", "Verdana"
+
+    _FONT_CSS = {
+        "arial": "Arial, sans-serif",
+        "times_new_roman": '"Times New Roman", serif',
+        "courier_new": '"Courier New", monospace',
+        "georgia": "Georgia, serif",
+        "verdana": "Verdana, sans-serif",
+    }
+
     header_text = models.CharField(max_length=500, blank=True, default="")
     footer_text = models.CharField(max_length=500, blank=True, default="")
     watermark_text = models.CharField(max_length=200, blank=True, default="")
     watermark_include_case_ref = models.BooleanField(default=False)
     page_numbers_enabled = models.BooleanField(default=False)
+    font_family = models.CharField(max_length=50, choices=FontFamily, default=FontFamily.ARIAL)
+
+    @property
+    def font_family_css(self):
+        return self._FONT_CSS.get(self.font_family, "Arial, sans-serif")
 
     class Meta:
         verbose_name = "Document Export Settings"
