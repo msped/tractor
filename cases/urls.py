@@ -7,6 +7,7 @@ from .views import (
     CaseListCreateView,
     DocumentCancelProcessingView,
     DocumentDetailView,
+    DocumentExportSettingsView,
     DocumentListCreateView,
     DocumentResubmitView,
     DocumentReviewView,
@@ -18,6 +19,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("cases/settings/export", DocumentExportSettingsView.as_view(), name="export-settings"),
     path("cases/exemptions", ExemptionTemplateListView.as_view(), name="exemption-template-list"),
     path("cases/exemptions/<int:pk>", ExemptionTemplateDetailView.as_view(), name="exemption-template-detail"),
     path("cases", CaseListCreateView.as_view(), name="case-list-create"),

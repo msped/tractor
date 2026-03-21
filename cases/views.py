@@ -3,20 +3,39 @@ from django_q.models import OrmQ
 from django_q.tasks import async_task
 from rest_framework import status
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView, RetrieveUpdateDestroyAPIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Case, Document, ExemptionTemplate, Redaction, RedactionContext
+from .models import Case, Document, DocumentExportSettings, ExemptionTemplate, Redaction, RedactionContext
 from .serializers import (
     CaseDetailSerializer,
     CaseSerializer,
+    DocumentExportSettingsSerializer,
     DocumentReviewSerializer,
     DocumentSerializer,
     ExemptionTemplateSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
 )
+
+
+class DocumentExportSettingsView(APIView):
+    """
+    GET/PATCH the singleton document export settings (admin only).
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        serializer = DocumentExportSettingsSerializer(DocumentExportSettings.get())
+        return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = DocumentExportSettingsSerializer(DocumentExportSettings.get(), data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class ExemptionTemplateListView(ListCreateAPIView):

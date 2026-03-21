@@ -17,8 +17,9 @@ from pypdf import PdfReader
 from training.models import Model as SpacyModel
 from training.tests.base import NetworkBlockerMixin
 
-from ..models import Case, Document, Redaction, RedactionContext
+from ..models import Case, Document, DocumentExportSettings, Redaction, RedactionContext
 from ..services import (
+    _build_export_css,
     _generate_pdf_from_document,
     _matches_data_subject,
     delete_cases_past_retention_date,
@@ -567,3 +568,120 @@ class DeleteOldCasesServiceTest(NetworkBlockerMixin, TestCase):
             delete_cases_past_retention_date()
 
             mock_filter.return_value.iterator.assert_called_once()
+
+
+class BuildExportCssTests(NetworkBlockerMixin, TestCase):
+    def _make_settings(self, **kwargs):
+        defaults = {
+            "header_text": "",
+            "footer_text": "",
+            "watermark_text": "",
+            "watermark_include_case_ref": False,
+            "page_numbers_enabled": False,
+        }
+        defaults.update(kwargs)
+        obj = DocumentExportSettings(**defaults)
+        return obj
+
+    def test_defaults_no_header_footer_page_numbers(self):
+        css = _build_export_css(self._make_settings())
+        self.assertIn("margin: 2cm 2cm 2cm 2cm", css)
+        self.assertNotIn("@top-center", css)
+        self.assertNotIn("@bottom-center", css)
+        self.assertNotIn("watermark", css)
+
+    def test_header_increases_top_margin_and_zeroes_companions(self):
+        css = _build_export_css(self._make_settings(header_text="OFFICIAL"))
+        self.assertIn("margin: 2.5cm 2cm 2cm 2cm", css)
+        self.assertIn("@top-center", css)
+        self.assertIn("OFFICIAL", css)
+        self.assertIn("@top-left", css)
+        self.assertIn("@top-right", css)
+
+    def test_footer_increases_bottom_margin_and_zeroes_companions(self):
+        css = _build_export_css(self._make_settings(footer_text="Confidential"))
+        self.assertIn("margin: 2cm 2cm 2.5cm 2cm", css)
+        self.assertIn("@bottom-center", css)
+        self.assertIn("Confidential", css)
+        self.assertIn("@bottom-left", css)
+        self.assertIn("@bottom-right", css)
+
+    def test_page_numbers_in_output(self):
+        css = _build_export_css(self._make_settings(page_numbers_enabled=True))
+        self.assertIn("counter(page)", css)
+        self.assertIn("counter(pages)", css)
+        self.assertIn("@bottom-center", css)
+
+    def test_footer_and_page_numbers_combined_in_bottom_center(self):
+        css = _build_export_css(self._make_settings(footer_text="Confidential", page_numbers_enabled=True))
+        self.assertIn("@bottom-center", css)
+        self.assertIn("Confidential", css)
+        self.assertIn("counter(page)", css)
+        self.assertIn(r"\A", css)
+
+    def test_watermark_css_emitted_when_watermark_text_set(self):
+        css = _build_export_css(
+            self._make_settings(watermark_text="SAR", watermark_include_case_ref=True),
+            case_reference="2025-001",
+        )
+        self.assertIn(".watermark", css)
+        self.assertIn("rotate(-45deg)", css)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class GeneratePdfWithSettingsTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(case_reference="CSS01", data_subject_name="Test User")
+        file = SimpleUploadedFile("doc.txt", b"Hello world redacted text here")
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=file,
+            extracted_text="Hello world redacted text here",
+        )
+
+    def test_generate_pdf_with_non_default_settings(self):
+        settings = DocumentExportSettings(
+            header_text="OFFICIAL",
+            footer_text="Confidential",
+            watermark_text="DRAFT",
+            watermark_include_case_ref=False,
+            page_numbers_enabled=True,
+        )
+        result = _generate_pdf_from_document(self.document, mode="disclosure", export_settings=settings)
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, bytes)
+        self.assertTrue(result[:4] == b"%PDF")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ExportCaseDocumentsPassesSettingsTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(case_reference="EXP01", data_subject_name="Export User")
+        file = SimpleUploadedFile("doc.txt", b"Some text")
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=file,
+            extracted_text="Some text",
+            status=Document.Status.COMPLETED,
+        )
+
+    def test_export_case_documents_passes_settings_and_case_ref(self):
+        mock_settings = DocumentExportSettings(
+            header_text="HDR",
+            footer_text="FTR",
+            watermark_text="WM",
+            watermark_include_case_ref=True,
+            page_numbers_enabled=True,
+        )
+        with (
+            patch("cases.services.DocumentExportSettings.get", return_value=mock_settings) as mock_get,
+            patch("cases.services._generate_pdf_from_document", return_value=b"%PDF-test") as mock_gen,
+        ):
+            export_case_documents(self.case.id)
+
+        mock_get.assert_called_once()
+        calls = mock_gen.call_args_list
+        self.assertEqual(len(calls), 2)
+        for c in calls:
+            self.assertEqual(c.kwargs["export_settings"], mock_settings)
+            self.assertEqual(c.kwargs["case_reference"], "EXP01")

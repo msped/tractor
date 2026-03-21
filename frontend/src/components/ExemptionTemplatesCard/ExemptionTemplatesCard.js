@@ -9,12 +9,8 @@ import {
     Card,
     CardContent,
     CircularProgress,
+    Divider,
     IconButton,
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableRow,
     TextField,
     Typography,
 } from '@mui/material';
@@ -123,7 +119,7 @@ export const ExemptionTemplatesCard = () => {
                                 required
                                 autoFocus
                                 sx={{ flex: 2 }}
-                                inputProps={{ 'aria-label': 'template name' }}
+                                slotProps={{ 'htmlInput': { 'aria-label': 'template name' } }}
                             />
                             <TextField
                                 label="Description (optional)"
@@ -131,7 +127,7 @@ export const ExemptionTemplatesCard = () => {
                                 onChange={(e) => setNewDescription(e.target.value)}
                                 size="small"
                                 sx={{ flex: 3 }}
-                                inputProps={{ 'aria-label': 'template description' }}
+                                slotProps={{ 'htmlInput': { 'aria-label': 'template description' } }}
                             />
                             <Button
                                 type="submit"
@@ -154,34 +150,32 @@ export const ExemptionTemplatesCard = () => {
                     {error && <Alert severity="error">{error.message}</Alert>}
                     {templates && (
                         templates.length > 0 ? (
-                            <Table size="small">
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Name</TableCell>
-                                        <TableCell>Description</TableCell>
-                                        <TableCell />
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {templates.map((template) => (
-                                        <TableRow key={template.id}>
-                                            <TableCell>{template.name}</TableCell>
-                                            <TableCell>{template.description || '—'}</TableCell>
-                                            <TableCell align="right">
-                                                <IconButton
-                                                    aria-label={`delete ${template.name}`}
-                                                    color="error"
-                                                    size="small"
-                                                    onClick={() => setConfirmDelete(template)}
-                                                    disabled={isSubmitting}
-                                                >
-                                                    <DeleteIcon />
-                                                </IconButton>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                            <Box>
+                                {templates.map((template, index) => (
+                                    <Box key={template.id}>
+                                        {index > 0 && <Divider />}
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1 }}>
+                                            <Box>
+                                                <Typography variant="body2">{template.name}</Typography>
+                                                {template.description && (
+                                                    <Typography variant="caption" color="text.secondary">
+                                                        {template.description}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+                                            <IconButton
+                                                aria-label={`delete ${template.name}`}
+                                                color="error"
+                                                size="small"
+                                                onClick={() => setConfirmDelete(template)}
+                                                disabled={isSubmitting}
+                                            >
+                                                <DeleteIcon />
+                                            </IconButton>
+                                        </Box>
+                                    </Box>
+                                ))}
+                            </Box>
                         ) : (
                             <Typography color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
                                 No exemption templates configured.

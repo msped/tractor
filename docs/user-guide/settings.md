@@ -2,6 +2,39 @@
 
 The Settings page allows administrators to configure Tractor for your organisation.
 
+## Document Export Settings
+
+These settings control the appearance of every PDF produced by an export. They are applied system-wide — there are no per-case or per-document overrides.
+
+Navigate to **Settings** and find the **Document Export Settings** card.
+
+### Header
+
+Text entered in the **Header text** field appears centred in the top margin of every exported page. Leave blank to suppress the header entirely.
+
+### Footer
+
+Text entered in the **Footer text** field appears centred in the bottom margin of every exported page. Leave blank to suppress the footer entirely.
+
+### Watermark
+
+Text entered in the **Watermark text** field is rendered diagonally across the centre of every page in a large, semi-transparent grey font (e.g. `DRAFT`, `SAR`, `RESTRICTED`).
+
+Enable **Include case reference in watermark** to append the case reference to the watermark text automatically (e.g. `SAR 2025-001`). This toggle is disabled when the watermark text field is empty.
+
+### Page Numbers
+
+Enable **Show page numbers** to add "Page X of Y" below the footer text on every page. If no footer text is set, the page number appears on its own.
+
+### Saving
+
+Click **Save** to apply changes. The new settings take effect on the next export — previously generated ZIP packages are not retroactively updated.
+
+!!! note
+    These settings are only visible and editable by administrators.
+
+---
+
 ## Exemption Templates
 
 Exemption templates are pre-configured rejection reasons that reviewers can select when rejecting a redaction suggestion. Rather than typing a reason from scratch each time, reviewers can pick from a searchable list of standard exemptions (e.g. "S.40 - Personal Information", "S.42 - Legal Privilege").
