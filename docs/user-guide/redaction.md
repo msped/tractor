@@ -54,11 +54,11 @@ If the AI has missed something, or you need to redact text that falls outside th
 
 The Redaction Sidebar contains three colour-coded buttons at the top — one for each redaction type:
 
-| Button | Type |
-|--------|------|
-| **PII** | Third-Party PII |
-| **Op. Data** | Operational Data |
-| **DS Info** | Data Subject Information |
+| Button       | Type                     |
+|--------------|--------------------------|
+| **PII**      | Third-Party PII          |
+| **Op. Data** | Operational Data         |
+| **DS Info**  | Data Subject Information |
 
 Click a button to activate that type as your active highlight tool. The button will appear bold to indicate it is active. Then select any text in the document — the redaction is applied immediately in that type's colour with no extra steps.
 
@@ -75,11 +75,11 @@ This method is useful when you want to consciously pick the type for each indivi
 
 Tractor currently supports the following redaction types:
 
-| Type | Description |
-|------|-------------|
-| **Operational Data** | Internal operational information |
-| **Third-Party PII** | Personally identifiable information belonging to third parties |
-| **Data Subject Information** | Information relating to the data subject of the case |
+| Type                         | Description                                                    |
+|------------------------------|----------------------------------------------------------------|
+| **Operational Data**         | Internal operational information                               |
+| **Third-Party PII**          | Personally identifiable information belonging to third parties |
+| **Data Subject Information** | Information relating to the data subject of the case           |
 
 !!! note
     Custom redaction types are not currently supported. The available types are defined in `cases/models.py`.

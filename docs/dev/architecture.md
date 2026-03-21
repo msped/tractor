@@ -4,14 +4,14 @@ This document describes the technical architecture of Tractor.
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | Next.js 15 (React 19), Material-UI v7 |
-| Backend | Django 5.2, Django REST Framework |
-| Database | PostgreSQL 15 |  
-| Task Queue | django-q2 |
-| NLP | SpanCat (spaCy 3.8), GLiNER (HuggingFace), Microsoft Presidio |
-| Authentication | NextAuth v5, JWT |
+| Component      | Technology                                                    |
+|----------------|---------------------------------------------------------------|
+| Frontend       | Next.js 15 (React 19), Material-UI v7                         |
+| Backend        | Django 5.2, Django REST Framework                             |
+| Database       | PostgreSQL 15                                                 |  
+| Task Queue     | django-q2                                                     |
+| NLP            | SpanCat (spaCy 3.8), GLiNER (HuggingFace), Microsoft Presidio |
+| Authentication | NextAuth v5, JWT                                              |
 
 ## Project Structure
 
@@ -49,63 +49,63 @@ All endpoints are prefixed with `/api/`.
 
 ### Authentication (`/api/auth/`)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/login` | Login with username/password |
-| POST | `/logout` | Logout current user |
-| GET | `/user` | Get current user details |
-| POST | `/token/verify` | Verify JWT token |
-| POST | `/token/refresh` | Refresh JWT token |
-| POST | `/microsoft` | Microsoft Entra ID callback |
+| Method | Endpoint         | Description                  |
+|--------|------------------|------------------------------|
+| POST   | `/login`         | Login with username/password |
+| POST   | `/logout`        | Logout current user          |
+| GET    | `/user`          | Get current user details     |
+| POST   | `/token/verify`  | Verify JWT token             |
+| POST   | `/token/refresh` | Refresh JWT token            |
+| POST   | `/microsoft`     | Microsoft Entra ID callback  |
 
 ### Cases (`/api/cases`)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/cases` | List all cases |
-| POST | `/cases` | Create a new case |
-| GET | `/cases/<case_id>` | Get case details |
-| PATCH | `/cases/<case_id>` | Update case |
-| DELETE | `/cases/<case_id>` | Delete case |
-| POST | `/cases/<case_id>/export` | Generate disclosure package |
+| Method | Endpoint                  | Description                 |
+|--------|---------------------------|-----------------------------|
+| GET    | `/cases`                  | List all cases              |
+| POST   | `/cases`                  | Create a new case           |
+| GET    | `/cases/<case_id>`        | Get case details            |
+| PATCH  | `/cases/<case_id>`        | Update case                 |
+| DELETE | `/cases/<case_id>`        | Delete case                 |
+| POST   | `/cases/<case_id>/export` | Generate disclosure package |
 
 ### Documents (`/api/cases/...`)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/cases/<case_id>/documents` | List documents in case |
-| POST | `/cases/<case_id>/documents` | Upload document(s) |
-| GET | `/cases/documents/<document_id>` | Get document details |
-| PATCH | `/cases/documents/<document_id>` | Update document |
-| DELETE | `/cases/documents/<document_id>` | Delete document |
-| POST | `/cases/documents/<document_id>/resubmit` | Resubmit for processing |
-| GET | `/cases/<case_id>/document/<document_id>/review` | Get document for review |
+| Method | Endpoint                                         | Description             |
+|--------|--------------------------------------------------|-------------------------|
+| GET    | `/cases/<case_id>/documents`                     | List documents in case  |
+| POST   | `/cases/<case_id>/documents`                     | Upload document(s)      |
+| GET    | `/cases/documents/<document_id>`                 | Get document details    |
+| PATCH  | `/cases/documents/<document_id>`                 | Update document         |
+| DELETE | `/cases/documents/<document_id>`                 | Delete document         |
+| POST   | `/cases/documents/<document_id>/resubmit`        | Resubmit for processing |
+| GET    | `/cases/<case_id>/document/<document_id>/review` | Get document for review |
 
 ### Redactions (`/api/cases/document/...`)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/cases/document/<document_id>/redaction` | List redactions |
-| POST | `/cases/document/<document_id>/redaction` | Create redaction |
-| GET | `/cases/document/redaction/<id>` | Get redaction details |
-| PATCH | `/cases/document/redaction/<id>` | Update redaction (accept/reject) |
-| DELETE | `/cases/document/redaction/<id>` | Delete redaction |
-| POST | `/cases/document/redaction/<id>/context` | Add/update context |
-| PATCH | `/cases/document/<document_id>/redactions/bulk` | Bulk accept/reject/retype multiple redactions |
+| Method | Endpoint                                        | Description                                   |
+|--------|-------------------------------------------------|-----------------------------------------------|
+| GET    | `/cases/document/<document_id>/redaction`       | List redactions                               |
+| POST   | `/cases/document/<document_id>/redaction`       | Create redaction                              |
+| GET    | `/cases/document/redaction/<id>`                | Get redaction details                         |
+| PATCH  | `/cases/document/redaction/<id>`                | Update redaction (accept/reject)              |
+| DELETE | `/cases/document/redaction/<id>`                | Delete redaction                              |
+| POST   | `/cases/document/redaction/<id>/context`        | Add/update context                            |
+| PATCH  | `/cases/document/<document_id>/redactions/bulk` | Bulk accept/reject/retype multiple redactions |
 
 ### Models & Training (`/api/...`)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/models` | List trained models |
-| GET | `/models/<id>` | Get model details |
-| POST | `/models/<id>/set-active` | Activate a model |
-| POST | `/training/run-now` | Trigger manual training |
-| GET | `/training-docs` | List training documents |
-| POST | `/training-docs` | Upload training document |
-| GET | `/schedules` | List training schedules |
-| POST | `/schedules` | Create training schedule |
-| GET | `/training-runs` | List training run history |
+| Method | Endpoint                  | Description               |
+|--------|---------------------------|---------------------------|
+| GET    | `/models`                 | List trained models       |
+| GET    | `/models/<id>`            | Get model details         |
+| POST   | `/models/<id>/set-active` | Activate a model          |
+| POST   | `/training/run-now`       | Trigger manual training   |
+| GET    | `/training-docs`          | List training documents   |
+| POST   | `/training-docs`          | Upload training document  |
+| GET    | `/schedules`              | List training schedules   |
+| POST   | `/schedules`              | Create training schedule  |
+| GET    | `/training-runs`          | List training run history |
 
 ## Authentication Flow
 
@@ -139,18 +139,18 @@ GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in t
 
 **THIRD_PARTY analyzer:**
 
-| Recogniser | Entities detected |
-|------------|------------------|
+| Recogniser                        | Entities detected                   |
+|-----------------------------------|-------------------------------------|
 | Built-in (spaCy `en_core_web_sm`) | PHONE_NUMBER, EMAIL_ADDRESS, UK_NHS |
-| Custom pattern | UK postcodes |
-| Custom pattern | National Insurance numbers |
+| Custom pattern                    | UK postcodes                        |
+| Custom pattern                    | National Insurance numbers          |
 
 **OPERATIONAL analyzer:**
 
-| Recogniser | Entities detected |
-|------------|------------------|
+| Recogniser     | Entities detected                            |
+|----------------|----------------------------------------------|
 | Custom pattern | Crime reference numbers (e.g. `42/12345/24`) |
-| Custom pattern | Police collar numbers (e.g. `PC 1234`) |
+| Custom pattern | Police collar numbers (e.g. `PC 1234`)       |
 
 Both analyzers are instantiated lazily and cached as module-level singletons.
 

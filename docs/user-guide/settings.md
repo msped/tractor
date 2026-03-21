@@ -30,13 +30,13 @@ Enable **Show page numbers** to add "Page X of Y" below the footer text on every
 
 The **Export font** dropdown controls the typeface used for all body text in exported PDFs. Choose from the following options:
 
-| Option | Font |
-|---|---|
-| Arial | Arial, sans-serif |
+| Option          | Font                   |
+|-----------------|------------------------|
+| Arial           | Arial, sans-serif      |
 | Times New Roman | Times New Roman, serif |
-| Courier New | Courier New, monospace |
-| Georgia | Georgia, serif |
-| Verdana | Verdana, sans-serif |
+| Courier New     | Courier New, monospace |
+| Georgia         | Georgia, serif         |
+| Verdana         | Verdana, sans-serif    |
 
 All fonts in this list are cross-platform web-safe fonts that render consistently on Linux servers without any additional font installation. The default is **Arial**.
 
