@@ -27,13 +27,7 @@ _MAX_CHUNK_CHARS = 1500
 
 
 def _chunk_text(text):
-    """
-    Split *text* into ``(chunk, start_offset)`` pairs that each fit within
-    GLiNER's token limit (~384 subword tokens ≈ 1500 characters).
-
-    Prefers breaking at newline boundaries, then at word (space) boundaries,
-    so that entity offsets remain correct when re-added to *start_offset*.
-    """
+    """Split text into overlapping chunks that fit within GLiNER's token limit."""
     if len(text) <= _MAX_CHUNK_CHARS:
         return [(text, 0)]
 

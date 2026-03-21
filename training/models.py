@@ -78,6 +78,8 @@ class TrainingEntity(models.Model):
 
 
 class TrainingRun(models.Model):
+    """Record of a single SpanCat model training run, including its outcome and source data."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     model = models.OneToOneField("Model", on_delete=models.CASCADE)
     source = models.CharField(
@@ -95,11 +97,15 @@ class TrainingRun(models.Model):
 
 
 class TrainingRunTrainingDoc(models.Model):
+    """Join table linking a TrainingRun to the TrainingDocuments used as its source."""
+
     training_run = models.ForeignKey(TrainingRun, on_delete=models.CASCADE)
     document = models.ForeignKey("TrainingDocument", on_delete=models.CASCADE)
 
 
 class TrainingRunCaseDoc(models.Model):
+    """Join table linking a TrainingRun to the case Documents used as its source."""
+
     training_run = models.ForeignKey(TrainingRun, on_delete=models.CASCADE)
     document = models.ForeignKey("cases.Document", on_delete=models.CASCADE)
 

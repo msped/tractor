@@ -41,10 +41,7 @@ _DOB_FORMATS = [
 
 
 def _matches_data_subject(text, case):
-    """
-    Check if entity text matches the case's data subject name or DOB.
-    Returns True if the text should be excluded from THIRD_PARTY suggestions.
-    """
+    """Return True if entity_text matches the case data subject's name or date of birth."""
     text_lower = text.strip().lower()
     if not text_lower:
         return False
@@ -76,9 +73,7 @@ def _matches_data_subject(text, case):
 
 
 def process_document_and_create_redactions(document_id):
-    """
-    The main background task. Fetches the active model from the database.
-    """
+    """Extract text from a document and create Redaction suggestions via the NLP pipeline."""
     try:
         document = Document.objects.get(id=document_id)
     except Document.DoesNotExist:
@@ -144,11 +139,7 @@ def process_document_and_create_redactions(document_id):
 
 
 def find_and_flag_matching_text_in_case(redaction_id):
-    """
-    When a user marks a piece of text as DS_INFORMATION, this function
-    searches for that same text in all other documents in the case and
-    creates new DS_INFORMATION suggestions.
-    """
+    """Propagate a DS_INFORMATION redaction to matching text across all other case documents."""
     try:
         source_redaction = Redaction.objects.select_related("document__case").get(id=redaction_id)
     except Redaction.DoesNotExist:
@@ -246,10 +237,7 @@ def find_and_flag_matching_text_in_case(redaction_id):
 
 
 def _apply_redactions_to_segment(full_text, start, end, sorted_redactions, mode):
-    """
-    Apply accepted redactions to a slice of full_text[start:end].
-    Returns an HTML string with redaction spans inserted.
-    """
+    """Apply accepted redactions to a text segment and return an HTML string with redaction spans."""
     parts = []
     prev = start
 
@@ -295,10 +283,7 @@ def _apply_redactions_to_segment(full_text, start, end, sorted_redactions, mode)
 
 
 def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode):
-    """
-    Render a table as an HTML <table> with redactions applied within each cell.
-    Falls back to escaped plain text if no cell data is available.
-    """
+    """Render a document table as an HTML table, applying redactions within each cell."""
     cells = table_data.get("cells", [])
 
     if not cells:
@@ -371,12 +356,7 @@ def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode
 
 
 def _build_export_css(settings, case_reference=""):
-    """
-    Dynamically build the WeasyPrint CSS string from DocumentExportSettings.
-    Header/footer use @page margin boxes. Companion left/right boxes are
-    explicitly zeroed (width: 0; content: "") so the center box gets the full
-    available width and long text wraps correctly rather than overflowing.
-    """
+    """Build the WeasyPrint CSS string from the current DocumentExportSettings."""
     has_header = bool(settings.header_text)
     has_footer = bool(settings.footer_text)
     has_page_numbers = settings.page_numbers_enabled
@@ -446,10 +426,14 @@ def _build_export_css(settings, case_reference=""):
 
 
 def _generate_pdf_from_document(document, mode="disclosure", export_settings=None, case_reference=""):
-    """
-    Generates a PDF for a single document.
-    mode: 'disclosure' (black boxes) or 'redacted' (color highlights)
-    DOCX tables are rendered as HTML tables with redactions applied per-cell.
+    """Render a Document to a PDF bytes object with all accepted redactions applied.
+
+    Args:
+        document: The Document instance to render.
+        mode: 'disclosure' blacks out redacted text; 'redacted' highlights it.
+
+    Returns:
+        PDF bytes, or None if the document has no extracted text.
     """
     if export_settings is None:
         export_settings = DocumentExportSettings.get()
@@ -513,9 +497,7 @@ def _generate_pdf_from_document(document, mode="disclosure", export_settings=Non
 
 
 def export_case_documents(case_id):
-    """
-    Background task to generate a ZIP file for a case.
-    """
+    """Background task: generate a ZIP export package for all documents in a case."""
     try:
         case = Case.objects.get(id=case_id)
     except Case.DoesNotExist:
@@ -576,6 +558,7 @@ def export_case_documents(case_id):
 
 
 def delete_cases_past_retention_date():
+    """Delete all cases whose retention_review_date is in the past."""
     today = timezone.now().date()
 
     cases_to_delete_qs = Case.objects.filter(retention_review_date__lt=today)
