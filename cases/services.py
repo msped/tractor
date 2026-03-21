@@ -497,7 +497,7 @@ def _generate_pdf_from_document(document, mode="disclosure", export_settings=Non
     <!DOCTYPE html>
     <html>
     <head><title>{html_escape(document.filename or "")}</title></head>
-    <body style="font-family: Calibri, sans-serif;">
+    <body style="font-family: {export_settings.font_family_css};">
     {watermark_html}
     {body_content}
     </body>
