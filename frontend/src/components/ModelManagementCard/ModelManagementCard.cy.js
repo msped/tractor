@@ -41,6 +41,37 @@ const mockModels = [
     },
 ];
 
+const mockModels6 = [
+    ...mockModels,
+    {
+        id: 'model-4',
+        name: 'Redaction Model v4',
+        is_active: false,
+        created_at: '2024-04-01T09:00:00Z',
+        precision: 0.85,
+        recall: 0.80,
+        f1_score: 0.82,
+    },
+    {
+        id: 'model-5',
+        name: 'Redaction Model v5',
+        is_active: false,
+        created_at: '2024-05-01T09:00:00Z',
+        precision: 0.87,
+        recall: 0.83,
+        f1_score: 0.85,
+    },
+    {
+        id: 'model-6',
+        name: 'Redaction Model v6',
+        is_active: false,
+        created_at: '2024-06-01T09:00:00Z',
+        precision: 0.89,
+        recall: 0.85,
+        f1_score: 0.87,
+    },
+];
+
 describe('<ModelManagementCard />', () => {
     context('Loading State', () => {
         it('shows loading spinner while fetching models', () => {
@@ -541,6 +572,68 @@ describe('<ModelManagementCard />', () => {
 
             cy.wait('@deleteRequest');
             cy.contains('Failed to delete model.').should('be.visible');
+        });
+    });
+
+    context('Show More / Show Less', () => {
+        it('shows only 5 models by default when more than 5 exist', () => {
+            cy.intercept('GET', '**/models', { body: mockModels6 }).as('getModels6');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels6');
+            cy.get('tbody tr').should('have.length', 5);
+        });
+
+        it('shows all models after clicking Show more', () => {
+            cy.intercept('GET', '**/models', { body: mockModels6 }).as('getModels6');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels6');
+            cy.contains('button', 'Show more').click();
+            cy.get('tbody tr').should('have.length', 6);
+        });
+
+        it('hides extra models after clicking Show less', () => {
+            cy.intercept('GET', '**/models', { body: mockModels6 }).as('getModels6');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels6');
+            cy.contains('button', 'Show more').click();
+            cy.get('tbody tr').should('have.length', 6);
+            cy.contains('button', 'Show less').click();
+            cy.get('tbody tr').should('have.length', 5);
+        });
+
+        it('does not show Show more button when 5 or fewer models exist', () => {
+            cy.intercept('GET', '**/models', { body: mockModels }).as('getModels');
+
+            cy.fullMount(
+                <TestWrapper>
+                    <ModelManagementCard />
+                </TestWrapper>,
+                mountOpts
+            );
+
+            cy.wait('@getModels');
+            cy.contains('button', 'Show more').should('not.exist');
         });
     });
 });
