@@ -226,3 +226,20 @@ class DocumentExportSettingsModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(obj.watermark_text, "")
         self.assertFalse(obj.watermark_include_case_ref)
         self.assertFalse(obj.page_numbers_enabled)
+
+    def test_default_font_family(self):
+        obj = DocumentExportSettings.get()
+        self.assertEqual(obj.font_family, "arial")
+
+    def test_font_family_css_property(self):
+        obj = DocumentExportSettings.get()
+        obj.font_family = DocumentExportSettings.FontFamily.ARIAL
+        self.assertEqual(obj.font_family_css, "Arial, sans-serif")
+        obj.font_family = DocumentExportSettings.FontFamily.TIMES_NEW_ROMAN
+        self.assertEqual(obj.font_family_css, '"Times New Roman", serif')
+        obj.font_family = DocumentExportSettings.FontFamily.COURIER_NEW
+        self.assertEqual(obj.font_family_css, '"Courier New", monospace')
+        obj.font_family = DocumentExportSettings.FontFamily.GEORGIA
+        self.assertEqual(obj.font_family_css, "Georgia, serif")
+        obj.font_family = DocumentExportSettings.FontFamily.VERDANA
+        self.assertEqual(obj.font_family_css, "Verdana, sans-serif")
