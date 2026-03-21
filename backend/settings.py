@@ -14,6 +14,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -98,15 +99,28 @@ WSGI_APPLICATION = "backend.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+#
+# Priority 1: DATABASE_URL  (e.g. postgresql://user:pass@host:5432/db
+#                                  or mysql://user:pass@host:3306/db)
+# Priority 2: Individual POSTGRES_* variables (legacy / Docker Compose default)
 
-DATABASES = {
-    "default": {
+_database_url = os.environ.get("DATABASE_URL")
+
+if _database_url:
+    _db_config = dj_database_url.parse(_database_url)
+else:
+    _db_config = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB"),
         "USER": os.environ.get("POSTGRES_USER"),
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+    }
+
+DATABASES = {
+    "default": {
+        **_db_config,
         "TEST": {"NAME": "testdatabase"},
     }
 }
