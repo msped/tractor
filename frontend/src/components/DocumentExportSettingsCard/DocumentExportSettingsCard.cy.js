@@ -31,12 +31,25 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.intercept('GET', '**/cases/settings/export', { body: defaultSettings }).as('getSettings');
     });
 
-    it('renders the title and all fields', () => {
+    it('renders the title and Configure button on the card', () => {
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
-        cy.wait('@getSettings');
         cy.contains('Document Export Settings').should('be.visible');
-        cy.get('input[aria-label="header text"]').should('be.visible');
-        cy.get('input[aria-label="footer text"]').should('be.visible');
+        cy.contains('button', 'Configure').should('be.visible');
+    });
+
+    it('opens the configure dialog when Configure is clicked', () => {
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.get('[role="dialog"]').should('be.visible');
+        cy.get('[role="dialog"]').contains('Document Export Settings').should('be.visible');
+    });
+
+    it('renders all fields inside the dialog', () => {
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettings');
+        cy.get('textarea[aria-label="header text"]').should('be.visible');
+        cy.get('textarea[aria-label="footer text"]').should('be.visible');
         cy.get('input[aria-label="watermark text"]').should('be.visible');
         cy.get('input[aria-label="include case reference in watermark"]').should('exist');
         cy.get('input[aria-label="show page numbers"]').should('exist');
@@ -46,9 +59,10 @@ describe('<DocumentExportSettingsCard />', () => {
     it('populates fields from the GET response', () => {
         cy.intercept('GET', '**/cases/settings/export', { body: mockSettings }).as('getSettingsMock');
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
         cy.wait('@getSettingsMock');
-        cy.get('input[aria-label="header text"]').should('have.value', 'OFFICIAL');
-        cy.get('input[aria-label="footer text"]').should('have.value', 'Confidential');
+        cy.get('textarea[aria-label="header text"]').should('have.value', 'OFFICIAL');
+        cy.get('textarea[aria-label="footer text"]').should('have.value', 'Confidential');
         cy.get('input[aria-label="watermark text"]').should('have.value', 'SAR');
         cy.get('input[aria-label="include case reference in watermark"]').should('be.checked');
         cy.get('input[aria-label="show page numbers"]').should('be.checked');
@@ -59,10 +73,11 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.intercept('GET', '**/cases/settings/export', { body: defaultSettings }).as('getSettingsDefault');
 
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
         cy.wait('@getSettingsDefault');
 
-        cy.get('input[aria-label="header text"]').type('OFFICIAL');
-        cy.get('input[aria-label="footer text"]').type('Confidential');
+        cy.get('textarea[aria-label="header text"]').type('OFFICIAL');
+        cy.get('textarea[aria-label="footer text"]').type('Confidential');
         cy.get('button').contains('Save').click();
 
         cy.wait('@patchSettings').its('request.body').should('include', {
@@ -71,14 +86,26 @@ describe('<DocumentExportSettingsCard />', () => {
         });
     });
 
+    it('closes the dialog after successful save', () => {
+        cy.intercept('PATCH', '**/cases/settings/export', { body: defaultSettings }).as('patchSettings');
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettings');
+        cy.get('button').contains('Save').click();
+        cy.wait('@patchSettings');
+        cy.get('[role="dialog"]').should('not.exist');
+    });
+
     it('disables "include case reference" switch when watermark text is empty', () => {
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
         cy.wait('@getSettings');
         cy.get('input[aria-label="include case reference in watermark"]').should('be.disabled');
     });
 
     it('enables "include case reference" switch when watermark text is entered', () => {
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
         cy.wait('@getSettings');
         cy.get('input[aria-label="include case reference in watermark"]').should('be.disabled');
         cy.get('input[aria-label="watermark text"]').type('DRAFT');
@@ -88,6 +115,7 @@ describe('<DocumentExportSettingsCard />', () => {
     it('shows error message when GET fails', () => {
         cy.intercept('GET', '**/cases/settings/export', { statusCode: 500, body: {} }).as('getSettingsError');
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
         cy.wait('@getSettingsError');
         cy.contains('Failed to load export settings.').should('be.visible');
     });
