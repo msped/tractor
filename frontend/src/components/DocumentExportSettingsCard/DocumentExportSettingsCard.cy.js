@@ -16,6 +16,7 @@ const mockSettings = {
     watermark_text: 'SAR',
     watermark_include_case_ref: true,
     page_numbers_enabled: true,
+    font_family: 'georgia',
 };
 
 const defaultSettings = {
@@ -24,6 +25,7 @@ const defaultSettings = {
     watermark_text: '',
     watermark_include_case_ref: false,
     page_numbers_enabled: false,
+    font_family: 'arial',
 };
 
 describe('<DocumentExportSettingsCard />', () => {
@@ -53,7 +55,16 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.get('input[aria-label="watermark text"]').should('be.visible');
         cy.get('input[aria-label="include case reference in watermark"]').should('exist');
         cy.get('input[aria-label="show page numbers"]').should('exist');
+        cy.get('#font-family-label').should('be.visible');
         cy.get('button').contains('Save').should('be.visible');
+    });
+
+    it('font select is populated from the GET response', () => {
+        cy.intercept('GET', '**/cases/settings/export', { body: mockSettings }).as('getSettingsMockFont');
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettingsMockFont');
+        cy.get('[aria-labelledby="font-family-label"]').should('contain.text', 'Georgia');
     });
 
     it('populates fields from the GET response', () => {
@@ -83,6 +94,7 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.wait('@patchSettings').its('request.body').should('include', {
             header_text: 'OFFICIAL',
             footer_text: 'Confidential',
+            font_family: 'arial',
         });
     });
 

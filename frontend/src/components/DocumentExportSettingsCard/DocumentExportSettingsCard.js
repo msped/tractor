@@ -12,7 +12,11 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    FormControl,
     FormControlLabel,
+    InputLabel,
+    MenuItem,
+    Select,
     Switch,
     TextField,
     Typography,
@@ -33,6 +37,7 @@ export const DocumentExportSettingsCard = () => {
     const [watermarkText, setWatermarkText] = useState('');
     const [watermarkIncludeCaseRef, setWatermarkIncludeCaseRef] = useState(false);
     const [pageNumbersEnabled, setPageNumbersEnabled] = useState(false);
+    const [fontFamily, setFontFamily] = useState('arial');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [configureOpen, setConfigureOpen] = useState(false);
 
@@ -43,6 +48,7 @@ export const DocumentExportSettingsCard = () => {
             setWatermarkText(data.watermark_text ?? '');
             setWatermarkIncludeCaseRef(data.watermark_include_case_ref ?? false);
             setPageNumbersEnabled(data.page_numbers_enabled ?? false);
+            setFontFamily(data.font_family ?? 'arial');
         }
     }, [data]);
 
@@ -56,6 +62,7 @@ export const DocumentExportSettingsCard = () => {
             setWatermarkText(data.watermark_text ?? '');
             setWatermarkIncludeCaseRef(data.watermark_include_case_ref ?? false);
             setPageNumbersEnabled(data.page_numbers_enabled ?? false);
+            setFontFamily(data.font_family ?? 'arial');
         }
     };
 
@@ -69,6 +76,7 @@ export const DocumentExportSettingsCard = () => {
                     watermark_text: watermarkText,
                     watermark_include_case_ref: watermarkIncludeCaseRef,
                     page_numbers_enabled: pageNumbersEnabled,
+                    font_family: fontFamily,
                 },
                 session?.access_token
             );
@@ -126,6 +134,21 @@ export const DocumentExportSettingsCard = () => {
                                 size="small"
                                 slotProps={{ 'htmlInput': { 'aria-label': 'watermark text' } }}
                             />
+                            <FormControl fullWidth size="small">
+                                <InputLabel id="font-family-label">Export font</InputLabel>
+                                <Select
+                                    labelId="font-family-label"
+                                    label="Export font"
+                                    value={fontFamily}
+                                    onChange={(e) => setFontFamily(e.target.value)}
+                                >
+                                    <MenuItem value="arial">Arial</MenuItem>
+                                    <MenuItem value="times_new_roman">Times New Roman</MenuItem>
+                                    <MenuItem value="courier_new">Courier New</MenuItem>
+                                    <MenuItem value="georgia">Georgia</MenuItem>
+                                    <MenuItem value="verdana">Verdana</MenuItem>
+                                </Select>
+                            </FormControl>
                             <FormControlLabel
                                 control={
                                     <Switch

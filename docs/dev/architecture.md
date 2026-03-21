@@ -177,3 +177,45 @@ Entities matching the case's `data_subject_name` or `data_subject_dob` are autom
 - DOB in common date formats (DD/MM/YYYY, YYYY-MM-DD, D Month YYYY, etc.)
 
 The data subject's own information should remain visible in the document. Users can still manually mark text as DS_INFORMATION, which propagates across all documents in the case via `find_and_flag_matching_text_in_case()`.
+
+## Export Font
+
+The export font controls the typeface used in the HTML body of every WeasyPrint-generated PDF. Fonts are defined as a curated list of web-safe choices on the `DocumentExportSettings` singleton model in `cases/models.py`.
+
+### How It Works
+
+1. `DocumentExportSettings.FontFamily` is a `TextChoices` enum — the database stores the short key (e.g. `arial`) and the model exposes a `font_family_css` property that returns the full CSS font stack string (e.g. `Arial, sans-serif`).
+2. `_generate_pdf_from_document()` in `cases/services.py` reads `export_settings.font_family_css` and injects it into the HTML `<body style="font-family: ...">` tag before passing the HTML to WeasyPrint.
+3. The `DocumentExportSettingsSerializer` includes `font_family` so it is readable and writable via the settings API endpoint.
+4. The frontend `DocumentExportSettingsCard` renders a MUI `Select` dropdown populated with the same choices.
+
+### Adding a New Font
+
+1. **Add the choice** to `DocumentExportSettings.FontFamily` in `cases/models.py`:
+
+    ```python
+    ROBOTO = "roboto", "Roboto"
+    ```
+
+2. **Add the CSS stack** to `DocumentExportSettings._FONT_CSS`:
+
+    ```python
+    "roboto": "Roboto, sans-serif",
+    ```
+
+3. **Ensure the font is available on the server.** WeasyPrint renders PDFs server-side, so the font must be installed on the host OS (e.g. via a system package). Web-safe fonts (Arial, Georgia, etc.) are already present on most Linux distributions. For custom fonts, install the font files and verify WeasyPrint can find them via `fontconfig`.
+
+4. **Generate and apply a migration:**
+
+    ```bash
+    python manage.py makemigrations cases
+    python manage.py migrate
+    ```
+
+5. **Add a `MenuItem`** to the `Select` in `DocumentExportSettingsCard.js`:
+
+    ```jsx
+    <MenuItem value="roboto">Roboto</MenuItem>
+    ```
+
+6. Update the Cypress test `mockSettings` and `defaultSettings` objects and add a test case if needed.

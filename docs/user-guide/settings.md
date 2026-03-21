@@ -26,6 +26,20 @@ Enable **Include case reference in watermark** to append the case reference to t
 
 Enable **Show page numbers** to add "Page X of Y" below the footer text on every page. If no footer text is set, the page number appears on its own.
 
+### Export Font
+
+The **Export font** dropdown controls the typeface used for all body text in exported PDFs. Choose from the following options:
+
+| Option | Font |
+|---|---|
+| Arial | Arial, sans-serif |
+| Times New Roman | Times New Roman, serif |
+| Courier New | Courier New, monospace |
+| Georgia | Georgia, serif |
+| Verdana | Verdana, sans-serif |
+
+All fonts in this list are cross-platform web-safe fonts that render consistently on Linux servers without any additional font installation. The default is **Arial**.
+
 ### Saving
 
 Click **Save** to apply changes. The new settings take effect on the next export — previously generated ZIP packages are not retroactively updated.

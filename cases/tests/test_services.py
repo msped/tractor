@@ -328,6 +328,19 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         pdf_content = _generate_pdf_from_document(self.document)
         self.assertIsNone(pdf_content)
 
+    def test_generate_pdf_with_custom_font(self):
+        """Test that PDF generation works with a non-default font family."""
+        self.document.extracted_text = "Some text for font testing."
+        self.document.save()
+        settings = DocumentExportSettings.get()
+        settings.font_family = DocumentExportSettings.FontFamily.TIMES_NEW_ROMAN
+        settings.save()
+
+        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        self.assertIsNotNone(pdf_content)
+        self.assertIsInstance(pdf_content, bytes)
+        self.assertTrue(pdf_content.startswith(b"%PDF-"))
+
     @patch("cases.services._generate_pdf_from_document")
     def test_export_case_documents(self, mock_generate_pdf):
         """Test the case export functionality."""
