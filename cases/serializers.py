@@ -128,7 +128,14 @@ class ExemptionTemplateSerializer(serializers.ModelSerializer):
 class DocumentExportSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentExportSettings
-        fields = ["header_text", "footer_text", "watermark_text", "watermark_include_case_ref", "page_numbers_enabled"]
+        fields = [
+            "header_text",
+            "footer_text",
+            "watermark_text",
+            "watermark_include_case_ref",
+            "page_numbers_enabled",
+            "font_family",
+        ]
 
 
 class DocumentReviewSerializer(serializers.ModelSerializer):
