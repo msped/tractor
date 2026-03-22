@@ -1,4 +1,5 @@
 const nextConfig = {
+  output: 'standalone',
   ...(process.env.CYPRESS_TEST
     ? {}
     : {
