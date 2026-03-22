@@ -24,6 +24,7 @@ _OPERATIONAL_ENTITIES = [
 
 
 def _build_analyzer():
+    """Build a Presidio AnalyzerEngine configured with UK PII pattern recognisers."""
     from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
 
     uk_postcode_pattern = Pattern(
@@ -63,6 +64,7 @@ def _build_analyzer():
 
 
 def _build_operational_analyzer():
+    """Build a Presidio AnalyzerEngine configured with operational reference recognisers (crime refs, collar numbers)."""
     from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
 
     crime_ref_pattern = Pattern(
@@ -104,6 +106,7 @@ _operational_analyzer = None
 
 
 def _get_analyzer():
+    """Return the singleton PII AnalyzerEngine, creating it on first call."""
     global _analyzer
     if _analyzer is None:
         _analyzer = _build_analyzer()
@@ -111,6 +114,7 @@ def _get_analyzer():
 
 
 def _get_operational_analyzer():
+    """Return the singleton operational AnalyzerEngine, creating it on first call."""
     global _operational_analyzer
     if _operational_analyzer is None:
         _operational_analyzer = _build_operational_analyzer()

@@ -4,6 +4,8 @@ from dj_rest_auth.registration.views import SocialLoginView
 
 
 class MicrosoftLogin(SocialLoginView):
+    """Handle Microsoft Entra ID OAuth2 login via the Microsoft Graph adapter."""
+
     adapter_class = MicrosoftGraphOAuth2Adapter
     callback_url = "http://localhost:3000/api/auth/callback/microsoft-entra-id"
     client_class = OAuth2Client

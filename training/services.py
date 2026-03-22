@@ -10,12 +10,7 @@ _PREFIX_CHARS = {"#"}
 
 
 def _expand_prefix_symbols(entities, text):
-    """
-    Expand entity start positions to include immediately preceding prefix symbols
-    (e.g. '#' before a crime reference number or collar number).
-
-    Modifies each entity dict in-place and returns the list.
-    """
+    """Extend entity start positions to include an immediately preceding '#' or similar symbol."""
     for ent in entities:
         start = ent["start_char"]
         if start > 0 and text[start - 1] in _PREFIX_CHARS:
@@ -25,10 +20,7 @@ def _expand_prefix_symbols(entities, text):
 
 
 def _deduplicate_entities(primary_entities, secondary_entities):
-    """
-    Combine two entity lists, with primary_entities taking priority.
-    Secondary entities that overlap with any primary span are skipped.
-    """
+    """Merge two entity lists, keeping primary entities and dropping overlapping secondary ones."""
     combined = list(primary_entities)
     for sec_ent in secondary_entities:
         overlaps = any(
@@ -41,12 +33,7 @@ def _deduplicate_entities(primary_entities, secondary_entities):
 
 
 def _table_has_borders(table):
-    """
-    Check if a DOCX table has visible borders by inspecting w:tblBorders.
-    Returns True if any border element has a visible style (e.g. "single", "double"),
-    False if all borders are "none" or "nil".
-    Defaults to True if tblPr or tblBorders is absent (Word default is bordered).
-    """
+    """Return True if any cell in the table has a visible border set."""
     tbl_pr = table._tbl.find(qn("w:tblPr"))
     if tbl_pr is None:
         return True
@@ -69,17 +56,7 @@ def _table_has_borders(table):
 
 
 def extract_table_with_styling(table, table_start_position, has_borders=True):
-    """
-    Extract table with full cell formatting as structured data for frontend rendering.
-    Returns (html, cells) where:
-    - html: Pre-rendered HTML for fallback
-    - cells: List of cell data with text, styling, and character positions for highlighting
-
-    Merged cells (colspan/rowspan) are detected via python-docx _tc element identity.
-    Continuation cells have isMergedContinuation=True; the first occurrence carries
-    colspan/rowspan attributes. Positions are still tracked for all cells to maintain
-    NER text compatibility with stored redaction positions.
-    """
+    """Extract a DOCX table as structured data, preserving cell text and formatting."""
     html = '<table style="border-collapse: collapse; width: 100%;">'
     cells = []
     position = table_start_position
@@ -216,14 +193,7 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
 
 
 def extract_document_structure(path):
-    """
-    Extract document structure from DOCX files using python-docx.
-    Returns (elements, tables_data) where:
-    - elements: list of {type, level, text, start, end} for headings/paragraphs
-    - tables_data: list of {id, html, text, ner_start, ner_end} for tables
-
-    For non-DOCX files, returns (None, None) to signal fallback to plain extraction.
-    """
+    """Extract headings, paragraphs, and tables from a DOCX file as a structured list."""
     if not path.lower().endswith((".docx", ".doc")):
         return None, None
 
@@ -332,10 +302,7 @@ def extract_document_structure(path):
 
 
 def _extract_text_from_pdf(path):
-    """
-    Extract plain text from a PDF file using pypdf.
-    Returns the extracted text string, or an empty string on failure.
-    """
+    """Extract plain text from a PDF file using pypdf."""
     try:
         reader = PdfReader(path)
         parts = []
@@ -349,24 +316,10 @@ def _extract_text_from_pdf(path):
 
 
 def extract_entities_from_text(path):
-    """
-    Processes a document using GLiNER + SpanCat + Presidio.
-    Extracts tables separately and stores them with HTML and text
-    representations. Returns (ner_text, entities, tables, structure).
+    """Run the full NLP pipeline (GLiNER → SpanCat → Presidio) on a document file.
 
-    Pipeline:
-    - GLiNER     → THIRD_PARTY (zero-shot: names, orgs, locations, DOB, addresses)
-    - SpanCat    → THIRD_PARTY + OPERATIONAL (trained on user data; contextual chunks)
-    - Presidio   → THIRD_PARTY structured PII + OPERATIONAL structured refs
-
-    Deduplication priority: SpanCat > GLiNER > Presidio.
-
-    SpanCat is optional — if no model has been trained yet, the system falls
-    back gracefully to GLiNER + Presidio only.
-
-    For DOCX files, uses python-docx to extract document structure
-    (headings, paragraphs, tables with styling). For other formats,
-    falls back to pypdf for text extraction (no table extraction).
+    Returns:
+        Tuple of (extracted_text, entity_suggestions, tables, spacy_model_entry).
     """
     # Lazy imports to avoid loading transformers/pandas at module import time
     from .extractors.gliner_extractor import extract_with_gliner

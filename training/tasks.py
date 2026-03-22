@@ -33,10 +33,7 @@ CUSTOM_NER_LABELS = ["THIRD_PARTY", "OPERATIONAL"]
 
 
 def collect_training_data_detailed(source="both"):
-    """
-    Collects training data and tracks which docs were used.
-    Returns (train_data, training_docs_used, case_docs_used).
-    """
+    """Collect labelled training examples from training documents and/or accepted case redactions."""
     train_data = []
     training_docs_used = []
     case_docs_used = []
@@ -150,13 +147,7 @@ def collect_training_data_detailed(source="both"):
 
 
 def _build_spancat_pipeline():
-    """
-    Build a SpanCat pipeline using en_core_web_lg's pretrained tok2vec.
-
-    Loads the base model, strips all pipes except tok2vec, then adds a
-    spancat component configured with an ngram suggester and a
-    Tok2VecListener that reuses the frozen pretrained embeddings.
-    """
+    """Build a SpanCat spaCy pipeline seeded with en_core_web_lg's pretrained tok2vec weights."""
     import spacy
 
     nlp = spacy.load("en_core_web_lg")
@@ -198,10 +189,7 @@ def _build_spancat_pipeline():
 
 
 def _prepare_examples(nlp, train_data):
-    """
-    Convert (text, {"entities": [...]}) tuples to spaCy Example objects
-    with entities set as doc.spans["sc"] for SpanCat training.
-    """
+    """Convert (text, annotations) tuples into spaCy Example objects for training."""
     examples = []
     total_entities = 0
     dropped_entities = 0
@@ -229,11 +217,7 @@ def _prepare_examples(nlp, train_data):
 
 
 def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
-    """
-    Train the SpanCat model with early stopping.
-
-    Returns the best scores dict from evaluation.
-    """
+    """Train the SpanCat model for a fixed number of iterations with early stopping."""
     max_epochs = 15
     patience = 3
     best_f1 = 0.0
@@ -284,10 +268,7 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
 
 
 def train_model(source="redactions", user=None):
-    """
-    Train a SpanCat model using en_core_web_lg's pretrained tok2vec
-    with transfer learning.
-    """
+    """Train a new SpanCat model from collected redaction data and save it to nlp_models/."""
     # Check if another training task is already running
     running_tasks = Task.objects.filter(
         func="training.tasks.train_model",
