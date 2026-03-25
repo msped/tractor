@@ -15,10 +15,11 @@ class ModelListCreateView(ListCreateAPIView):
     """
     API view to list SpanCat models or create a new model entry.
     GLiNER is always active and system-managed — excluded from this list.
+    SpanCat models always have an associated TrainingRun; GLiNER never does.
     """
 
     permission_classes = [IsAdminUser]
-    queryset = Model.objects.all().order_by("-created_at")
+    queryset = Model.objects.filter(trainingrun__isnull=False).order_by("-created_at")
     serializer_class = ModelSerializer
 
 
@@ -54,6 +55,8 @@ class ModelSetActiveView(APIView):
             return Response(status=status.HTTP_200_OK)
         except Model.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class TrainingDocumentViewSet(viewsets.ModelViewSet):
