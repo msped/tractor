@@ -1,6 +1,10 @@
 """
-Management command to download a GLiNER model from HuggingFace Hub, save it
-to nlp_models/, and register it as the active model in the database.
+Management command to download a GLiNER model from HuggingFace Hub and save
+it to nlp_models/ for local use.
+
+GLiNER is system-managed and is NOT registered in the Model database table
+(which is for SpanCat models only). The loader reads the model from the local
+nlp_models/ directory on every startup.
 
 Run once during initial project setup, or whenever a maintainer decides
 to update the base model. After this, the application loads the model
@@ -17,13 +21,11 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from training.models import Model
-
 NLP_MODELS_DIR = os.path.join(settings.BASE_DIR, "nlp_models")
 
 
 class Command(BaseCommand):
-    help = "Download a GLiNER model from HuggingFace, save it locally, and register it as active."
+    help = "Download a GLiNER model from HuggingFace and save it locally to nlp_models/."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -36,8 +38,8 @@ class Command(BaseCommand):
         from gliner import GLiNER
 
         model_id = options["name"]
-        db_name = model_id.replace("/", "_").replace("-", "_").replace(".", "_")
-        local_path = os.path.join(NLP_MODELS_DIR, db_name)
+        local_name = model_id.replace("/", "_").replace("-", "_").replace(".", "_")
+        local_path = os.path.join(NLP_MODELS_DIR, local_name)
 
         self.stdout.write(f"Downloading GLiNER model: {model_id}")
         self.stdout.write("This may take a few minutes on first run...")
@@ -47,15 +49,3 @@ class Command(BaseCommand):
         model.save_pretrained(local_path)
 
         self.stdout.write(self.style.SUCCESS(f"Saved to {local_path}"))
-        self.stdout.write("Registering as active model...")
-
-        Model.objects.filter(is_active=True).update(is_active=False)
-        Model.objects.update_or_create(
-            name=db_name,
-            defaults={
-                "path": local_path,
-                "is_active": True,
-            },
-        )
-
-        self.stdout.write(self.style.SUCCESS(f"Model '{db_name}' is now active."))
