@@ -11,7 +11,7 @@ from rest_framework.test import APIClient, APITestCase, override_settings
 
 from cases.models import Case, Document
 
-from ..models import Model, TrainingDocument
+from ..models import Model, TrainingDocument, TrainingRun
 from .base import NetworkBlockerMixin
 
 User = get_user_model()
@@ -25,12 +25,16 @@ class BaseTrainingAPITestCase(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         """Set up users and initial data for tests."""
         self.client = APIClient()
-        self.admin_user = User.objects.create_superuser("admin", "admin@example.com", "password")
-        self.regular_user = User.objects.create_user("user", "user@example.com", "password")
+        self.admin_user = User.objects.create_superuser(
+            "admin", "admin@example.com", "password")
+        self.regular_user = User.objects.create_user(
+            "user", "user@example.com", "password")
 
         # Clear any models seeded by migrations (e.g. legacy GLiNER entry)
         Model.objects.all().delete()
-        self.model = Model.objects.create(name="test_model_v1", path="/path/to/model_v1")
+        self.model = Model.objects.create(
+            name="test_model_v1", path="/path/to/model_v1")
+        TrainingRun.objects.create(model=self.model, source="redactions")
         self.docx_file = SimpleUploadedFile(
             "test.docx",
             b"file_content",
@@ -47,22 +51,30 @@ class ModelViewTests(BaseTrainingAPITestCase):
         """Unauthenticated users get 401 on model views."""
         list_url = reverse("model-list-create")
         detail_url = reverse("model-detail", kwargs={"pk": self.model.pk})
-        set_active_url = reverse("model-set-active", kwargs={"pk": self.model.pk})
+        set_active_url = reverse(
+            "model-set-active", kwargs={"pk": self.model.pk})
 
-        self.assertEqual(self.client.get(list_url).status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(self.client.get(detail_url).status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(self.client.post(set_active_url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(list_url).status_code,
+                         status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(detail_url).status_code,
+                         status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.post(
+            set_active_url).status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_access_to_model_views_fails(self):
         """Non-admin users get 403 on model views."""
         self.client.force_authenticate(user=self.regular_user)
         list_url = reverse("model-list-create")
         detail_url = reverse("model-detail", kwargs={"pk": self.model.pk})
-        set_active_url = reverse("model-set-active", kwargs={"pk": self.model.pk})
+        set_active_url = reverse(
+            "model-set-active", kwargs={"pk": self.model.pk})
 
-        self.assertEqual(self.client.get(list_url).status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(self.client.get(detail_url).status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(self.client.post(set_active_url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(list_url).status_code,
+                         status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(
+            detail_url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.post(
+            set_active_url).status_code, status.HTTP_403_FORBIDDEN)
 
     def test_list_models_as_admin(self):
         """Admin can list all models."""
@@ -119,7 +131,8 @@ class ModelViewTests(BaseTrainingAPITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         mock_spancat_manager.get_instance.assert_called_once()
-        mock_manager_instance.switch_model.assert_called_once_with(self.model.name)
+        mock_manager_instance.switch_model.assert_called_once_with(
+            self.model.name)
 
     def test_set_active_model_not_found(self):
         """Setting a non-existent model as active returns 404."""
@@ -130,17 +143,20 @@ class ModelViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingDocumentViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""
         url = reverse("training-document-list")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(url).status_code,
+                         status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_access_fails(self):
         """Non-admin users get 403."""
         self.client.force_authenticate(user=self.regular_user)
         url = reverse("training-document-list")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(url).status_code,
+                         status.HTTP_403_FORBIDDEN)
 
     def test_create_training_doc_as_admin(self):
         """Admin can upload a .docx training document."""
@@ -171,23 +187,27 @@ class TrainingScheduleViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""
         url = reverse("schedule-list")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(url).status_code,
+                         status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_access_fails(self):
         """Non-admin users get 403."""
         self.client.force_authenticate(user=self.regular_user)
         url = reverse("schedule-list")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(url).status_code,
+                         status.HTTP_403_FORBIDDEN)
 
     def test_list_schedules_as_admin(self):
         """Admin can list training schedules."""
-        Schedule.objects.create(func="training.tasks.train_model", schedule_type=Schedule.DAILY)
+        Schedule.objects.create(
+            func="training.tasks.train_model", schedule_type=Schedule.DAILY)
         self.client.force_authenticate(user=self.admin_user)
         url = reverse("schedule-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["func"], "training.tasks.train_model")
+        self.assertEqual(response.data[0]["func"],
+                         "training.tasks.train_model")
 
     def test_create_schedule_as_admin(self):
         """Admin can create a new training schedule."""
@@ -200,18 +220,22 @@ class TrainingScheduleViewTests(BaseTrainingAPITestCase):
         }
         response = self.client.post(url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(Schedule.objects.filter(func="training.tasks.train_model").exists())
+        self.assertTrue(Schedule.objects.filter(
+            func="training.tasks.train_model").exists())
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class RunManualTrainingViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""
         url = reverse("training-run-now")
-        self.assertEqual(self.client.post(url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.post(url).status_code,
+                         status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_cannot_trigger_training(self):
         """Any authenticated user can trigger manual training."""
-        TrainingDocument.objects.create(name="doc1", original_file=self.docx_file, created_by=self.regular_user)
+        TrainingDocument.objects.create(
+            name="doc1", original_file=self.docx_file, created_by=self.regular_user)
         self.client.force_authenticate(user=self.regular_user)
         url = reverse("training-run-now")
         response = self.client.post(url)
@@ -220,7 +244,8 @@ class RunManualTrainingViewTests(BaseTrainingAPITestCase):
     @patch("training.views.async_task")
     def test_run_manual_training_triggers_task(self, mock_async_task):
         """POST to run-now triggers the async_task."""
-        TrainingDocument.objects.create(name="doc1", original_file=self.docx_file, created_by=self.admin_user)
+        TrainingDocument.objects.create(
+            name="doc1", original_file=self.docx_file, created_by=self.admin_user)
         self.client.force_authenticate(user=self.admin_user)
         url = reverse("training-run-now")
         response = self.client.post(url)
@@ -240,20 +265,24 @@ class RunManualTrainingViewTests(BaseTrainingAPITestCase):
         response = self.client.post(url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["detail"], "No unprocessed training documents found.")
+        self.assertEqual(response.data["detail"],
+                         "No unprocessed training documents found.")
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingRunViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""
         url = reverse("training-run-list")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(url).status_code,
+                         status.HTTP_401_UNAUTHORIZED)
 
     def test_regular_user_access_fails(self):
         """Non-admin users get 403."""
         self.client.force_authenticate(user=self.regular_user)
         url = reverse("training-run-list")
-        self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(url).status_code,
+                         status.HTTP_403_FORBIDDEN)
 
     def test_list_training_runs_as_admin(self):
         """Admin can list all training runs."""

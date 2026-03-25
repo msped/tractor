@@ -1,61 +1,54 @@
 from io import StringIO
+import tempfile
 from unittest.mock import MagicMock, patch
 
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from training.models import Model
 from training.tests.base import NetworkBlockerMixin
 
 
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_collect"))
 class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
     @patch("training.management.commands.download_model.os.makedirs")
     @patch("gliner.GLiNER")
-    def test_default_model_registered_as_active(self, mock_gliner_cls, mock_makedirs):
-        """Running download_model with defaults creates and activates the medium model."""
-        mock_gliner_cls.from_pretrained.return_value = MagicMock()
+    def test_default_model_downloaded_and_saved(self, mock_gliner_cls, mock_makedirs):
+        """Running download_model with defaults downloads and saves the medium model locally."""
+        mock_instance = MagicMock()
+        mock_gliner_cls.from_pretrained.return_value = mock_instance
 
         call_command("download_model")
 
-        model = Model.objects.get(name="urchade_gliner_medium_v2_1")
-        self.assertTrue(model.is_active)
+        mock_gliner_cls.from_pretrained.assert_called_once_with(
+            "urchade/gliner_medium-v2.1")
+        mock_instance.save_pretrained.assert_called_once()
+        saved_path = mock_instance.save_pretrained.call_args[0][0]
+        self.assertIn("urchade_gliner_medium_v2_1", saved_path)
 
     @patch("training.management.commands.download_model.os.makedirs")
     @patch("gliner.GLiNER")
     def test_custom_name_argument(self, mock_gliner_cls, mock_makedirs):
-        """--name argument is slugified and stored as the model name."""
-        mock_gliner_cls.from_pretrained.return_value = MagicMock()
+        """--name argument downloads the specified model and saves to a matching local path."""
+        mock_instance = MagicMock()
+        mock_gliner_cls.from_pretrained.return_value = mock_instance
 
         call_command("download_model", name="urchade/gliner_large-v2.1")
 
-        model = Model.objects.get(name="urchade_gliner_large_v2_1")
-        self.assertTrue(model.is_active)
+        mock_gliner_cls.from_pretrained.assert_called_once_with(
+            "urchade/gliner_large-v2.1")
+        saved_path = mock_instance.save_pretrained.call_args[0][0]
+        self.assertIn("urchade_gliner_large_v2_1", saved_path)
 
     @patch("training.management.commands.download_model.os.makedirs")
     @patch("gliner.GLiNER")
-    def test_previous_active_model_deactivated(self, mock_gliner_cls, mock_makedirs):
-        """An existing active model is deactivated before registering the new one."""
+    def test_does_not_register_in_db(self, mock_gliner_cls, mock_makedirs):
+        """download_model does not create or modify any Model DB entries."""
         mock_gliner_cls.from_pretrained.return_value = MagicMock()
-
-        old_model = Model.objects.create(name="old_model", path="/old/path", is_active=True)
 
         call_command("download_model")
 
-        old_model.refresh_from_db()
-        self.assertFalse(old_model.is_active)
-
-    @patch("training.management.commands.download_model.os.makedirs")
-    @patch("gliner.GLiNER")
-    def test_update_or_create_for_existing_name(self, mock_gliner_cls, mock_makedirs):
-        """Re-running with the same name updates the existing record instead of creating a duplicate."""
-        mock_gliner_cls.from_pretrained.return_value = MagicMock()
-
-        Model.objects.create(name="urchade_gliner_medium_v2_1", path="/some/old/path")
-
-        call_command("download_model")
-
-        self.assertEqual(Model.objects.filter(name="urchade_gliner_medium_v2_1").count(), 1)
-        self.assertTrue(Model.objects.get(name="urchade_gliner_medium_v2_1").is_active)
+        self.assertEqual(Model.objects.count(), 0)
 
     @patch("training.management.commands.download_model.os.makedirs")
     @patch("gliner.GLiNER")
@@ -68,4 +61,4 @@ class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
 
         output = stdout.getvalue()
         self.assertIn("Downloading GLiNER model", output)
-        self.assertIn("Registering as active model", output)
+        self.assertIn("Saved to", output)
