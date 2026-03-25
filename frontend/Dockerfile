@@ -9,8 +9,6 @@ FROM node:25.8.1-alpine3.23 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ARG NEXT_PUBLIC_API_HOST
-ENV NEXT_PUBLIC_API_HOST=$NEXT_PUBLIC_API_HOST
 RUN npm run build
 
 # Stage 3: Production runner

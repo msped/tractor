@@ -7,11 +7,10 @@ services:
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
+      - nlp_models_volume:/app/nlp_models
     expose:
       - 8000
     env_file: .env
-    depends_on:
-      - db
 
   worker:
     build:
@@ -21,19 +20,18 @@ services:
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
+      - nlp_models_volume:/app/nlp_models
     env_file: .env
-    depends_on:
-      - db
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_HOST=${NEXT_PUBLIC_API_HOST}
     expose:
       - 3000
     env_file: ./frontend/.env
+    environment:
+      - INTERNAL_API_HOST=http://backend:8000
     depends_on:
       - backend
 
@@ -45,13 +43,14 @@ services:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
       - static_volume:/app/staticfiles
-      - media_volume:/app/mediafiles
     depends_on:
       - backend
       - frontend
 
   db:
     image: postgres:15
+    profiles:
+      - db
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file: .env
@@ -60,3 +59,4 @@ volumes:
   postgres_data:
   static_volume:
   media_volume:
+  nlp_models_volume:
