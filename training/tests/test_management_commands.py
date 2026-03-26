@@ -1,5 +1,5 @@
-from io import StringIO
 import tempfile
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from django.core.management import call_command
@@ -20,8 +20,7 @@ class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
 
         call_command("download_model")
 
-        mock_gliner_cls.from_pretrained.assert_called_once_with(
-            "urchade/gliner_medium-v2.1")
+        mock_gliner_cls.from_pretrained.assert_called_once_with("urchade/gliner_medium-v2.1")
         mock_instance.save_pretrained.assert_called_once()
         saved_path = mock_instance.save_pretrained.call_args[0][0]
         self.assertIn("urchade_gliner_medium_v2_1", saved_path)
@@ -35,8 +34,7 @@ class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
 
         call_command("download_model", name="urchade/gliner_large-v2.1")
 
-        mock_gliner_cls.from_pretrained.assert_called_once_with(
-            "urchade/gliner_large-v2.1")
+        mock_gliner_cls.from_pretrained.assert_called_once_with("urchade/gliner_large-v2.1")
         saved_path = mock_instance.save_pretrained.call_args[0][0]
         self.assertIn("urchade_gliner_large_v2_1", saved_path)
 
