@@ -443,6 +443,8 @@ def _generate_pdf_from_document(document, mode="disclosure", export_settings=Non
         return None
 
     redactions = document.redactions.filter(is_accepted=True).select_related("context")
+    if mode == "disclosure":
+        redactions = redactions.exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
     sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
 
     tables = document.extracted_tables or []

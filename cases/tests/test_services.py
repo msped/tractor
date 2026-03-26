@@ -267,6 +267,42 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIsInstance(pdf_content_redacted, bytes)
         self.assertTrue(pdf_content_redacted.startswith(b"%PDF-"))
 
+    def test_generate_pdf_disclosure_excludes_ds_information(self):
+        """DS_INFORMATION redactions must not be blacked out in the disclosure PDF."""
+        self.document.extracted_text = "John Doe attended the event on 01/01/1990."
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=8,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+        )
+
+        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        self.assertIsNotNone(pdf_content)
+
+        page_text = PdfReader(io.BytesIO(pdf_content)).pages[0].extract_text()
+        self.assertIn("John Doe", page_text)
+
+    def test_generate_pdf_redacted_includes_ds_information(self):
+        """DS_INFORMATION redactions should still be highlighted in the redacted (review) PDF."""
+        self.document.extracted_text = "John Doe attended the event."
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=8,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+        )
+
+        pdf_content = _generate_pdf_from_document(self.document, mode="redacted")
+        self.assertIsNotNone(pdf_content)
+        self.assertTrue(pdf_content.startswith(b"%PDF-"))
+
     def test_generate_pdf_with_redaction_context(self):
         """
         Test that redaction context text appears in the final disclosure PDF.
