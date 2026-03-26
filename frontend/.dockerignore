@@ -1,0 +1,19 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (reinstalled in container)
+node_modules/
+
+# Next.js build output
+.next/
+
+# Test / coverage
+coverage/
+cypress/
+
+# Env files
+.env*
+
+# Docs
+README.md

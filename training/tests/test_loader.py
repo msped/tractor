@@ -23,9 +23,10 @@ class GLiNERModelManagerTests(NetworkBlockerMixin, TestCase):
         GLiNERModelManager.get_instance()
         mock_load.assert_not_called()
 
+    @patch("training.loader.os.path.isdir", return_value=False)
     @patch("training.loader._load_gliner_model")
-    def test_get_model_loads_default(self, mock_load):
-        """get_model() loads DEFAULT_GLINER_MODEL when no model is cached."""
+    def test_get_model_loads_default(self, mock_load, mock_isdir):
+        """get_model() falls back to DEFAULT_GLINER_MODEL when local path is absent."""
         mock_model = MagicMock()
         mock_load.return_value = mock_model
 

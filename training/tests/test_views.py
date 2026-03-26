@@ -11,7 +11,7 @@ from rest_framework.test import APIClient, APITestCase, override_settings
 
 from cases.models import Case, Document
 
-from ..models import Model, TrainingDocument
+from ..models import Model, TrainingDocument, TrainingRun
 from .base import NetworkBlockerMixin
 
 User = get_user_model()
@@ -31,6 +31,7 @@ class BaseTrainingAPITestCase(NetworkBlockerMixin, APITestCase):
         # Clear any models seeded by migrations (e.g. legacy GLiNER entry)
         Model.objects.all().delete()
         self.model = Model.objects.create(name="test_model_v1", path="/path/to/model_v1")
+        TrainingRun.objects.create(model=self.model, source="redactions")
         self.docx_file = SimpleUploadedFile(
             "test.docx",
             b"file_content",
@@ -130,6 +131,7 @@ class ModelViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingDocumentViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""
@@ -203,6 +205,7 @@ class TrainingScheduleViewTests(BaseTrainingAPITestCase):
         self.assertTrue(Schedule.objects.filter(func="training.tasks.train_model").exists())
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class RunManualTrainingViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""
@@ -243,6 +246,7 @@ class RunManualTrainingViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.data["detail"], "No unprocessed training documents found.")
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingRunViewTests(BaseTrainingAPITestCase):
     def test_unauthenticated_access_fails(self):
         """Unauthenticated users get 401."""

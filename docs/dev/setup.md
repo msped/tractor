@@ -154,6 +154,17 @@ MySQL 8.0 or later is required. Tractor does not use any PostgreSQL-only field t
 
 ## Environment Variables
 
+### Django settings
+
+The project uses split settings under `backend/settings/`:
+
+| Module                          | Used when                          |
+|---------------------------------|------------------------------------|
+| `backend.settings.development`  | Local development (default)        |
+| `backend.settings.production`   | Production / Docker                |
+
+`manage.py` defaults to `backend.settings.development`, so `DJANGO_SETTINGS_MODULE` does not need to be set locally. The development settings hardcode `DEBUG=True` and `ALLOWED_HOSTS=["*"]` so those do not need to be in your local `.env` either.
+
 ### Backend (.env)
 
 | Variable                 | Purpose                                                        |
@@ -166,17 +177,16 @@ MySQL 8.0 or later is required. Tractor does not use any PostgreSQL-only field t
 | `POSTGRES_PASSWORD`      | PostgreSQL password (used when `DATABASE_URL` is not set)      |
 | `POSTGRES_HOST`          | PostgreSQL host (default: `localhost`)                         |
 | `POSTGRES_PORT`          | PostgreSQL port (default: `5432`)                              |
-| `DJANGO_SETTINGS_MODULE` | Django settings module path (e.g., `backend.settings`)         |
 
 ### Frontend (frontend/.env)
 
-| Variable                         | Purpose                                         |
-|----------------------------------|-------------------------------------------------|
-| `NEXT_PUBLIC_API_HOST`           | Backend API URL (e.g., `http://localhost:8000`) |
-| `AUTH_SECRET`                    | NextAuth secret for session encryption          |
-| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Microsoft Entra ID client ID (optional)         |
-| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Microsoft Entra ID client secret (optional)     |
-| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft Entra ID issuer URL (optional)        |
+| Variable                         | Purpose                                                    |
+|----------------------------------|------------------------------------------------------------|
+| `NEXT_PUBLIC_API_HOST`           | Backend API URL — for local dev use `http://localhost:8000` |
+| `AUTH_SECRET`                    | NextAuth secret for session encryption                     |
+| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Microsoft Entra ID client ID (optional)                    |
+| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Microsoft Entra ID client secret (optional)                |
+| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft Entra ID issuer URL (optional)                   |
 
 !!! note
     The Microsoft Entra ID variables are only required if SSO is being configured.

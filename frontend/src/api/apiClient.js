@@ -1,8 +1,14 @@
 import axios from "axios";
 
 const apiClient = () => {
+    // Server-side (Next.js container): use INTERNAL_API_HOST to reach the
+    // backend directly on the Docker network. Client-side (browser): use
+    // NEXT_PUBLIC_API_HOST which resolves via nginx on the host machine.
+    const host = typeof window === 'undefined'
+        ? (process.env.INTERNAL_API_HOST || process.env.NEXT_PUBLIC_API_HOST || '')
+        : (process.env.NEXT_PUBLIC_API_HOST || '');
     const defaultOptions = {
-        baseURL: `${process.env.NEXT_PUBLIC_API_HOST}/api`,
+        baseURL: `${host}/api`,
         headers: {
             "Content-Type": "application/json",
             accept: "application/json",

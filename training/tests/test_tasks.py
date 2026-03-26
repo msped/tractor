@@ -11,7 +11,7 @@ from docx.enum.text import WD_COLOR_INDEX
 from cases.models import Case, Redaction
 from cases.models import Document as CaseDocument
 
-from ..models import Model, TrainingDocument, TrainingRun
+from ..models import Model, TrainingDocument, TrainingRun, TrainingRunCaseDoc, TrainingRunTrainingDoc
 from ..tasks import (
     _build_spancat_pipeline,
     _prepare_examples,
@@ -284,7 +284,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(text[start:end], "Valid")
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_train"))
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_model_train"))
 class TrainModelTests(NetworkBlockerMixin, TestCase):
     """Tests for the full SpanCat training pipeline."""
 
@@ -377,13 +377,6 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         self, mock_task, mock_collect, mock_build_pipeline, mock_prepare, mock_run_loop
     ):
         """train_model() creates TrainingRunTrainingDoc and TrainingRunCaseDoc for used docs."""
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        from cases.models import Case
-        from cases.models import Document as CaseDocument
-
-        from ..models import TrainingRunCaseDoc, TrainingRunTrainingDoc
-
         mock_task.objects.filter.return_value.count.return_value = 0
 
         case = Case.objects.create(case_reference="TRACK1")

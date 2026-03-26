@@ -50,6 +50,7 @@ freezegun==1.5.5
 fsspec==2025.5.1
 ghp-import==2.1.0
 gliner==0.2.25
+gunicorn==25.1.0
 hf-xet==1.1.5
 huggingface-hub==0.33.1
 humanfriendly==10.0
