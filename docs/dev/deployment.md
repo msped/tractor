@@ -204,6 +204,28 @@ The SpanCat model is trained from user-accepted redactions via the training pipe
 
 ---
 
+## Original File Auto-Deletion
+
+Tractor can automatically clear original uploaded files after a case reaches a terminal state (Completed, Closed, Withdrawn, Under Review, or Error) and has not been updated for a configurable number of days. This reduces storage usage over time while leaving redaction review and exports fully functional — all extracted text is stored in the database.
+
+This feature is **disabled by default**. To enable it, set the following in `backend/settings/base.py` (or override in your environment-specific settings file):
+
+```python
+DELETE_ORIGINAL_FILES = True
+DELETE_ORIGINAL_FILES_AFTER_DAYS = 30  # adjust as needed
+```
+
+A scheduled task (`delete_original_files_daily`) runs once per day via the `worker` service. It finds all documents where:
+
+- the parent case status is terminal, **and**
+- the case's `updated_at` timestamp is older than the configured threshold.
+
+`django-cleanup` handles physical file deletion from storage (local or cloud) when the field is cleared.
+
+> **Note:** Once an original file is deleted it cannot be recovered. Exported redacted PDFs and disclosure packages are unaffected.
+
+---
+
 ## WeasyPrint (PDF Export)
 
 WeasyPrint dependencies (Cairo, Pango, GDK-Pixbuf) are installed in the backend Docker image. No additional host configuration is needed.

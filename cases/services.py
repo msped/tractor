@@ -3,9 +3,11 @@ import os
 import re
 import shutil
 import zipfile
+from datetime import timedelta
 from html import escape as html_escape
 
 import inflect
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
@@ -582,3 +584,34 @@ def delete_cases_past_retention_date():
         logger.info(f"Successfully deleted case {case_ref}.")
 
     return f"Successfully deleted {len(deleted_case_refs)} " + f"case(s): {', '.join(deleted_case_refs)}."
+
+
+TERMINAL_CASE_STATUSES = [
+    Case.Status.COMPLETED,
+    Case.Status.CLOSED,
+    Case.Status.WITHDRAWN,
+    Case.Status.UNDER_REVIEW,
+    Case.Status.ERROR,
+]
+
+
+def delete_original_files_past_threshold():
+    """Clear original_file on documents whose case is terminal and was last updated beyond the threshold."""
+    if not getattr(settings, "DELETE_ORIGINAL_FILES", False):
+        return "Original file deletion is disabled."
+
+    days = getattr(settings, "DELETE_ORIGINAL_FILES_AFTER_DAYS", 30)
+    threshold = timezone.now() - timedelta(days=days)
+
+    documents = Document.objects.filter(
+        case__status__in=TERMINAL_CASE_STATUSES,
+        case__updated_at__lt=threshold,
+    ).exclude(original_file="")
+
+    count = documents.count()
+    for doc in documents:
+        doc.original_file = ""
+        doc.save(update_fields=["original_file"])
+
+    logger.info("Deleted original files for %d document(s) (case terminal > %d days).", count, days)
+    return f"Deleted original files for {count} document(s)."

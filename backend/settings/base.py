@@ -184,6 +184,9 @@ SIMPLE_JWT = {
 
 ACCOUNT_EMAIL_VERIFICATION = "none"
 
+DELETE_ORIGINAL_FILES = False
+DELETE_ORIGINAL_FILES_AFTER_DAYS = 30
+
 Q_CLUSTER = {
     "name": "DjangORM",
     "workers": 4,
@@ -196,6 +199,10 @@ Q_CLUSTER = {
         "delete_old_cases_daily": {
             "func": "cases.services.delete_cases_past_retention_date",
             "schedule_type": "D",
-        }
+        },
+        "delete_original_files_daily": {
+            "func": "cases.services.delete_original_files_past_threshold",
+            "schedule_type": "D",
+        },
     },
 }
