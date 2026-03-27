@@ -22,6 +22,7 @@ from ..services import (
     _build_export_css,
     _generate_pdf_from_document,
     _matches_data_subject,
+    _render_table_with_redactions,
     delete_cases_past_retention_date,
     delete_original_files_past_threshold,
     export_case_documents,
@@ -735,6 +736,138 @@ class ExportCaseDocumentsPassesSettingsTests(NetworkBlockerMixin, TestCase):
         for c in calls:
             self.assertEqual(c.kwargs["export_settings"], mock_settings)
             self.assertEqual(c.kwargs["case_reference"], "EXP01")
+
+
+def _make_redaction(start, end, redaction_type="PII"):
+    r = MagicMock()
+    r.start_char = start
+    r.end_char = end
+    r.redaction_type = redaction_type
+    del r.context  # ensure hasattr(r, "context") is False by default
+    return r
+
+
+class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
+    def _cell(self, row, col, start, end, text, **kwargs):
+        c = {"row": row, "col": col, "start": start, "end": end, "text": text}
+        c.update(kwargs)
+        return c
+
+    def test_no_cells_returns_escaped_text(self):
+        result = _render_table_with_redactions({"text": "plain <text>"}, "", [], "internal")
+        self.assertEqual(result, "plain &lt;text&gt;")
+
+    def test_no_cells_empty_text_returns_empty_string(self):
+        result = _render_table_with_redactions({}, "", [], "internal")
+        self.assertEqual(result, "")
+
+    def test_simple_table_structure(self):
+        full_text = "Hello World"
+        table_data = {
+            "cells": [
+                self._cell(0, 0, 0, 5, "Hello", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(0, 1, 6, 11, "World", isMergedContinuation=False, colspan=1, rowspan=1),
+            ]
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        self.assertIn("<table", result)
+        self.assertIn("<tr>", result)
+        self.assertIn("Hello", result)
+        self.assertIn("World", result)
+
+    def test_redaction_applied_within_cell(self):
+        full_text = "Hello World"
+        table_data = {
+            "cells": [
+                self._cell(0, 0, 0, 5, "Hello", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(0, 1, 6, 11, "World", isMergedContinuation=False, colspan=1, rowspan=1),
+            ]
+        }
+        redaction = _make_redaction(6, 11)
+        result = _render_table_with_redactions(table_data, full_text, [redaction], "internal")
+        self.assertIn('class="redaction', result)
+        self.assertIn("World", result)
+
+    def test_disclosure_mode_replaces_with_blocks(self):
+        full_text = "Secret data"
+        table_data = {
+            "cells": [
+                self._cell(0, 0, 0, 6, "Secret", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(0, 1, 7, 11, "data", isMergedContinuation=False, colspan=1, rowspan=1),
+            ]
+        }
+        redaction = _make_redaction(0, 6)
+        result = _render_table_with_redactions(table_data, full_text, [redaction], "disclosure")
+        self.assertIn("█", result)
+        self.assertNotIn("Secret", result)
+
+    def test_merged_continuation_cell_skipped(self):
+        full_text = "MergedMerged"
+        table_data = {
+            "cells": [
+                self._cell(0, 0, 0, 6, "Merged", isMergedContinuation=False, colspan=2, rowspan=1),
+                self._cell(0, 1, 0, 6, "Merged", isMergedContinuation=True, colspan=1, rowspan=1),
+            ]
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        # Only one <td> should be rendered (the continuation is skipped)
+        self.assertEqual(result.count("<td"), 1)
+        self.assertIn('colspan="2"', result)
+
+    def test_colspan_and_rowspan_attrs_rendered(self):
+        full_text = "AB"
+        table_data = {
+            "cells": [
+                self._cell(0, 0, 0, 1, "A", isMergedContinuation=False, colspan=3, rowspan=2),
+            ]
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        self.assertIn('colspan="3"', result)
+        self.assertIn('rowspan="2"', result)
+
+    def test_col_widths_applied(self):
+        full_text = "AB"
+        table_data = {
+            "cells": [self._cell(0, 0, 0, 1, "A", isMergedContinuation=False, colspan=1, rowspan=1)],
+            "colWidths": [42.5],
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        self.assertIn("width: 42.5%", result)
+
+    def test_equal_fallback_widths_when_no_col_widths(self):
+        full_text = "AB"
+        table_data = {
+            "cells": [
+                self._cell(0, 0, 0, 1, "A", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(0, 1, 1, 2, "B", isMergedContinuation=False, colspan=1, rowspan=1),
+            ]
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        self.assertIn("width: 50.0%", result)
+
+    def test_heuristic_merge_detection_for_legacy_data(self):
+        # No isMergedContinuation key — heuristic should detect adjacent identical cells
+        full_text = "SameSame"
+        table_data = {
+            "cells": [
+                {"row": 0, "col": 0, "start": 0, "end": 4, "text": "Same"},
+                {"row": 0, "col": 1, "start": 0, "end": 4, "text": "Same"},
+            ]
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        self.assertEqual(result.count("<td"), 1)
+        self.assertIn('colspan="2"', result)
+
+    def test_heuristic_no_merge_for_different_adjacent_cells(self):
+        full_text = "AB"
+        table_data = {
+            "cells": [
+                {"row": 0, "col": 0, "start": 0, "end": 1, "text": "A"},
+                {"row": 0, "col": 1, "start": 1, "end": 2, "text": "B"},
+            ]
+        }
+        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        self.assertEqual(result.count("<td"), 2)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
