@@ -23,6 +23,7 @@ from ..services import (
     _generate_pdf_from_document,
     _matches_data_subject,
     delete_cases_past_retention_date,
+    delete_original_files_past_threshold,
     export_case_documents,
     find_and_flag_matching_text_in_case,
     process_document_and_create_redactions,
@@ -734,3 +735,49 @@ class ExportCaseDocumentsPassesSettingsTests(NetworkBlockerMixin, TestCase):
         for c in calls:
             self.assertEqual(c.kwargs["export_settings"], mock_settings)
             self.assertEqual(c.kwargs["case_reference"], "EXP01")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class DeleteOriginalFilesTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="DEL01",
+            data_subject_name="Delete Test",
+            status=Case.Status.COMPLETED,
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("test.txt", b"content"),
+            status=Document.Status.COMPLETED,
+        )
+
+    @override_settings(DELETE_ORIGINAL_FILES=False)
+    def test_disabled_returns_early(self):
+        result = delete_original_files_past_threshold()
+        self.assertEqual(result, "Original file deletion is disabled.")
+        self.document.refresh_from_db()
+        self.assertTrue(bool(self.document.original_file))
+
+    @override_settings(DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=30)
+    def test_within_threshold_not_deleted(self):
+        # Case updated_at is effectively "now" — within 30 days
+        result = delete_original_files_past_threshold()
+        self.assertEqual(result, "Deleted original files for 0 document(s).")
+        self.document.refresh_from_db()
+        self.assertTrue(bool(self.document.original_file))
+
+    @override_settings(DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0)
+    def test_past_threshold_deletes_original_file(self):
+        result = delete_original_files_past_threshold()
+        self.assertEqual(result, "Deleted original files for 1 document(s).")
+        self.document.refresh_from_db()
+        self.assertFalse(bool(self.document.original_file))
+
+    @override_settings(DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0)
+    def test_non_terminal_case_not_deleted(self):
+        self.case.status = Case.Status.OPEN
+        self.case.save()
+        result = delete_original_files_past_threshold()
+        self.assertEqual(result, "Deleted original files for 0 document(s).")
+        self.document.refresh_from_db()
+        self.assertTrue(bool(self.document.original_file))

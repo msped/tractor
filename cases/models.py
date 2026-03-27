@@ -61,6 +61,7 @@ class Case(models.Model):
     data_subject_dob = models.DateField(null=True, blank=True, help_text="Date of birth of the data subject.")
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_cases"
     )
