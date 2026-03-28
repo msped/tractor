@@ -55,7 +55,9 @@ def _build_analyzer():
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
     }
-    nlp_engine = NlpEngineProvider(nlp_configuration=nlp_config).create_engine()
+    nlp_engine = NlpEngineProvider(
+        nlp_configuration=nlp_config
+    ).create_engine()
 
     engine = AnalyzerEngine(nlp_engine=nlp_engine)
     engine.registry.add_recognizer(postcode_recognizer)
@@ -93,7 +95,9 @@ def _build_operational_analyzer():
         "nlp_engine_name": "spacy",
         "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
     }
-    nlp_engine = NlpEngineProvider(nlp_configuration=nlp_config).create_engine()
+    nlp_engine = NlpEngineProvider(
+        nlp_configuration=nlp_config
+    ).create_engine()
 
     engine = AnalyzerEngine(nlp_engine=nlp_engine)
     engine.registry.add_recognizer(crime_ref_recognizer)
@@ -129,7 +133,9 @@ def extract_with_presidio(text):
     All entities are mapped to THIRD_PARTY.
     """
     analyzer = _get_analyzer()
-    results = analyzer.analyze(text=text, language="en", entities=_PRESIDIO_ENTITIES)
+    results = analyzer.analyze(
+        text=text, language="en", entities=_PRESIDIO_ENTITIES
+    )
     output = []
     for r in results:
         output.append(
@@ -152,7 +158,9 @@ def extract_operational_with_presidio(text):
     end_char. All entities are mapped to OPERATIONAL.
     """
     analyzer = _get_operational_analyzer()
-    results = analyzer.analyze(text=text, language="en", entities=_OPERATIONAL_ENTITIES)
+    results = analyzer.analyze(
+        text=text, language="en", entities=_OPERATIONAL_ENTITIES
+    )
     output = []
     for r in results:
         output.append(

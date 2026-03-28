@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import Model, TrainingDocument, TrainingRun, TrainingRunCaseDoc, TrainingRunTrainingDoc
+from .models import (
+    Model,
+    TrainingDocument,
+    TrainingRun,
+    TrainingRunCaseDoc,
+    TrainingRunTrainingDoc,
+)
 
 
 class TrainingRunTrainingDocInline(admin.TabularInline):

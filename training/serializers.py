@@ -3,29 +3,71 @@ from rest_framework import serializers
 
 from cases.models import Document
 
-from .models import Model, TrainingDocument, TrainingRun, TrainingRunCaseDoc, TrainingRunTrainingDoc
+from .models import (
+    Model,
+    TrainingDocument,
+    TrainingRun,
+    TrainingRunCaseDoc,
+    TrainingRunTrainingDoc,
+)
 
 
 class ModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Model
-        fields = ["id", "name", "path", "is_active", "created_at", "precision", "recall", "f1_score"]
-        read_only_fields = ["path", "created_at", "precision", "recall", "f1_score"]
+        fields = [
+            "id",
+            "name",
+            "path",
+            "is_active",
+            "created_at",
+            "precision",
+            "recall",
+            "f1_score",
+        ]
+        read_only_fields = [
+            "path",
+            "created_at",
+            "precision",
+            "recall",
+            "f1_score",
+        ]
 
 
 class ScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Schedule
-        fields = ["id", "func", "kwargs", "schedule_type", "next_run", "repeats"]
+        fields = [
+            "id",
+            "func",
+            "kwargs",
+            "schedule_type",
+            "next_run",
+            "repeats",
+        ]
 
 
 class TrainingDocumentSerializer(serializers.ModelSerializer):
-    created_by_username = serializers.ReadOnlyField(source="created_by.username")
+    created_by_username = serializers.ReadOnlyField(
+        source="created_by.username"
+    )
 
     class Meta:
         model = TrainingDocument
-        fields = ["id", "name", "original_file", "created_at", "created_by_username", "processed"]
-        read_only_fields = ["id", "created_at", "created_by_username", "processed"]
+        fields = [
+            "id",
+            "name",
+            "original_file",
+            "created_at",
+            "created_by_username",
+            "processed",
+        ]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "created_by_username",
+            "processed",
+        ]
 
 
 class TrainingRunTrainingDocSerializer(serializers.ModelSerializer):
@@ -69,13 +111,15 @@ class TrainingRunSerializer(serializers.ModelSerializer):
         ]
 
     def get_training_documents(self, obj):
-        training_doc_links = TrainingRunTrainingDoc.objects.filter(training_run=obj).select_related("document")
+        training_doc_links = TrainingRunTrainingDoc.objects.filter(
+            training_run=obj
+        ).select_related("document")
         documents = [link.document for link in training_doc_links]
         return TrainingRunTrainingDocSerializer(documents, many=True).data
 
     def get_case_documents(self, obj):
-        case_doc_links = TrainingRunCaseDoc.objects.filter(training_run=obj).select_related(
-            "document", "document__case"
-        )
+        case_doc_links = TrainingRunCaseDoc.objects.filter(
+            training_run=obj
+        ).select_related("document", "document__case")
         documents = [link.document for link in case_doc_links]
         return TrainingRunCaseDocSerializer(documents, many=True).data

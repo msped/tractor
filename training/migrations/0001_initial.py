@@ -14,7 +14,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Model",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
                 (
                     "name",
                     models.CharField(
@@ -26,13 +34,16 @@ class Migration(migrations.Migration):
                 (
                     "path",
                     models.CharField(
-                        help_text="The absolute file path to the trained model directory.", max_length=512, unique=True
+                        help_text="The absolute file path to the trained model directory.",
+                        max_length=512,
+                        unique=True,
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=False, help_text="Designates if this model is the one currently used for processing."
+                        default=False,
+                        help_text="Designates if this model is the one currently used for processing.",
                     ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),

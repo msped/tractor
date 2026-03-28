@@ -51,29 +51,48 @@ class Case(models.Model):
         help_text="The internal unique identifier for the case (UUID).",
     )
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.OPEN, help_text="The current status of the case."
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OPEN,
+        help_text="The current status of the case.",
     )
     case_reference = models.CharField(
-        max_length=6, unique=True, help_text="The human-readable, unique identifier for this case (e.g., 2025-0114)."
+        max_length=6,
+        unique=True,
+        help_text="The human-readable, unique identifier for this case (e.g., 2025-0114).",
     )
 
-    data_subject_name = models.CharField(max_length=255, help_text="Full name of the data subject.")
-    data_subject_dob = models.DateField(null=True, blank=True, help_text="Date of birth of the data subject.")
+    data_subject_name = models.CharField(
+        max_length=255, help_text="Full name of the data subject."
+    )
+    data_subject_dob = models.DateField(
+        null=True, blank=True, help_text="Date of birth of the data subject."
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_cases"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_cases",
     )
 
     retention_review_date = models.DateField(
-        default=retention_review_date_default, help_text="Date when this case should be reviewed for retention."
+        default=retention_review_date_default,
+        help_text="Date when this case should be reviewed for retention.",
     )
 
     # Export-related fields
-    export_status = models.CharField(max_length=20, choices=ExportStatus.choices, default=ExportStatus.NONE)
+    export_status = models.CharField(
+        max_length=20, choices=ExportStatus.choices, default=ExportStatus.NONE
+    )
     export_file = models.FileField(
-        upload_to=case_export_upload_to, null=True, blank=True, help_text="The path to the generated ZIP export file."
+        upload_to=case_export_upload_to,
+        null=True,
+        blank=True,
+        help_text="The path to the generated ZIP export file.",
     )
     export_task_id = models.CharField(max_length=255, null=True, blank=True)
 
@@ -103,10 +122,14 @@ class Case(models.Model):
         retention_years = getattr(settings, "CASE_RETENTION_YEARS", 6)
         if self.data_subject_dob:
             age = relativedelta(today, self.data_subject_dob).years
-            eighteenth_birthday = self.data_subject_dob + relativedelta(years=18)
+            eighteenth_birthday = self.data_subject_dob + relativedelta(
+                years=18
+            )
 
             if age < 18:
-                return eighteenth_birthday + relativedelta(years=retention_years)
+                return eighteenth_birthday + relativedelta(
+                    years=retention_years
+                )
             else:
                 return today + relativedelta(years=retention_years)
 
@@ -141,19 +164,24 @@ class Document(models.Model):
     )
 
     original_file = models.FileField(
-        upload_to="originals/%Y/%m/%d/", help_text="The original, unmodified uploaded file."
+        upload_to="originals/%Y/%m/%d/",
+        help_text="The original, unmodified uploaded file.",
     )
     filename = models.CharField(max_length=255, null=True, blank=True)
     file_type = models.CharField(max_length=10, blank=True)
 
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROCESSING)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PROCESSING
+    )
 
     extracted_text = models.TextField(blank=True, null=True, editable=False)
     extracted_tables = models.JSONField(default=list, blank=True)
     extracted_structure = models.JSONField(null=True, blank=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    processing_task_id = models.CharField(max_length=255, null=True, blank=True)
+    processing_task_id = models.CharField(
+        max_length=255, null=True, blank=True
+    )
     spacy_model = models.ForeignKey(
         Model,
         on_delete=models.SET_NULL,  # Important for data retention
@@ -190,21 +218,29 @@ class Redaction(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Allows easy access: my_document.redactions.all()
-    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="redactions")
+    document = models.ForeignKey(
+        Document, on_delete=models.CASCADE, related_name="redactions"
+    )
 
     start_char = models.IntegerField()
     end_char = models.IntegerField()
     text = models.TextField(help_text="The actual text that was redacted.")
     justification = models.TextField(
-        blank=True, null=True, help_text="Reason for a manual redaction or for rejecting a suggestion."
+        blank=True,
+        null=True,
+        help_text="Reason for a manual redaction or for rejecting a suggestion.",
     )
 
-    redaction_type = models.CharField(max_length=10, choices=RedactionType.choices)
+    redaction_type = models.CharField(
+        max_length=10, choices=RedactionType.choices
+    )
     is_suggestion = models.BooleanField(
-        default=True, help_text="True if this was created by the AI, False if created manually by a user."
+        default=True,
+        help_text="True if this was created by the AI, False if created manually by a user.",
     )
     is_accepted = models.BooleanField(
-        default=False, help_text="True if the user has confirmed this redaction should be applied."
+        default=False,
+        help_text="True if the user has confirmed this redaction should be applied.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -222,8 +258,15 @@ class RedactionContext(models.Model):
     final exported document to provide more clarity.
     """
 
-    redaction = models.OneToOneField(Redaction, on_delete=models.CASCADE, primary_key=True, related_name="context")
-    text = models.TextField(help_text="User-provided context for the redaction.")
+    redaction = models.OneToOneField(
+        Redaction,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="context",
+    )
+    text = models.TextField(
+        help_text="User-provided context for the redaction."
+    )
 
 
 class ExemptionTemplate(models.Model):
@@ -232,9 +275,17 @@ class ExemptionTemplate(models.Model):
     admins configure and users select when rejecting redaction suggestions.
     """
 
-    name = models.CharField(max_length=255, unique=True, help_text="The exemption label shown to users.")
-    description = models.TextField(blank=True, help_text="Optional longer description of this exemption.")
-    is_active = models.BooleanField(default=True, help_text="Inactive templates are hidden from the UI.")
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="The exemption label shown to users.",
+    )
+    description = models.TextField(
+        blank=True, help_text="Optional longer description of this exemption."
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Inactive templates are hidden from the UI."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -265,7 +316,9 @@ class DocumentExportSettings(models.Model):
     watermark_text = models.CharField(max_length=200, blank=True, default="")
     watermark_include_case_ref = models.BooleanField(default=False)
     page_numbers_enabled = models.BooleanField(default=False)
-    font_family = models.CharField(max_length=50, choices=FontFamily, default=FontFamily.ARIAL)
+    font_family = models.CharField(
+        max_length=50, choices=FontFamily, default=FontFamily.ARIAL
+    )
 
     @property
     def font_family_css(self):

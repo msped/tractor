@@ -109,7 +109,9 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
 
         mod._analyzer = None
 
-        with patch("training.extractors.presidio_extractor._build_analyzer") as mock_build:
+        with patch(
+            "training.extractors.presidio_extractor._build_analyzer"
+        ) as mock_build:
             mock_build.return_value = MagicMock()
             mock_build.return_value.analyze.return_value = []
 
@@ -200,7 +202,9 @@ class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
 
         mod._operational_analyzer = None
 
-        with patch("training.extractors.presidio_extractor._build_operational_analyzer") as mock_build:
+        with patch(
+            "training.extractors.presidio_extractor._build_operational_analyzer"
+        ) as mock_build:
             mock_build.return_value = MagicMock()
             mock_build.return_value.analyze.return_value = []
 
@@ -221,26 +225,34 @@ class BuildAnalyzerTests(NetworkBlockerMixin, TestCase):
     @patch("presidio_analyzer.AnalyzerEngine")
     @patch("presidio_analyzer.PatternRecognizer")
     @patch("presidio_analyzer.Pattern")
-    def test_build_analyzer_returns_engine(self, mock_pattern, mock_recognizer, mock_engine, mock_provider):
+    def test_build_analyzer_returns_engine(
+        self, mock_pattern, mock_recognizer, mock_engine, mock_provider
+    ):
         mock_engine_instance = MagicMock()
         mock_engine.return_value = mock_engine_instance
 
         result = _build_analyzer()
 
         mock_engine.assert_called_once()
-        self.assertEqual(mock_engine_instance.registry.add_recognizer.call_count, 2)
+        self.assertEqual(
+            mock_engine_instance.registry.add_recognizer.call_count, 2
+        )
         self.assertEqual(result, mock_engine_instance)
 
     @patch("presidio_analyzer.nlp_engine.NlpEngineProvider")
     @patch("presidio_analyzer.AnalyzerEngine")
     @patch("presidio_analyzer.PatternRecognizer")
     @patch("presidio_analyzer.Pattern")
-    def test_build_operational_analyzer_returns_engine(self, mock_pattern, mock_recognizer, mock_engine, mock_provider):
+    def test_build_operational_analyzer_returns_engine(
+        self, mock_pattern, mock_recognizer, mock_engine, mock_provider
+    ):
         mock_engine_instance = MagicMock()
         mock_engine.return_value = mock_engine_instance
 
         result = _build_operational_analyzer()
 
         mock_engine.assert_called_once()
-        self.assertEqual(mock_engine_instance.registry.add_recognizer.call_count, 2)
+        self.assertEqual(
+            mock_engine_instance.registry.add_recognizer.call_count, 2
+        )
         self.assertEqual(result, mock_engine_instance)

@@ -38,7 +38,9 @@ class Command(BaseCommand):
         from gliner import GLiNER
 
         model_id = options["name"]
-        local_name = model_id.replace("/", "_").replace("-", "_").replace(".", "_")
+        local_name = (
+            model_id.replace("/", "_").replace("-", "_").replace(".", "_")
+        )
         local_path = os.path.join(NLP_MODELS_DIR, local_name)
 
         self.stdout.write(f"Downloading GLiNER model: {model_id}")

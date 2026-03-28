@@ -23,7 +23,12 @@ class Migration(migrations.Migration):
                         to="cases.redaction",
                     ),
                 ),
-                ("text", models.TextField(help_text="User-provided context for the redaction.")),
+                (
+                    "text",
+                    models.TextField(
+                        help_text="User-provided context for the redaction."
+                    ),
+                ),
             ],
         ),
     ]

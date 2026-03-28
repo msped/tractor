@@ -6,8 +6,12 @@ from django.conf import settings
 from training.models import Model
 
 DEFAULT_GLINER_MODEL = "urchade/gliner_medium-v2.1"
-_GLINER_LOCAL_NAME = DEFAULT_GLINER_MODEL.replace("/", "_").replace("-", "_").replace(".", "_")
-_GLINER_LOCAL_PATH = os.path.join(settings.BASE_DIR, "nlp_models", _GLINER_LOCAL_NAME)
+_GLINER_LOCAL_NAME = (
+    DEFAULT_GLINER_MODEL.replace("/", "_").replace("-", "_").replace(".", "_")
+)
+_GLINER_LOCAL_PATH = os.path.join(
+    settings.BASE_DIR, "nlp_models", _GLINER_LOCAL_NAME
+)
 
 
 def _load_gliner_model(path):
@@ -61,7 +65,11 @@ class GLiNERModelManager:
         if self.model is None:
             self.load_active_model()
             if self.model is None:
-                path = _GLINER_LOCAL_PATH if os.path.isdir(_GLINER_LOCAL_PATH) else DEFAULT_GLINER_MODEL
+                path = (
+                    _GLINER_LOCAL_PATH
+                    if os.path.isdir(_GLINER_LOCAL_PATH)
+                    else DEFAULT_GLINER_MODEL
+                )
                 self.model = _load_gliner_model(path)
                 self.model_name = DEFAULT_GLINER_MODEL
         return self.model

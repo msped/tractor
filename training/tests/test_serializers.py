@@ -7,8 +7,18 @@ from django.test import TestCase, override_settings
 from cases.models import Case
 from cases.models import Document as CaseDocument
 
-from ..models import Model, TrainingDocument, TrainingRun, TrainingRunCaseDoc, TrainingRunTrainingDoc
-from ..serializers import ModelSerializer, TrainingDocumentSerializer, TrainingRunSerializer
+from ..models import (
+    Model,
+    TrainingDocument,
+    TrainingRun,
+    TrainingRunCaseDoc,
+    TrainingRunTrainingDoc,
+)
+from ..serializers import (
+    ModelSerializer,
+    TrainingDocumentSerializer,
+    TrainingRunSerializer,
+)
 from .base import NetworkBlockerMixin
 
 User = get_user_model()
@@ -46,7 +56,10 @@ class ModelSerializerTests(NetworkBlockerMixin, TestCase):
             name="test_model_v2",
             path="/path/to/model_v2",
         )
-        serializer = ModelSerializer(model, data={"name": "new_name", "path": "new/path", "is_active": True})
+        serializer = ModelSerializer(
+            model,
+            data={"name": "new_name", "path": "new/path", "is_active": True},
+        )
         serializer.is_valid(raise_exception=True)
         # path is read-only and must not appear in validated_data
         self.assertNotIn("path", serializer.validated_data)
@@ -82,7 +95,9 @@ class TrainingRunSerializerTests(NetworkBlockerMixin, TestCase):
             precision=0.8,
             recall=0.85,
         )
-        self.run = TrainingRun.objects.create(model=self.model, source="redactions")
+        self.run = TrainingRun.objects.create(
+            model=self.model, source="redactions"
+        )
 
     def test_get_training_documents_returns_linked_docs(self):
         user = User.objects.create_user("runuser", password="password")
@@ -91,7 +106,9 @@ class TrainingRunSerializerTests(NetworkBlockerMixin, TestCase):
             original_file=SimpleUploadedFile("run.docx", b"content"),
             created_by=user,
         )
-        TrainingRunTrainingDoc.objects.create(training_run=self.run, document=doc)
+        TrainingRunTrainingDoc.objects.create(
+            training_run=self.run, document=doc
+        )
 
         data = TrainingRunSerializer(self.run).data
 
@@ -105,7 +122,9 @@ class TrainingRunSerializerTests(NetworkBlockerMixin, TestCase):
             extracted_text="Some text",
             status=CaseDocument.Status.COMPLETED,
         )
-        TrainingRunCaseDoc.objects.create(training_run=self.run, document=case_doc)
+        TrainingRunCaseDoc.objects.create(
+            training_run=self.run, document=case_doc
+        )
 
         data = TrainingRunSerializer(self.run).data
 

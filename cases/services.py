@@ -14,7 +14,11 @@ from django.utils import timezone
 from weasyprint import CSS, HTML
 from weasyprint.text.fonts import FontConfiguration
 
-from training.loader import DEFAULT_GLINER_MODEL, GLiNERModelManager, SpanCatModelManager
+from training.loader import (
+    DEFAULT_GLINER_MODEL,
+    GLiNERModelManager,
+    SpanCatModelManager,
+)
 from training.services import extract_entities_from_text
 
 from .models import Case, Document, DocumentExportSettings, Redaction
@@ -83,7 +87,9 @@ def process_document_and_create_redactions(document_id):
         return
 
     if document.status != Document.Status.PROCESSING:
-        print(f"Document {document_id} is no longer processing (status: {document.status}). Aborting.")
+        print(
+            f"Document {document_id} is no longer processing (status: {document.status}). Aborting."
+        )
         return
 
     gliner_manager = GLiNERModelManager.get_instance()
@@ -98,7 +104,9 @@ def process_document_and_create_redactions(document_id):
         using model '{model_display}'..."
     )
 
-    extracted_text, ai_suggestions, tables, structure = extract_entities_from_text(document.original_file.path)
+    extracted_text, ai_suggestions, tables, structure = (
+        extract_entities_from_text(document.original_file.path)
+    )
 
     if not extracted_text:
         document.status = Document.Status.ERROR
@@ -108,7 +116,13 @@ def process_document_and_create_redactions(document_id):
     document.extracted_text = extracted_text
     document.extracted_tables = tables
     document.extracted_structure = structure
-    document.save(update_fields=["extracted_text", "extracted_tables", "extracted_structure"])
+    document.save(
+        update_fields=[
+            "extracted_text",
+            "extracted_tables",
+            "extracted_structure",
+        ]
+    )
 
     case = document.case
 
@@ -143,7 +157,9 @@ def process_document_and_create_redactions(document_id):
 def find_and_flag_matching_text_in_case(redaction_id):
     """Propagate a DS_INFORMATION redaction to matching text across all other case documents."""
     try:
-        source_redaction = Redaction.objects.select_related("document__case").get(id=redaction_id)
+        source_redaction = Redaction.objects.select_related(
+            "document__case"
+        ).get(id=redaction_id)
     except Redaction.DoesNotExist:
         print(f"Source redaction with id {redaction_id} not found.")
         return
@@ -153,7 +169,11 @@ def find_and_flag_matching_text_in_case(redaction_id):
     case = source_document.case
 
     other_documents = Document.objects.filter(
-        case=case, status__in=[Document.Status.READY_FOR_REVIEW, Document.Status.COMPLETED]
+        case=case,
+        status__in=[
+            Document.Status.READY_FOR_REVIEW,
+            Document.Status.COMPLETED,
+        ],
     ).exclude(id=source_document.id)
 
     if not search_term.strip():
@@ -178,7 +198,11 @@ def find_and_flag_matching_text_in_case(redaction_id):
 
     # Create a regex pattern that matches variations as a whole word.
     # The \b ensures we only match whole words/phrases.
-    pattern = r"\b(" + "|".join(re.escape(term) for term in sorted_variations) + r")\b"
+    pattern = (
+        r"\b("
+        + "|".join(re.escape(term) for term in sorted_variations)
+        + r")\b"
+    )
 
     print(
         f"Searching for variations of '{search_term}' in \
@@ -194,28 +218,44 @@ def find_and_flag_matching_text_in_case(redaction_id):
 
         with transaction.atomic():
             # Find all matches for the pattern
-            for match in re.finditer(pattern, document.extracted_text, re.IGNORECASE):
+            for match in re.finditer(
+                pattern, document.extracted_text, re.IGNORECASE
+            ):
                 start, end = match.span()
                 text = match.group(0)
 
                 # Try to find an existing redaction at this position
                 existing_redaction = (
-                    Redaction.objects.filter(document=document, start_char=start, end_char=end)
-                    .exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+                    Redaction.objects.filter(
+                        document=document, start_char=start, end_char=end
+                    )
+                    .exclude(
+                        redaction_type=Redaction.RedactionType.DS_INFORMATION
+                    )
                     .first()
                 )
 
                 if existing_redaction:
                     # A redaction already exists.
                     # Update it if it's not already DS_INFO.
-                    if existing_redaction.redaction_type != Redaction.RedactionType.DS_INFORMATION:
-                        existing_redaction.redaction_type = Redaction.RedactionType.DS_INFORMATION
+                    if (
+                        existing_redaction.redaction_type
+                        != Redaction.RedactionType.DS_INFORMATION
+                    ):
+                        existing_redaction.redaction_type = (
+                            Redaction.RedactionType.DS_INFORMATION
+                        )
                         # Reset its status to a pending suggestion for review
                         existing_redaction.is_suggestion = True
                         existing_redaction.is_accepted = False
                         existing_redaction.justification = None
                         existing_redaction.save(
-                            update_fields=["redaction_type", "is_suggestion", "is_accepted", "justification"]
+                            update_fields=[
+                                "redaction_type",
+                                "is_suggestion",
+                                "is_accepted",
+                                "justification",
+                            ]
                         )
                         document_modified = True
                 else:
@@ -233,12 +273,17 @@ def find_and_flag_matching_text_in_case(redaction_id):
 
             # If we modified this document and it was already completed,
             # revert its status so it can be reviewed again.
-            if document_modified and document.status == Document.Status.COMPLETED:
+            if (
+                document_modified
+                and document.status == Document.Status.COMPLETED
+            ):
                 document.status = Document.Status.READY_FOR_REVIEW
                 document.save(update_fields=["status"])
 
 
-def _apply_redactions_to_segment(full_text, start, end, sorted_redactions, mode):
+def _apply_redactions_to_segment(
+    full_text, start, end, sorted_redactions, mode
+):
     """Apply accepted redactions to a text segment and return an HTML string with redaction spans."""
     parts = []
     prev = start
@@ -284,7 +329,9 @@ def _apply_redactions_to_segment(full_text, start, end, sorted_redactions, mode)
     return "".join(parts)
 
 
-def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode):
+def _render_table_with_redactions(
+    table_data, full_text, sorted_redactions, mode
+):
     """Render a document table as an HTML table, applying redactions within each cell."""
     cells = table_data.get("cells", [])
 
@@ -309,8 +356,16 @@ def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode
             for col_idx in sorted(row_cells.keys()):
                 cell = row_cells[col_idx]
                 cell_text = cell["text"].strip()
-                prev_text = prev_cell["text"].strip() if prev_cell is not None else None
-                if prev_cell is not None and cell_text and cell_text == prev_text:
+                prev_text = (
+                    prev_cell["text"].strip()
+                    if prev_cell is not None
+                    else None
+                )
+                if (
+                    prev_cell is not None
+                    and cell_text
+                    and cell_text == prev_text
+                ):
                     cell["isMergedContinuation"] = True
                     prev_cell["colspan"] = prev_cell.get("colspan", 1) + 1
                 else:
@@ -331,7 +386,9 @@ def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode
     table_html = '<table style="border-collapse: collapse; width: 100%; margin: 1em 0; table-layout: fixed;">'
     table_html += "<colgroup>"
     for w in col_widths:
-        table_html += f'<col style="width: {w}%;">' if w is not None else "<col>"
+        table_html += (
+            f'<col style="width: {w}%;">' if w is not None else "<col>"
+        )
     table_html += "</colgroup>"
 
     for row_idx in sorted(rows_dict.keys()):
@@ -344,13 +401,17 @@ def _render_table_with_redactions(table_data, full_text, sorted_redactions, mode
             colspan = cell.get("colspan", 1)
             rowspan = cell.get("rowspan", 1)
             cell_style = cell.get("style", "padding: 6px 8px;")
-            cell_content = _apply_redactions_to_segment(full_text, cell["start"], cell["end"], sorted_redactions, mode)
+            cell_content = _apply_redactions_to_segment(
+                full_text, cell["start"], cell["end"], sorted_redactions, mode
+            )
             span_attrs = ""
             if colspan > 1:
                 span_attrs += f' colspan="{colspan}"'
             if rowspan > 1:
                 span_attrs += f' rowspan="{rowspan}"'
-            table_html += f'<td{span_attrs} style="{cell_style}">{cell_content}</td>'
+            table_html += (
+                f'<td{span_attrs} style="{cell_style}">{cell_content}</td>'
+            )
         table_html += "</tr>"
 
     table_html += "</table>"
@@ -401,7 +462,11 @@ def _build_export_css(settings, case_reference=""):
 
     watermark_label = settings.watermark_text
     if settings.watermark_include_case_ref and case_reference:
-        watermark_label = f"{watermark_label} {case_reference}" if watermark_label else case_reference
+        watermark_label = (
+            f"{watermark_label} {case_reference}"
+            if watermark_label
+            else case_reference
+        )
 
     watermark_css = ""
     if watermark_label:
@@ -423,11 +488,14 @@ def _build_export_css(settings, case_reference=""):
         ".type-PII { background-color: rgba(46, 204, 113, 0.7); color: initial; }\n"
         ".type-OP_DATA { background-color: rgba(0, 221, 255, 0.7); color: initial; }\n"
         ".type-DS_INFO { background-color: rgba(177, 156, 217, 0.8); color: initial; }\n"
-        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n" + watermark_css
+        ".internal-context-note { color: #555; font-style: italic; font-size: 0.9em; }\n"
+        + watermark_css
     )
 
 
-def _generate_pdf_from_document(document, mode="disclosure", export_settings=None, case_reference=""):
+def _generate_pdf_from_document(
+    document, mode="disclosure", export_settings=None, case_reference=""
+):
     """Render a Document to a PDF bytes object with all accepted redactions applied.
 
     Args:
@@ -444,9 +512,13 @@ def _generate_pdf_from_document(document, mode="disclosure", export_settings=Non
     if not text:
         return None
 
-    redactions = document.redactions.filter(is_accepted=True).select_related("context")
+    redactions = document.redactions.filter(is_accepted=True).select_related(
+        "context"
+    )
     if mode == "disclosure":
-        redactions = redactions.exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+        redactions = redactions.exclude(
+            redaction_type=Redaction.RedactionType.DS_INFORMATION
+        )
     sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
 
     tables = document.extracted_tables or []
@@ -464,22 +536,38 @@ def _generate_pdf_from_document(document, mode="disclosure", export_settings=Non
         ner_end = table["ner_end"]
 
         if prev_pos < ner_start:
-            segment = _apply_redactions_to_segment(text, prev_pos, ner_start, sorted_redactions, mode)
+            segment = _apply_redactions_to_segment(
+                text, prev_pos, ner_start, sorted_redactions, mode
+            )
             html_parts.append(f'<div class="text-block">{segment}</div>')
 
-        html_parts.append(_render_table_with_redactions(table, text, sorted_redactions, mode))
-        prev_pos = ner_end + 1  # +1 to skip the newline separator after the table
+        html_parts.append(
+            _render_table_with_redactions(table, text, sorted_redactions, mode)
+        )
+        prev_pos = (
+            ner_end + 1
+        )  # +1 to skip the newline separator after the table
 
     if prev_pos < len(text):
-        segment = _apply_redactions_to_segment(text, prev_pos, len(text), sorted_redactions, mode)
+        segment = _apply_redactions_to_segment(
+            text, prev_pos, len(text), sorted_redactions, mode
+        )
         html_parts.append(f'<div class="text-block">{segment}</div>')
 
     body_content = "".join(html_parts)
 
     watermark_label = export_settings.watermark_text
     if export_settings.watermark_include_case_ref and case_reference:
-        watermark_label = f"{watermark_label} {case_reference}" if watermark_label else case_reference
-    watermark_html = f'<div class="watermark">{html_escape(watermark_label)}</div>' if watermark_label else ""
+        watermark_label = (
+            f"{watermark_label} {case_reference}"
+            if watermark_label
+            else case_reference
+        )
+    watermark_html = (
+        f'<div class="watermark">{html_escape(watermark_label)}</div>'
+        if watermark_label
+        else ""
+    )
 
     html_string = f"""
     <!DOCTYPE html>
@@ -496,7 +584,8 @@ def _generate_pdf_from_document(document, mode="disclosure", export_settings=Non
 
     font_config = FontConfiguration()
     return HTML(string=html_string).write_pdf(
-        stylesheets=[CSS(string=css_string, font_config=font_config)], font_config=font_config
+        stylesheets=[CSS(string=css_string, font_config=font_config)],
+        font_config=font_config,
     )
 
 
@@ -525,20 +614,35 @@ def export_case_documents(case_id):
 
     for doc in documents:
         if doc.original_file:
-            shutil.copy(doc.original_file.path, os.path.join(unedited_dir, doc.original_file.name.split("/")[-1]))
+            shutil.copy(
+                doc.original_file.path,
+                os.path.join(
+                    unedited_dir, doc.original_file.name.split("/")[-1]
+                ),
+            )
 
         redacted_pdf_content = _generate_pdf_from_document(
-            doc, mode="redacted", export_settings=export_settings, case_reference=case.case_reference
+            doc,
+            mode="redacted",
+            export_settings=export_settings,
+            case_reference=case.case_reference,
         )
         if redacted_pdf_content:
-            with open(os.path.join(redacted_dir, f"{doc.filename}.pdf"), "wb") as f:
+            with open(
+                os.path.join(redacted_dir, f"{doc.filename}.pdf"), "wb"
+            ) as f:
                 f.write(redacted_pdf_content)
 
         disclosure_pdf_content = _generate_pdf_from_document(
-            doc, mode="disclosure", export_settings=export_settings, case_reference=case.case_reference
+            doc,
+            mode="disclosure",
+            export_settings=export_settings,
+            case_reference=case.case_reference,
         )
         if disclosure_pdf_content:
-            with open(os.path.join(disclosure_dir, f"{doc.filename}.pdf"), "wb") as f:
+            with open(
+                os.path.join(disclosure_dir, f"{doc.filename}.pdf"), "wb"
+            ) as f:
                 f.write(disclosure_pdf_content)
 
     zip_file_path = f"{temp_export_dir}.zip"
@@ -552,7 +656,11 @@ def export_case_documents(case_id):
 
     with open(zip_file_path, "rb") as f:
         zip_content = f.read()
-        case.export_file.save(f"disclosure_package_{case.case_reference}.zip", ContentFile(zip_content), save=False)
+        case.export_file.save(
+            f"disclosure_package_{case.case_reference}.zip",
+            ContentFile(zip_content),
+            save=False,
+        )
 
     case.export_status = Case.ExportStatus.COMPLETED
     case.save(update_fields=["export_file", "export_status"])
@@ -578,12 +686,18 @@ def delete_cases_past_retention_date():
     deleted_case_refs = []
     for case in cases_to_delete_qs.iterator():
         case_ref = case.case_reference
-        logger.info(f"Deleting case {case_ref} " + f"(Retention Date: {case.retention_review_date})")
+        logger.info(
+            f"Deleting case {case_ref} "
+            + f"(Retention Date: {case.retention_review_date})"
+        )
         case.delete()
         deleted_case_refs.append(case_ref)
         logger.info(f"Successfully deleted case {case_ref}.")
 
-    return f"Successfully deleted {len(deleted_case_refs)} " + f"case(s): {', '.join(deleted_case_refs)}."
+    return (
+        f"Successfully deleted {len(deleted_case_refs)} "
+        + f"case(s): {', '.join(deleted_case_refs)}."
+    )
 
 
 TERMINAL_CASE_STATUSES = [
@@ -613,5 +727,9 @@ def delete_original_files_past_threshold():
         doc.original_file = ""
         doc.save(update_fields=["original_file"])
 
-    logger.info("Deleted original files for %d document(s) (case terminal > %d days).", count, days)
+    logger.info(
+        "Deleted original files for %d document(s) (case terminal > %d days).",
+        count,
+        days,
+    )
     return f"Deleted original files for {count} document(s)."

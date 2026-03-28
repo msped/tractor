@@ -11,8 +11,13 @@ def document_post_save(sender, instance, created, **kwargs):
     When a document is first created, trigger the AI processing task.
     """
     if created and instance.status == Document.Status.PROCESSING:
-        task_id = async_task("cases.services.process_document_and_create_redactions", instance.id)
-        Document.objects.filter(pk=instance.pk).update(processing_task_id=task_id)
+        task_id = async_task(
+            "cases.services.process_document_and_create_redactions",
+            instance.id,
+        )
+        Document.objects.filter(pk=instance.pk).update(
+            processing_task_id=task_id
+        )
 
 
 @receiver(post_save, sender=Redaction)
@@ -24,8 +29,14 @@ def redaction_post_save(sender, instance, created, **kwargs):
     if instance.redaction_type == Redaction.RedactionType.DS_INFORMATION:
         print("redaction: ", created, instance.redaction_type)
         if created:
-            async_task("cases.services.find_and_flag_matching_text_in_case", instance.id)
+            async_task(
+                "cases.services.find_and_flag_matching_text_in_case",
+                instance.id,
+            )
         else:
             update_fields = kwargs.get("update_fields") or set()
             if "redaction_type" in update_fields:
-                async_task("cases.services.find_and_flag_matching_text_in_case", instance.id)
+                async_task(
+                    "cases.services.find_and_flag_matching_text_in_case",
+                    instance.id,
+                )

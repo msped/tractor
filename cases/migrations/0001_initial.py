@@ -55,10 +55,20 @@ class Migration(migrations.Migration):
                         unique=True,
                     ),
                 ),
-                ("data_subject_name", models.CharField(help_text="Full name of the data subject.", max_length=255)),
+                (
+                    "data_subject_name",
+                    models.CharField(
+                        help_text="Full name of the data subject.",
+                        max_length=255,
+                    ),
+                ),
                 (
                     "data_subject_dob",
-                    models.DateField(blank=True, help_text="Date of birth of the data subject.", null=True),
+                    models.DateField(
+                        blank=True,
+                        help_text="Date of birth of the data subject.",
+                        null=True,
+                    ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
@@ -95,11 +105,20 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Document",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
                 (
                     "original_file",
                     models.FileField(
-                        help_text="The original, unmodified uploaded file.", upload_to="originals/%Y/%m/%d/"
+                        help_text="The original, unmodified uploaded file.",
+                        upload_to="originals/%Y/%m/%d/",
                     ),
                 ),
                 ("filename", models.CharField(blank=True, max_length=255)),
@@ -117,12 +136,17 @@ class Migration(migrations.Migration):
                         max_length=20,
                     ),
                 ),
-                ("extracted_text", models.TextField(blank=True, editable=False)),
+                (
+                    "extracted_text",
+                    models.TextField(blank=True, editable=False),
+                ),
                 ("uploaded_at", models.DateTimeField(auto_now_add=True)),
                 (
                     "case",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE, related_name="documents", to="cases.case"
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="documents",
+                        to="cases.case",
                     ),
                 ),
             ],
@@ -133,14 +157,31 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Redaction",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
                 ("start_char", models.IntegerField()),
                 ("end_char", models.IntegerField()),
-                ("text", models.TextField(help_text="The actual text that was redacted.")),
+                (
+                    "text",
+                    models.TextField(
+                        help_text="The actual text that was redacted."
+                    ),
+                ),
                 (
                     "redaction_type",
                     models.CharField(
-                        choices=[("OP_DATA", "Operational Data"), ("PII", "Third-Party PII")], max_length=10
+                        choices=[
+                            ("OP_DATA", "Operational Data"),
+                            ("PII", "Third-Party PII"),
+                        ],
+                        max_length=10,
                     ),
                 ),
                 (
@@ -153,14 +194,17 @@ class Migration(migrations.Migration):
                 (
                     "is_accepted",
                     models.BooleanField(
-                        default=False, help_text="True if the user has confirmed this redaction should be applied."
+                        default=False,
+                        help_text="True if the user has confirmed this redaction should be applied.",
                     ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 (
                     "document",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE, related_name="redactions", to="cases.document"
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="redactions",
+                        to="cases.document",
                     ),
                 ),
             ],

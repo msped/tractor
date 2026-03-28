@@ -17,7 +17,13 @@ from pypdf import PdfReader
 from training.models import Model as SpacyModel
 from training.tests.base import NetworkBlockerMixin
 
-from ..models import Case, Document, DocumentExportSettings, Redaction, RedactionContext
+from ..models import (
+    Case,
+    Document,
+    DocumentExportSettings,
+    Redaction,
+    RedactionContext,
+)
 from ..services import (
     _build_export_css,
     _generate_pdf_from_document,
@@ -38,20 +44,26 @@ MEDIA_ROOT = tempfile.mkdtemp()
 class ServiceTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         """Set up test data for all service tests."""
-        self.user = User.objects.create_user(username="testuser", password="password")
+        self.user = User.objects.create_user(
+            username="testuser", password="password"
+        )
         self.case = Case.objects.create(
             case_reference="250001",
             data_subject_name="John Doe",
             data_subject_dob=date(1990, 1, 1),
             created_by=self.user,
         )
-        self.test_file = SimpleUploadedFile("document.pdf", b"This is a test file.", "application/pdf")
+        self.test_file = SimpleUploadedFile(
+            "document.pdf", b"This is a test file.", "application/pdf"
+        )
         self.document = Document.objects.create(
             case=self.case,
             original_file=self.test_file,
             status=Document.Status.PROCESSING,
         )
-        self.spacy_model = SpacyModel.objects.create(name="en_test_model", is_active=True)
+        self.spacy_model = SpacyModel.objects.create(
+            name="en_test_model", is_active=True
+        )
 
     def tearDown(self):
         """Clean up the temporary media directory."""
@@ -73,18 +85,42 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         mock_spancat_manager.get_instance.return_value = mock_spancat_instance
 
         # Mock the entity extraction with different entity labels
-        extracted_text = "This text contains PII like a name and operational data."
+        extracted_text = (
+            "This text contains PII like a name and operational data."
+        )
         suggestions = [
-            {"start_char": 18, "end_char": 21, "text": "PII", "label": "THIRD_PARTY"},
-            {"start_char": 29, "end_char": 33, "text": "name", "label": "DS_INFORMATION"},
-            {"start_char": 38, "end_char": 54, "text": "operational data", "label": "OPERATIONAL"},
+            {
+                "start_char": 18,
+                "end_char": 21,
+                "text": "PII",
+                "label": "THIRD_PARTY",
+            },
+            {
+                "start_char": 29,
+                "end_char": 33,
+                "text": "name",
+                "label": "DS_INFORMATION",
+            },
+            {
+                "start_char": 38,
+                "end_char": 54,
+                "text": "operational data",
+                "label": "OPERATIONAL",
+            },
         ]
-        mock_extract_entities.return_value = (extracted_text, suggestions, [], None)
+        mock_extract_entities.return_value = (
+            extracted_text,
+            suggestions,
+            [],
+            None,
+        )
 
         process_document_and_create_redactions(self.document.id)
 
         self.document.refresh_from_db()
-        self.assertEqual(self.document.status, Document.Status.READY_FOR_REVIEW)
+        self.assertEqual(
+            self.document.status, Document.Status.READY_FOR_REVIEW
+        )
         self.assertEqual(self.document.extracted_text, extracted_text)
         self.assertEqual(self.document.extracted_tables, [])
         self.assertEqual(self.document.spacy_model, self.spacy_model)
@@ -94,19 +130,30 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
 
         # First redaction: THIRD_PARTY -> THIRD_PARTY_PII
         self.assertEqual(redactions[0].text, "PII")
-        self.assertEqual(redactions[0].redaction_type, Redaction.RedactionType.THIRD_PARTY_PII)
+        self.assertEqual(
+            redactions[0].redaction_type,
+            Redaction.RedactionType.THIRD_PARTY_PII,
+        )
         self.assertTrue(redactions[0].is_suggestion)
         self.assertFalse(redactions[0].is_accepted)
 
         # Second redaction: DS_INFORMATION -> DS_INFORMATION
         self.assertEqual(redactions[1].text, "name")
-        self.assertEqual(redactions[1].redaction_type, Redaction.RedactionType.DS_INFORMATION)
+        self.assertEqual(
+            redactions[1].redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
 
         # Third redaction: OPERATIONAL -> OPERATIONAL_DATA
         self.assertEqual(redactions[2].text, "operational data")
-        self.assertEqual(redactions[2].redaction_type, Redaction.RedactionType.OPERATIONAL_DATA)
+        self.assertEqual(
+            redactions[2].redaction_type,
+            Redaction.RedactionType.OPERATIONAL_DATA,
+        )
 
-        mock_extract_entities.assert_called_once_with(self.document.original_file.path)
+        mock_extract_entities.assert_called_once_with(
+            self.document.original_file.path
+        )
 
     @patch("cases.services.extract_entities_from_text")
     @patch("cases.services.SpanCatModelManager")
@@ -116,13 +163,25 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     ):
         """Test that unknown entity labels fall back to THIRD_PARTY_PII."""
         mock_gliner_manager.get_instance.return_value = MagicMock()
-        mock_spancat_manager.get_instance.return_value = MagicMock(get_model_entry=MagicMock(return_value=None))
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=None)
+        )
 
         extracted_text = "This has an unknown entity."
         suggestions = [
-            {"start_char": 12, "end_char": 19, "text": "unknown", "label": "UNKNOWN_TYPE"},
+            {
+                "start_char": 12,
+                "end_char": 19,
+                "text": "unknown",
+                "label": "UNKNOWN_TYPE",
+            },
         ]
-        mock_extract_entities.return_value = (extracted_text, suggestions, [], None)
+        mock_extract_entities.return_value = (
+            extracted_text,
+            suggestions,
+            [],
+            None,
+        )
 
         process_document_and_create_redactions(self.document.id)
 
@@ -130,16 +189,22 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(self.document.redactions.count(), 1)
 
         redaction = self.document.redactions.first()
-        self.assertEqual(redaction.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII)
+        self.assertEqual(
+            redaction.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
+        )
 
     @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
     @patch("cases.services.extract_entities_from_text")
-    def test_process_document_extraction_fails(self, mock_extract_entities, mock_gliner_manager, mock_spancat_manager):
+    def test_process_document_extraction_fails(
+        self, mock_extract_entities, mock_gliner_manager, mock_spancat_manager
+    ):
         """Test document processing when text extraction returns nothing."""
         mock_extract_entities.return_value = (None, [], [], None)
         mock_gliner_manager.get_instance.return_value = MagicMock()
-        mock_spancat_manager.get_instance.return_value = MagicMock(get_model_entry=MagicMock(return_value=None))
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=None)
+        )
 
         process_document_and_create_redactions(self.document.id)
 
@@ -196,11 +261,17 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
 
         new_redactions = doc2.redactions.all()
         self.assertEqual(new_redactions[0].text, "name")
-        self.assertEqual(new_redactions[0].redaction_type, Redaction.RedactionType.DS_INFORMATION)
+        self.assertEqual(
+            new_redactions[0].redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
         self.assertTrue(new_redactions[0].is_suggestion)
 
         self.assertEqual(new_redactions[1].text, "name")
-        self.assertEqual(new_redactions[1].redaction_type, Redaction.RedactionType.DS_INFORMATION)
+        self.assertEqual(
+            new_redactions[1].redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
 
     def test_find_and_flag_updates_existing_redaction(self):
         """Test that an existing redaction is updated to DS_INFO."""
@@ -234,7 +305,10 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         find_and_flag_matching_text_in_case(source_redaction.id)
 
         existing_redaction.refresh_from_db()
-        self.assertEqual(existing_redaction.redaction_type, Redaction.RedactionType.DS_INFORMATION)
+        self.assertEqual(
+            existing_redaction.redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
         self.assertTrue(existing_redaction.is_suggestion)
         self.assertFalse(existing_redaction.is_accepted)
         self.assertIsNone(existing_redaction.justification)
@@ -257,21 +331,27 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         )
 
         # Test disclosure mode (black box)
-        pdf_content_disclosure = _generate_pdf_from_document(self.document, mode="disclosure")
+        pdf_content_disclosure = _generate_pdf_from_document(
+            self.document, mode="disclosure"
+        )
         self.assertIsNotNone(pdf_content_disclosure)
         self.assertIsInstance(pdf_content_disclosure, bytes)
         # A simple check to see if the PDF content seems valid
         self.assertTrue(pdf_content_disclosure.startswith(b"%PDF-"))
 
         # Test redacted mode (color highlight)
-        pdf_content_redacted = _generate_pdf_from_document(self.document, mode="redacted")
+        pdf_content_redacted = _generate_pdf_from_document(
+            self.document, mode="redacted"
+        )
         self.assertIsNotNone(pdf_content_redacted)
         self.assertIsInstance(pdf_content_redacted, bytes)
         self.assertTrue(pdf_content_redacted.startswith(b"%PDF-"))
 
     def test_generate_pdf_disclosure_excludes_ds_information(self):
         """DS_INFORMATION redactions must not be blacked out in the disclosure PDF."""
-        self.document.extracted_text = "John Doe attended the event on 01/01/1990."
+        self.document.extracted_text = (
+            "John Doe attended the event on 01/01/1990."
+        )
         self.document.save()
         Redaction.objects.create(
             document=self.document,
@@ -282,7 +362,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        pdf_content = _generate_pdf_from_document(
+            self.document, mode="disclosure"
+        )
         self.assertIsNotNone(pdf_content)
 
         page_text = PdfReader(io.BytesIO(pdf_content)).pages[0].extract_text()
@@ -301,7 +383,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        pdf_content = _generate_pdf_from_document(self.document, mode="redacted")
+        pdf_content = _generate_pdf_from_document(
+            self.document, mode="redacted"
+        )
         self.assertIsNotNone(pdf_content)
         self.assertTrue(pdf_content.startswith(b"%PDF-"))
 
@@ -322,7 +406,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         context_text = "a type of cheese"
         RedactionContext.objects.create(redaction=redaction, text=context_text)
 
-        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        pdf_content = _generate_pdf_from_document(
+            self.document, mode="disclosure"
+        )
 
         self.assertIsNotNone(pdf_content)
         self.assertTrue(pdf_content.startswith(b"%PDF-"))
@@ -350,7 +436,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        pdf_content = _generate_pdf_from_document(
+            self.document, mode="disclosure"
+        )
         self.assertIsNotNone(pdf_content)
         bytes_content = io.BytesIO(pdf_content)
         pdf = PdfReader(bytes_content)
@@ -371,10 +459,14 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.document.extracted_text = "Some text for font testing."
         self.document.save()
         settings = DocumentExportSettings.get()
-        settings.font_family = DocumentExportSettings.FontFamily.TIMES_NEW_ROMAN
+        settings.font_family = (
+            DocumentExportSettings.FontFamily.TIMES_NEW_ROMAN
+        )
         settings.save()
 
-        pdf_content = _generate_pdf_from_document(self.document, mode="disclosure")
+        pdf_content = _generate_pdf_from_document(
+            self.document, mode="disclosure"
+        )
         self.assertIsNotNone(pdf_content)
         self.assertIsInstance(pdf_content, bytes)
         self.assertTrue(pdf_content.startswith(b"%PDF-"))
@@ -405,7 +497,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         with zipfile.ZipFile(zip_path, "r") as zf:
             filenames = zf.namelist()
             # Check for original files
-            original_file_basename = os.path.basename(self.document.original_file.name)
+            original_file_basename = os.path.basename(
+                self.document.original_file.name
+            )
             self.assertIn(
                 f"unedited/{original_file_basename}",
                 filenames,
@@ -418,7 +512,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             self.assertIn(f"redacted/{self.document.filename}.pdf", filenames)
             self.assertIn(f"redacted/{doc2.filename}.pdf", filenames)
             # Check for disclosure PDFs
-            self.assertIn(f"disclosure/{self.document.filename}.pdf", filenames)
+            self.assertIn(
+                f"disclosure/{self.document.filename}.pdf", filenames
+            )
             self.assertIn(f"disclosure/{doc2.filename}.pdf", filenames)
 
         # Check that the PDF generator was called for each document and mode
@@ -469,15 +565,37 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     ):
         """Test that entities matching the data subject name/DOB are excluded."""
         mock_gliner_manager.get_instance.return_value = MagicMock()
-        mock_spancat_manager.get_instance.return_value = MagicMock(get_model_entry=MagicMock(return_value=None))
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=None)
+        )
 
         extracted_text = "John Doe lives in London. DOB: 01/01/1990."
         suggestions = [
-            {"start_char": 0, "end_char": 8, "text": "John Doe", "label": "THIRD_PARTY"},
-            {"start_char": 18, "end_char": 24, "text": "London", "label": "THIRD_PARTY"},
-            {"start_char": 31, "end_char": 41, "text": "01/01/1990", "label": "THIRD_PARTY"},
+            {
+                "start_char": 0,
+                "end_char": 8,
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+            },
+            {
+                "start_char": 18,
+                "end_char": 24,
+                "text": "London",
+                "label": "THIRD_PARTY",
+            },
+            {
+                "start_char": 31,
+                "end_char": 41,
+                "text": "01/01/1990",
+                "label": "THIRD_PARTY",
+            },
         ]
-        mock_extract_entities.return_value = (extracted_text, suggestions, [], None)
+        mock_extract_entities.return_value = (
+            extracted_text,
+            suggestions,
+            [],
+            None,
+        )
 
         process_document_and_create_redactions(self.document.id)
 
@@ -554,14 +672,17 @@ class DeleteOldCasesServiceTest(NetworkBlockerMixin, TestCase):
         Case.objects.create(
             case_reference="FUTR01",
             data_subject_name="Future Person",
-            retention_review_date=timezone.now().date() + relativedelta(days=1),
+            retention_review_date=timezone.now().date()
+            + relativedelta(days=1),
         )
 
         with patch("cases.services.logger") as mock_logger:
             result = delete_cases_past_retention_date()
             self.assertEqual(result, "No cases are due for deletion.")
             self.assertEqual(Case.objects.count(), 1)
-            mock_logger.info.assert_called_with("No cases are due for deletion.")
+            mock_logger.info.assert_called_with(
+                "No cases are due for deletion."
+            )
 
     def test_deletes_case_past_retention_date(self):
         """
@@ -570,11 +691,15 @@ class DeleteOldCasesServiceTest(NetworkBlockerMixin, TestCase):
         """
         past_date = timezone.now().date() - relativedelta(days=1)
         case_to_delete = Case.objects.create(
-            case_reference="PAST01", data_subject_name="Past Person", retention_review_date=past_date
+            case_reference="PAST01",
+            data_subject_name="Past Person",
+            retention_review_date=past_date,
         )
 
         doc_file = SimpleUploadedFile("test_doc.txt", b"some content")
-        doc = Document.objects.create(case=case_to_delete, original_file=doc_file)
+        doc = Document.objects.create(
+            case=case_to_delete, original_file=doc_file
+        )
         self.assertTrue(os.path.exists(doc.original_file.path))
 
         export_file = SimpleUploadedFile("export.zip", b"zip content")
@@ -584,7 +709,8 @@ class DeleteOldCasesServiceTest(NetworkBlockerMixin, TestCase):
         Case.objects.create(
             case_reference="FUTR02",
             data_subject_name="Future Person 2",
-            retention_review_date=timezone.now().date() + relativedelta(days=10),
+            retention_review_date=timezone.now().date()
+            + relativedelta(days=10),
         )
 
         self.assertEqual(Case.objects.count(), 2)
@@ -596,7 +722,9 @@ class DeleteOldCasesServiceTest(NetworkBlockerMixin, TestCase):
             mock_logger.info.assert_has_calls(
                 [
                     call("Found 1 case(s) due for deletion."),
-                    call(f"Deleting case PAST01 (Retention Date: {past_date})"),
+                    call(
+                        f"Deleting case PAST01 (Retention Date: {past_date})"
+                    ),
                     call("Successfully deleted case PAST01."),
                 ]
             )
@@ -650,7 +778,9 @@ class BuildExportCssTests(NetworkBlockerMixin, TestCase):
         self.assertIn("@top-right", css)
 
     def test_footer_increases_bottom_margin_and_zeroes_companions(self):
-        css = _build_export_css(self._make_settings(footer_text="Confidential"))
+        css = _build_export_css(
+            self._make_settings(footer_text="Confidential")
+        )
         self.assertIn("margin: 2cm 2cm 2.5cm 2cm", css)
         self.assertIn("@bottom-center", css)
         self.assertIn("Confidential", css)
@@ -664,7 +794,11 @@ class BuildExportCssTests(NetworkBlockerMixin, TestCase):
         self.assertIn("@bottom-center", css)
 
     def test_footer_and_page_numbers_combined_in_bottom_center(self):
-        css = _build_export_css(self._make_settings(footer_text="Confidential", page_numbers_enabled=True))
+        css = _build_export_css(
+            self._make_settings(
+                footer_text="Confidential", page_numbers_enabled=True
+            )
+        )
         self.assertIn("@bottom-center", css)
         self.assertIn("Confidential", css)
         self.assertIn("counter(page)", css)
@@ -672,7 +806,9 @@ class BuildExportCssTests(NetworkBlockerMixin, TestCase):
 
     def test_watermark_css_emitted_when_watermark_text_set(self):
         css = _build_export_css(
-            self._make_settings(watermark_text="SAR", watermark_include_case_ref=True),
+            self._make_settings(
+                watermark_text="SAR", watermark_include_case_ref=True
+            ),
             case_reference="2025-001",
         )
         self.assertIn(".watermark", css)
@@ -682,7 +818,9 @@ class BuildExportCssTests(NetworkBlockerMixin, TestCase):
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class GeneratePdfWithSettingsTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        self.case = Case.objects.create(case_reference="CSS01", data_subject_name="Test User")
+        self.case = Case.objects.create(
+            case_reference="CSS01", data_subject_name="Test User"
+        )
         file = SimpleUploadedFile("doc.txt", b"Hello world redacted text here")
         self.document = Document.objects.create(
             case=self.case,
@@ -698,7 +836,9 @@ class GeneratePdfWithSettingsTests(NetworkBlockerMixin, TestCase):
             watermark_include_case_ref=False,
             page_numbers_enabled=True,
         )
-        result = _generate_pdf_from_document(self.document, mode="disclosure", export_settings=settings)
+        result = _generate_pdf_from_document(
+            self.document, mode="disclosure", export_settings=settings
+        )
         self.assertIsNotNone(result)
         self.assertIsInstance(result, bytes)
         self.assertTrue(result[:4] == b"%PDF")
@@ -707,7 +847,9 @@ class GeneratePdfWithSettingsTests(NetworkBlockerMixin, TestCase):
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class ExportCaseDocumentsPassesSettingsTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        self.case = Case.objects.create(case_reference="EXP01", data_subject_name="Export User")
+        self.case = Case.objects.create(
+            case_reference="EXP01", data_subject_name="Export User"
+        )
         file = SimpleUploadedFile("doc.txt", b"Some text")
         self.document = Document.objects.create(
             case=self.case,
@@ -725,8 +867,14 @@ class ExportCaseDocumentsPassesSettingsTests(NetworkBlockerMixin, TestCase):
             page_numbers_enabled=True,
         )
         with (
-            patch("cases.services.DocumentExportSettings.get", return_value=mock_settings) as mock_get,
-            patch("cases.services._generate_pdf_from_document", return_value=b"%PDF-test") as mock_gen,
+            patch(
+                "cases.services.DocumentExportSettings.get",
+                return_value=mock_settings,
+            ) as mock_get,
+            patch(
+                "cases.services._generate_pdf_from_document",
+                return_value=b"%PDF-test",
+            ) as mock_gen,
         ):
             export_case_documents(self.case.id)
 
@@ -754,7 +902,9 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         return c
 
     def test_no_cells_returns_escaped_text(self):
-        result = _render_table_with_redactions({"text": "plain <text>"}, "", [], "internal")
+        result = _render_table_with_redactions(
+            {"text": "plain <text>"}, "", [], "internal"
+        )
         self.assertEqual(result, "plain &lt;text&gt;")
 
     def test_no_cells_empty_text_returns_empty_string(self):
@@ -765,11 +915,31 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         full_text = "Hello World"
         table_data = {
             "cells": [
-                self._cell(0, 0, 0, 5, "Hello", isMergedContinuation=False, colspan=1, rowspan=1),
-                self._cell(0, 1, 6, 11, "World", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    5,
+                    "Hello",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
+                self._cell(
+                    0,
+                    1,
+                    6,
+                    11,
+                    "World",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
             ]
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         self.assertIn("<table", result)
         self.assertIn("<tr>", result)
         self.assertIn("Hello", result)
@@ -779,12 +949,32 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         full_text = "Hello World"
         table_data = {
             "cells": [
-                self._cell(0, 0, 0, 5, "Hello", isMergedContinuation=False, colspan=1, rowspan=1),
-                self._cell(0, 1, 6, 11, "World", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    5,
+                    "Hello",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
+                self._cell(
+                    0,
+                    1,
+                    6,
+                    11,
+                    "World",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
             ]
         }
         redaction = _make_redaction(6, 11)
-        result = _render_table_with_redactions(table_data, full_text, [redaction], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [redaction], "internal"
+        )
         self.assertIn('class="redaction', result)
         self.assertIn("World", result)
 
@@ -792,12 +982,32 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         full_text = "Secret data"
         table_data = {
             "cells": [
-                self._cell(0, 0, 0, 6, "Secret", isMergedContinuation=False, colspan=1, rowspan=1),
-                self._cell(0, 1, 7, 11, "data", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    6,
+                    "Secret",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
+                self._cell(
+                    0,
+                    1,
+                    7,
+                    11,
+                    "data",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
             ]
         }
         redaction = _make_redaction(0, 6)
-        result = _render_table_with_redactions(table_data, full_text, [redaction], "disclosure")
+        result = _render_table_with_redactions(
+            table_data, full_text, [redaction], "disclosure"
+        )
         self.assertIn("█", result)
         self.assertNotIn("Secret", result)
 
@@ -805,11 +1015,31 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         full_text = "MergedMerged"
         table_data = {
             "cells": [
-                self._cell(0, 0, 0, 6, "Merged", isMergedContinuation=False, colspan=2, rowspan=1),
-                self._cell(0, 1, 0, 6, "Merged", isMergedContinuation=True, colspan=1, rowspan=1),
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    6,
+                    "Merged",
+                    isMergedContinuation=False,
+                    colspan=2,
+                    rowspan=1,
+                ),
+                self._cell(
+                    0,
+                    1,
+                    0,
+                    6,
+                    "Merged",
+                    isMergedContinuation=True,
+                    colspan=1,
+                    rowspan=1,
+                ),
             ]
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         # Only one <td> should be rendered (the continuation is skipped)
         self.assertEqual(result.count("<td"), 1)
         self.assertIn('colspan="2"', result)
@@ -818,31 +1048,75 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         full_text = "AB"
         table_data = {
             "cells": [
-                self._cell(0, 0, 0, 1, "A", isMergedContinuation=False, colspan=3, rowspan=2),
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    1,
+                    "A",
+                    isMergedContinuation=False,
+                    colspan=3,
+                    rowspan=2,
+                ),
             ]
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         self.assertIn('colspan="3"', result)
         self.assertIn('rowspan="2"', result)
 
     def test_col_widths_applied(self):
         full_text = "AB"
         table_data = {
-            "cells": [self._cell(0, 0, 0, 1, "A", isMergedContinuation=False, colspan=1, rowspan=1)],
+            "cells": [
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    1,
+                    "A",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                )
+            ],
             "colWidths": [42.5],
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         self.assertIn("width: 42.5%", result)
 
     def test_equal_fallback_widths_when_no_col_widths(self):
         full_text = "AB"
         table_data = {
             "cells": [
-                self._cell(0, 0, 0, 1, "A", isMergedContinuation=False, colspan=1, rowspan=1),
-                self._cell(0, 1, 1, 2, "B", isMergedContinuation=False, colspan=1, rowspan=1),
+                self._cell(
+                    0,
+                    0,
+                    0,
+                    1,
+                    "A",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
+                self._cell(
+                    0,
+                    1,
+                    1,
+                    2,
+                    "B",
+                    isMergedContinuation=False,
+                    colspan=1,
+                    rowspan=1,
+                ),
             ]
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         self.assertIn("width: 50.0%", result)
 
     def test_heuristic_merge_detection_for_legacy_data(self):
@@ -854,7 +1128,9 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
                 {"row": 0, "col": 1, "start": 0, "end": 4, "text": "Same"},
             ]
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         self.assertEqual(result.count("<td"), 1)
         self.assertIn('colspan="2"', result)
 
@@ -866,7 +1142,9 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
                 {"row": 0, "col": 1, "start": 1, "end": 2, "text": "B"},
             ]
         }
-        result = _render_table_with_redactions(table_data, full_text, [], "internal")
+        result = _render_table_with_redactions(
+            table_data, full_text, [], "internal"
+        )
         self.assertEqual(result.count("<td"), 2)
 
 
@@ -891,7 +1169,9 @@ class DeleteOriginalFilesTests(NetworkBlockerMixin, TestCase):
         self.document.refresh_from_db()
         self.assertTrue(bool(self.document.original_file))
 
-    @override_settings(DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=30)
+    @override_settings(
+        DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=30
+    )
     def test_within_threshold_not_deleted(self):
         # Case updated_at is effectively "now" — within 30 days
         result = delete_original_files_past_threshold()
@@ -899,14 +1179,18 @@ class DeleteOriginalFilesTests(NetworkBlockerMixin, TestCase):
         self.document.refresh_from_db()
         self.assertTrue(bool(self.document.original_file))
 
-    @override_settings(DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0)
+    @override_settings(
+        DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0
+    )
     def test_past_threshold_deletes_original_file(self):
         result = delete_original_files_past_threshold()
         self.assertEqual(result, "Deleted original files for 1 document(s).")
         self.document.refresh_from_db()
         self.assertFalse(bool(self.document.original_file))
 
-    @override_settings(DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0)
+    @override_settings(
+        DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0
+    )
     def test_non_terminal_case_not_deleted(self):
         self.case.status = Case.Status.OPEN
         self.case.save()

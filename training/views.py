@@ -1,14 +1,22 @@
 from django_q.models import OrmQ, Schedule
 from django_q.tasks import async_task
 from rest_framework import serializers, status, viewsets
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .loader import SpanCatModelManager
 from .models import Model, TrainingDocument, TrainingRun
-from .serializers import ModelSerializer, ScheduleSerializer, TrainingDocumentSerializer, TrainingRunSerializer
+from .serializers import (
+    ModelSerializer,
+    ScheduleSerializer,
+    TrainingDocumentSerializer,
+    TrainingRunSerializer,
+)
 
 
 class ModelListCreateView(ListCreateAPIView):
@@ -37,7 +45,9 @@ class ModelDetailView(RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         if instance.document_set.exists():
             return Response(
-                {"detail": "Cannot delete a model that has been used to process documents."},
+                {
+                    "detail": "Cannot delete a model that has been used to process documents."
+                },
                 status=status.HTTP_409_CONFLICT,
             )
         return super().destroy(request, *args, **kwargs)
@@ -56,7 +66,10 @@ class ModelSetActiveView(APIView):
         except Model.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class TrainingDocumentViewSet(viewsets.ModelViewSet):
@@ -66,15 +79,17 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAdminUser]
-    queryset = TrainingDocument.objects.filter(
-        processed=False).order_by("-created_at")
+    queryset = TrainingDocument.objects.filter(processed=False).order_by(
+        "-created_at"
+    )
     serializer_class = TrainingDocumentSerializer
 
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
         if not uploaded_file.name.endswith(".docx"):
             raise serializers.ValidationError(
-                "Only .docx files are supported.")
+                "Only .docx files are supported."
+            )
         serializer.save(created_by=self.request.user)
 
 
@@ -94,12 +109,21 @@ class RunManualTrainingView(APIView):
     def post(self, request):
         docs = TrainingDocument.objects.filter(processed=False)
         if not docs.exists():
-            return Response({"detail": "No unprocessed training documents found."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "No unprocessed training documents found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        async_task("training.tasks.train_model",
-                   source="training_docs", user=request.user)
+        async_task(
+            "training.tasks.train_model",
+            source="training_docs",
+            user=request.user,
+        )
 
-        return Response({"status": "training started", "documents": docs.count()}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"status": "training started", "documents": docs.count()},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class TrainingRunViewSet(viewsets.ReadOnlyModelViewSet):
@@ -108,8 +132,11 @@ class TrainingRunViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     permission_classes = [IsAdminUser]
-    queryset = TrainingRun.objects.all().select_related(
-        "model").order_by("-created_at")
+    queryset = (
+        TrainingRun.objects.all()
+        .select_related("model")
+        .order_by("-created_at")
+    )
     serializer_class = TrainingRunSerializer
 
 

@@ -14,18 +14,36 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="ExemptionTemplate",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 (
                     "name",
-                    models.CharField(help_text="The exemption label shown to users.", max_length=255, unique=True),
+                    models.CharField(
+                        help_text="The exemption label shown to users.",
+                        max_length=255,
+                        unique=True,
+                    ),
                 ),
                 (
                     "description",
-                    models.TextField(blank=True, help_text="Optional longer description of this exemption."),
+                    models.TextField(
+                        blank=True,
+                        help_text="Optional longer description of this exemption.",
+                    ),
                 ),
                 (
                     "is_active",
-                    models.BooleanField(default=True, help_text="Inactive templates are hidden from the UI."),
+                    models.BooleanField(
+                        default=True,
+                        help_text="Inactive templates are hidden from the UI.",
+                    ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
