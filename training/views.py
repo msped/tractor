@@ -1,4 +1,4 @@
-from django_q.models import Schedule
+from django_q.models import OrmQ, Schedule
 from django_q.tasks import async_task
 from rest_framework import serializers, status, viewsets
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
@@ -19,7 +19,7 @@ class ModelListCreateView(ListCreateAPIView):
     """
 
     permission_classes = [IsAdminUser]
-    queryset = Model.objects.filter(trainingrun__isnull=False).order_by("-created_at")
+    queryset = Model.objects.all().order_by("-created_at")
     serializer_class = ModelSerializer
 
 
@@ -66,13 +66,15 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = [IsAdminUser]
-    queryset = TrainingDocument.objects.filter(processed=False).order_by("-created_at")
+    queryset = TrainingDocument.objects.filter(
+        processed=False).order_by("-created_at")
     serializer_class = TrainingDocumentSerializer
 
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
         if not uploaded_file.name.endswith(".docx"):
-            raise serializers.ValidationError("Only .docx files are supported.")
+            raise serializers.ValidationError(
+                "Only .docx files are supported.")
         serializer.save(created_by=self.request.user)
 
 
@@ -94,7 +96,8 @@ class RunManualTrainingView(APIView):
         if not docs.exists():
             return Response({"detail": "No unprocessed training documents found."}, status=status.HTTP_400_BAD_REQUEST)
 
-        async_task("training.tasks.train_model", source="training_docs", user=request.user)
+        async_task("training.tasks.train_model",
+                   source="training_docs", user=request.user)
 
         return Response({"status": "training started", "documents": docs.count()}, status=status.HTTP_202_ACCEPTED)
 
@@ -105,5 +108,19 @@ class TrainingRunViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     permission_classes = [IsAdminUser]
-    queryset = TrainingRun.objects.all().select_related("model").order_by("-created_at")
+    queryset = TrainingRun.objects.all().select_related(
+        "model").order_by("-created_at")
     serializer_class = TrainingRunSerializer
+
+
+class TrainingStatusView(APIView):
+    """Returns whether a training task is currently running."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        running = any(
+            q.func() == "training.tasks.train_model"
+            for q in OrmQ.objects.all()
+        )
+        return Response({"is_running": running})

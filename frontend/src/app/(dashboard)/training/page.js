@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Typography, Grid, Card, CardContent, Button, Box, Container } from "@mui/material";
 import { ScheduledTrainingCard } from '@/components/ScheduleTrainingCard';
 import { TrainingRunList } from '@/components/TrainingRunList';
+import { TrainingStatusBanner } from '@/components/TrainingStatusBanner';
 import { getTrainingSchedules, getTrainingRuns } from '@/services/trainingService';
 import { auth } from "@/auth";
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
@@ -57,7 +58,11 @@ export default async function TrainingPage() {
                         </Typography>
                     </CardContent>
                 </Grid>
+                <Grid item size={{ xs: 12}}>
+                    <TrainingStatusBanner />
+                </Grid>
             </Grid>
+            
             <TrainingRunList runs={runs} />
         </Container>
     );

@@ -8,6 +8,7 @@ from .views import (
     TrainingDocumentViewSet,
     TrainingRunViewSet,
     TrainingScheduleViewSet,
+    TrainingStatusView,
 )
 
 urlpatterns = [
@@ -35,4 +36,5 @@ urlpatterns = [
     ),
     path("training-runs", TrainingRunViewSet.as_view({"get": "list"}), name="training-run-list"),
     path("training-runs/<uuid:pk>", TrainingRunViewSet.as_view({"get": "retrieve"}), name="training-run-detail"),
+    path("training/status", TrainingStatusView.as_view(), name="training-status"),
 ]

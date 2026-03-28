@@ -162,6 +162,19 @@ export const uploadTrainingDoc = async (file, accessToken) => {
     }
 };
 
+export const getTrainingStatus = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
+    try {
+        const response = await apiClient.get(`/training/status`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        return response.data; // { is_running: boolean }
+    } catch (error) {
+        console.error("Failed to fetch training status:", error.response?.data || error.message);
+        throw new Error("Failed to fetch training status.");
+    }
+};
+
 export const runManualTraining = async (accessToken) => {
     if (!accessToken) throw new Error("Not authenticated");
 

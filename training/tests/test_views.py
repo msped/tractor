@@ -1,6 +1,6 @@
 import shutil
 import tempfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -265,3 +265,32 @@ class TrainingRunViewTests(BaseTrainingAPITestCase):
         url = reverse("training-run-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class TrainingStatusViewTests(BaseTrainingAPITestCase):
+    def test_unauthenticated_access_fails(self):
+        url = reverse("training-status")
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_regular_user_access_fails(self):
+        self.client.force_authenticate(user=self.regular_user)
+        url = reverse("training-status")
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("training.views.OrmQ")
+    def test_returns_not_running_when_no_tasks(self, mock_ormq):
+        mock_ormq.objects.all.return_value = []
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(reverse("training-status"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["is_running"])
+
+    @patch("training.views.OrmQ")
+    def test_returns_running_when_task_in_progress(self, mock_ormq):
+        mock_entry = MagicMock()
+        mock_entry.func.return_value = "training.tasks.train_model"
+        mock_ormq.objects.all.return_value = [mock_entry]
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(reverse("training-status"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["is_running"])
