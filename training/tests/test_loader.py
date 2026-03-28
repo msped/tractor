@@ -2,7 +2,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from ..loader import DEFAULT_GLINER_MODEL, GLiNERModelManager, SpanCatModelManager
+from ..loader import (
+    DEFAULT_GLINER_MODEL,
+    GLiNERModelManager,
+    SpanCatModelManager,
+)
 from ..models import Model
 from .base import NetworkBlockerMixin
 
@@ -51,7 +55,9 @@ class GLiNERModelManagerTests(NetworkBlockerMixin, TestCase):
     @patch("training.loader._load_gliner_model")
     def test_switch_model(self, mock_load):
         """switch_model() loads the named model from its DB path."""
-        model_entry = Model.objects.create(name="custom_gliner", path="/path/to/custom")
+        model_entry = Model.objects.create(
+            name="custom_gliner", path="/path/to/custom"
+        )
 
         manager = GLiNERModelManager.get_instance()
         manager.switch_model("custom_gliner")
@@ -78,7 +84,9 @@ class SpanCatModelManagerTests(NetworkBlockerMixin, TestCase):
         mock_nlp = MagicMock()
         mock_load.return_value = mock_nlp
 
-        active_model = Model.objects.create(name="spancat_v1", path="/path/to/spancat_v1", is_active=True)
+        active_model = Model.objects.create(
+            name="spancat_v1", path="/path/to/spancat_v1", is_active=True
+        )
 
         manager = SpanCatModelManager.get_instance()
 
@@ -100,7 +108,9 @@ class SpanCatModelManagerTests(NetworkBlockerMixin, TestCase):
     @patch("training.loader._load_spancat_model")
     def test_get_model_returns_cached_model(self, mock_load):
         """get_model() returns cached model without reloading."""
-        Model.objects.create(name="spancat_v1", path="/path/to/spancat_v1", is_active=True)
+        Model.objects.create(
+            name="spancat_v1", path="/path/to/spancat_v1", is_active=True
+        )
 
         manager = SpanCatModelManager.get_instance()
         self.assertEqual(mock_load.call_count, 1)
@@ -111,8 +121,12 @@ class SpanCatModelManagerTests(NetworkBlockerMixin, TestCase):
     @patch("training.loader._load_spancat_model")
     def test_switch_model(self, mock_load):
         """Test switching to a different SpanCat model."""
-        active_model = Model.objects.create(name="spancat_v1", path="/path/to/spancat_v1", is_active=True)
-        inactive_model = Model.objects.create(name="spancat_v2", path="/path/to/spancat_v2", is_active=False)
+        active_model = Model.objects.create(
+            name="spancat_v1", path="/path/to/spancat_v1", is_active=True
+        )
+        inactive_model = Model.objects.create(
+            name="spancat_v2", path="/path/to/spancat_v2", is_active=False
+        )
 
         manager = SpanCatModelManager.get_instance()
         mock_load.assert_called_once_with(active_model.path)

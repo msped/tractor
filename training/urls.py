@@ -8,13 +8,22 @@ from .views import (
     TrainingDocumentViewSet,
     TrainingRunViewSet,
     TrainingScheduleViewSet,
+    TrainingStatusView,
 )
 
 urlpatterns = [
     path("models", ModelListCreateView.as_view(), name="model-list-create"),
     path("models/<uuid:pk>", ModelDetailView.as_view(), name="model-detail"),
-    path("models/<uuid:pk>/set-active", ModelSetActiveView.as_view(), name="model-set-active"),
-    path("training/run-now", RunManualTrainingView.as_view(), name="training-run-now"),
+    path(
+        "models/<uuid:pk>/set-active",
+        ModelSetActiveView.as_view(),
+        name="model-set-active",
+    ),
+    path(
+        "training/run-now",
+        RunManualTrainingView.as_view(),
+        name="training-run-now",
+    ),
     path(
         "training-docs",
         TrainingDocumentViewSet.as_view({"get": "list", "post": "create"}),
@@ -23,16 +32,38 @@ urlpatterns = [
     path(
         "training-docs/<uuid:pk>",
         TrainingDocumentViewSet.as_view(
-            {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+            {
+                "get": "retrieve",
+                "put": "update",
+                "patch": "partial_update",
+                "delete": "destroy",
+            }
         ),
         name="training-document-detail",
     ),
-    path("schedules", TrainingScheduleViewSet.as_view({"get": "list", "post": "create"}), name="schedule-list"),
+    path(
+        "schedules",
+        TrainingScheduleViewSet.as_view({"get": "list", "post": "create"}),
+        name="schedule-list",
+    ),
     path(
         "schedules/<int:pk>",
-        TrainingScheduleViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"}),
+        TrainingScheduleViewSet.as_view(
+            {"get": "retrieve", "put": "update", "delete": "destroy"}
+        ),
         name="schedule-detail",
     ),
-    path("training-runs", TrainingRunViewSet.as_view({"get": "list"}), name="training-run-list"),
-    path("training-runs/<uuid:pk>", TrainingRunViewSet.as_view({"get": "retrieve"}), name="training-run-detail"),
+    path(
+        "training-runs",
+        TrainingRunViewSet.as_view({"get": "list"}),
+        name="training-run-list",
+    ),
+    path(
+        "training-runs/<uuid:pk>",
+        TrainingRunViewSet.as_view({"get": "retrieve"}),
+        name="training-run-detail",
+    ),
+    path(
+        "training/status", TrainingStatusView.as_view(), name="training-status"
+    ),
 ]

@@ -12,11 +12,31 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="DocumentExportSettings",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("header_text", models.CharField(blank=True, default="", max_length=500)),
-                ("footer_text", models.CharField(blank=True, default="", max_length=500)),
-                ("watermark_text", models.CharField(blank=True, default="", max_length=200)),
-                ("watermark_include_case_ref", models.BooleanField(default=False)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "header_text",
+                    models.CharField(blank=True, default="", max_length=500),
+                ),
+                (
+                    "footer_text",
+                    models.CharField(blank=True, default="", max_length=500),
+                ),
+                (
+                    "watermark_text",
+                    models.CharField(blank=True, default="", max_length=200),
+                ),
+                (
+                    "watermark_include_case_ref",
+                    models.BooleanField(default=False),
+                ),
                 ("page_numbers_enabled", models.BooleanField(default=False)),
             ],
             options={

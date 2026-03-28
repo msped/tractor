@@ -38,7 +38,9 @@ class ExtractWithSpanCatTests(NetworkBlockerMixin, TestCase):
     def test_operational_span_returned(self):
         span = _make_span("attended the scene at night", "OPERATIONAL", 10, 37)
         nlp = _make_nlp([span])
-        results = extract_with_spancat(nlp, "Officers attended the scene at night.")
+        results = extract_with_spancat(
+            nlp, "Officers attended the scene at night."
+        )
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["label"], "OPERATIONAL")
 
@@ -48,7 +50,9 @@ class ExtractWithSpanCatTests(NetworkBlockerMixin, TestCase):
             _make_span("attended the scene", "OPERATIONAL", 15, 33),
         ]
         nlp = _make_nlp(spans)
-        results = extract_with_spancat(nlp, "John Doe was seen attending the scene.")
+        results = extract_with_spancat(
+            nlp, "John Doe was seen attending the scene."
+        )
         self.assertEqual(len(results), 2)
         labels = {r["label"] for r in results}
         self.assertIn("THIRD_PARTY", labels)

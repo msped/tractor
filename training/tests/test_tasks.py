@@ -11,7 +11,13 @@ from docx.enum.text import WD_COLOR_INDEX
 from cases.models import Case, Redaction
 from cases.models import Document as CaseDocument
 
-from ..models import Model, TrainingDocument, TrainingRun, TrainingRunCaseDoc, TrainingRunTrainingDoc
+from ..models import (
+    Model,
+    TrainingDocument,
+    TrainingRun,
+    TrainingRunCaseDoc,
+    TrainingRunTrainingDoc,
+)
 from ..tasks import (
     _build_spancat_pipeline,
     _prepare_examples,
@@ -111,7 +117,9 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
 
     def test_collect_from_training_docs(self):
         """Test collecting data only from TrainingDocuments."""
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs"
+        )
 
         self.assertEqual(len(train_data), 1)
         self.assertEqual(len(t_docs), 1)
@@ -127,7 +135,9 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
 
     def test_collect_from_redactions(self):
         """Test collecting data only from CaseDocument redactions."""
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="redactions")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="redactions"
+        )
 
         self.assertEqual(len(train_data), 1)
         self.assertEqual(len(t_docs), 0)
@@ -144,7 +154,9 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
 
     def test_collect_from_both(self):
         """Test collecting data from both sources."""
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="both")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="both"
+        )
         self.assertEqual(len(train_data), 2)
         self.assertEqual(len(t_docs), 1)
         self.assertEqual(len(c_docs), 1)
@@ -182,7 +194,9 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs"
+        )
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
@@ -213,7 +227,9 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs"
+        )
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
@@ -238,18 +254,24 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         with open(docx_path, "rb") as f:
             TrainingDocument.objects.create(
                 name="Separate Test",
-                original_file=SimpleUploadedFile("separate_test.docx", f.read()),
+                original_file=SimpleUploadedFile(
+                    "separate_test.docx", f.read()
+                ),
                 created_by=self.user,
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs"
+        )
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
         # Should be TWO separate entities
         self.assertEqual(len(annotations["entities"]), 2)
-        entity_texts = [text[start:end] for start, end, label in annotations["entities"]]
+        entity_texts = [
+            text[start:end] for start, end, label in annotations["entities"]
+        ]
         self.assertIn("John", entity_texts)
         self.assertIn("Jane", entity_texts)
 
@@ -269,12 +291,16 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         with open(docx_path, "rb") as f:
             TrainingDocument.objects.create(
                 name="Whitespace Test",
-                original_file=SimpleUploadedFile("whitespace_test.docx", f.read()),
+                original_file=SimpleUploadedFile(
+                    "whitespace_test.docx", f.read()
+                ),
                 created_by=self.user,
                 processed=False,
             )
 
-        train_data, t_docs, c_docs = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, c_docs = collect_training_data_detailed(
+            source="training_docs"
+        )
 
         self.assertEqual(len(train_data), 1)
         text, annotations = train_data[0]
@@ -318,20 +344,32 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks.collect_training_data_detailed")
     @patch("training.tasks.Task")
     def test_train_model_creates_spancat_model(
-        self, mock_task, mock_collect, mock_build_pipeline, mock_prepare, mock_run_loop
+        self,
+        mock_task,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
     ):
         """train_model() creates a Model with model_type=SPANCAT and a TrainingRun."""
         mock_task.objects.filter.return_value.count.return_value = 0
 
         # Provide enough fake training data (>=25 entries)
-        fake_data = [(f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]}) for i in range(25)]
+        fake_data = [
+            (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+            for i in range(25)
+        ]
         mock_collect.return_value = (fake_data, [], [])
 
         mock_nlp = MagicMock()
         mock_nlp.pipe_names = []
         mock_build_pipeline.return_value = mock_nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = {"spans_sc_p": 0.8, "spans_sc_r": 0.75, "spans_sc_f": 0.77}
+        mock_run_loop.return_value = {
+            "spans_sc_p": 0.8,
+            "spans_sc_r": 0.75,
+            "spans_sc_f": 0.77,
+        }
 
         initial_model_count = Model.objects.count()
         train_model(source="redactions")
@@ -343,7 +381,9 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         self.assertAlmostEqual(new_model.recall, 0.75)
         self.assertAlmostEqual(new_model.f1_score, 0.77)
 
-        self.assertEqual(TrainingRun.objects.filter(model=new_model).count(), 1)
+        self.assertEqual(
+            TrainingRun.objects.filter(model=new_model).count(), 1
+        )
 
     @patch("training.tasks._run_training_loop")
     @patch("training.tasks._prepare_examples")
@@ -351,12 +391,20 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks.collect_training_data_detailed")
     @patch("training.tasks.Task")
     def test_train_model_cleans_up_on_exception(
-        self, mock_task, mock_collect, mock_build_pipeline, mock_prepare, mock_run_loop
+        self,
+        mock_task,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
     ):
         """train_model() removes the output directory if training raises an exception."""
         mock_task.objects.filter.return_value.count.return_value = 0
 
-        fake_data = [(f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]}) for i in range(25)]
+        fake_data = [
+            (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+            for i in range(25)
+        ]
         mock_collect.return_value = (fake_data, [], [])
 
         mock_build_pipeline.side_effect = RuntimeError("spaCy load failed")
@@ -374,7 +422,12 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks.collect_training_data_detailed")
     @patch("training.tasks.Task")
     def test_train_model_records_training_and_case_docs(
-        self, mock_task, mock_collect, mock_build_pipeline, mock_prepare, mock_run_loop
+        self,
+        mock_task,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
     ):
         """train_model() creates TrainingRunTrainingDoc and TrainingRunCaseDoc for used docs."""
         mock_task.objects.filter.return_value.count.return_value = 0
@@ -391,22 +444,39 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
             created_by=self.user,
         )
 
-        fake_data = [(f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]}) for i in range(25)]
+        fake_data = [
+            (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+            for i in range(25)
+        ]
         mock_collect.return_value = (fake_data, [training_doc], [case_doc])
 
         mock_nlp = MagicMock()
         mock_nlp.pipe_names = []
         mock_build_pipeline.return_value = mock_nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = {"spans_sc_p": 0.8, "spans_sc_r": 0.75, "spans_sc_f": 0.77}
+        mock_run_loop.return_value = {
+            "spans_sc_p": 0.8,
+            "spans_sc_r": 0.75,
+            "spans_sc_f": 0.77,
+        }
 
         train_model(source="both")
 
         new_model = Model.objects.order_by("-created_at").first()
         training_run = TrainingRun.objects.get(model=new_model)
 
-        self.assertEqual(TrainingRunTrainingDoc.objects.filter(training_run=training_run).count(), 1)
-        self.assertEqual(TrainingRunCaseDoc.objects.filter(training_run=training_run).count(), 1)
+        self.assertEqual(
+            TrainingRunTrainingDoc.objects.filter(
+                training_run=training_run
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            TrainingRunCaseDoc.objects.filter(
+                training_run=training_run
+            ).count(),
+            1,
+        )
 
 
 class BuildSpancatPipelineTests(NetworkBlockerMixin, TestCase):
@@ -449,7 +519,9 @@ class PrepareExamplesTests(NetworkBlockerMixin, TestCase):
             examples = _prepare_examples(mock_nlp, train_data)
 
         self.assertEqual(len(examples), 1)
-        mock_ref.char_span.assert_called_once_with(0, 5, label="THIRD_PARTY", alignment_mode="contract")
+        mock_ref.char_span.assert_called_once_with(
+            0, 5, label="THIRD_PARTY", alignment_mode="contract"
+        )
 
     def test_misaligned_spans_dropped(self):
         mock_nlp = MagicMock()
@@ -476,7 +548,11 @@ class RunTrainingLoopTests(NetworkBlockerMixin, TestCase):
     def test_early_stopping_triggered(self):
         mock_nlp = MagicMock()
         mock_nlp.resume_training.return_value = MagicMock()
-        mock_nlp.evaluate.return_value = {"spans_sc_f": 0.0, "spans_sc_p": 0.0, "spans_sc_r": 0.0}
+        mock_nlp.evaluate.return_value = {
+            "spans_sc_f": 0.0,
+            "spans_sc_p": 0.0,
+            "spans_sc_r": 0.0,
+        }
 
         with tempfile.TemporaryDirectory() as output_dir:
             _run_training_loop(mock_nlp, [], [], output_dir)
@@ -487,7 +563,11 @@ class RunTrainingLoopTests(NetworkBlockerMixin, TestCase):
     def test_saves_to_disk_when_no_improvement(self):
         mock_nlp = MagicMock()
         mock_nlp.resume_training.return_value = MagicMock()
-        mock_nlp.evaluate.return_value = {"spans_sc_f": 0.0, "spans_sc_p": 0.0, "spans_sc_r": 0.0}
+        mock_nlp.evaluate.return_value = {
+            "spans_sc_f": 0.0,
+            "spans_sc_p": 0.0,
+            "spans_sc_r": 0.0,
+        }
 
         with tempfile.TemporaryDirectory() as output_dir:
             result = _run_training_loop(mock_nlp, [], [], output_dir)
@@ -557,6 +637,8 @@ class CollectTrainingDataDetailedEdgeCasesTests(NetworkBlockerMixin, TestCase):
             processed=False,
         )
 
-        train_data, t_docs, _ = collect_training_data_detailed(source="training_docs")
+        train_data, t_docs, _ = collect_training_data_detailed(
+            source="training_docs"
+        )
         self.assertEqual(len(train_data), 0)
         self.assertEqual(len(t_docs), 0)

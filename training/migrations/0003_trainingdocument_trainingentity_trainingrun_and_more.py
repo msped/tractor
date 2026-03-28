@@ -18,9 +18,20 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="TrainingDocument",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
                 ("name", models.CharField(max_length=255)),
-                ("original_file", models.FileField(upload_to="training_docs/")),
+                (
+                    "original_file",
+                    models.FileField(upload_to="training_docs/"),
+                ),
                 ("extracted_text", models.TextField()),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("processed", models.BooleanField(default=False)),
@@ -37,7 +48,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="TrainingEntity",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
                 ("start_char", models.IntegerField()),
                 ("end_char", models.IntegerField()),
                 (
@@ -64,7 +83,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="TrainingRun",
             fields=[
-                ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
                 (
                     "source",
                     models.CharField(
@@ -77,31 +104,68 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
-                ("model", models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to="training.model")),
+                (
+                    "model",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="training.model",
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
             name="TrainingRunCaseDoc",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
-                ("document", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="cases.document")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "document",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="cases.document",
+                    ),
+                ),
                 (
                     "training_run",
-                    models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="training.trainingrun"),
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="training.trainingrun",
+                    ),
                 ),
             ],
         ),
         migrations.CreateModel(
             name="TrainingRunTrainingDoc",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
                 (
                     "document",
-                    models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="training.trainingdocument"),
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="training.trainingdocument",
+                    ),
                 ),
                 (
                     "training_run",
-                    models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="training.trainingrun"),
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="training.trainingrun",
+                    ),
                 ),
             ],
         ),

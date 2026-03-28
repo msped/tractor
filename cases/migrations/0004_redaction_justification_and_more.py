@@ -13,7 +13,9 @@ class Migration(migrations.Migration):
             model_name="redaction",
             name="justification",
             field=models.TextField(
-                blank=True, help_text="Reason for a manual redaction or for rejecting a suggestion.", null=True
+                blank=True,
+                help_text="Reason for a manual redaction or for rejecting a suggestion.",
+                null=True,
             ),
         ),
         migrations.AlterField(

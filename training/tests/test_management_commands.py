@@ -13,14 +13,18 @@ from training.tests.base import NetworkBlockerMixin
 class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
     @patch("training.management.commands.download_model.os.makedirs")
     @patch("gliner.GLiNER")
-    def test_default_model_downloaded_and_saved(self, mock_gliner_cls, mock_makedirs):
+    def test_default_model_downloaded_and_saved(
+        self, mock_gliner_cls, mock_makedirs
+    ):
         """Running download_model with defaults downloads and saves the medium model locally."""
         mock_instance = MagicMock()
         mock_gliner_cls.from_pretrained.return_value = mock_instance
 
         call_command("download_model")
 
-        mock_gliner_cls.from_pretrained.assert_called_once_with("urchade/gliner_medium-v2.1")
+        mock_gliner_cls.from_pretrained.assert_called_once_with(
+            "urchade/gliner_medium-v2.1"
+        )
         mock_instance.save_pretrained.assert_called_once()
         saved_path = mock_instance.save_pretrained.call_args[0][0]
         self.assertIn("urchade_gliner_medium_v2_1", saved_path)
@@ -34,7 +38,9 @@ class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
 
         call_command("download_model", name="urchade/gliner_large-v2.1")
 
-        mock_gliner_cls.from_pretrained.assert_called_once_with("urchade/gliner_large-v2.1")
+        mock_gliner_cls.from_pretrained.assert_called_once_with(
+            "urchade/gliner_large-v2.1"
+        )
         saved_path = mock_instance.save_pretrained.call_args[0][0]
         self.assertIn("urchade_gliner_large_v2_1", saved_path)
 

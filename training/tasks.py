@@ -55,19 +55,37 @@ def collect_training_data_detailed(source="both"):
 
                 def close_current_entity(entities_list, text):
                     """Close the current entity if one is open and has content."""
-                    nonlocal current_entity_start, current_entity_end, current_entity_label
-                    if current_entity_start is not None and current_entity_label is not None:
+                    nonlocal \
+                        current_entity_start, \
+                        current_entity_end, \
+                        current_entity_label
+                    if (
+                        current_entity_start is not None
+                        and current_entity_label is not None
+                    ):
                         # Check if the entity text has actual content (not just whitespace)
-                        entity_text = text[current_entity_start:current_entity_end]
+                        entity_text = text[
+                            current_entity_start:current_entity_end
+                        ]
                         stripped_text = entity_text.strip()
                         if stripped_text:
                             # Adjust boundaries to exclude leading/trailing whitespace
                             # This ensures alignment with token boundaries
-                            leading_ws = len(entity_text) - len(entity_text.lstrip())
-                            trailing_ws = len(entity_text) - len(entity_text.rstrip())
+                            leading_ws = len(entity_text) - len(
+                                entity_text.lstrip()
+                            )
+                            trailing_ws = len(entity_text) - len(
+                                entity_text.rstrip()
+                            )
                             adjusted_start = current_entity_start + leading_ws
                             adjusted_end = current_entity_end - trailing_ws
-                            entities_list.append((adjusted_start, adjusted_end, current_entity_label))
+                            entities_list.append(
+                                (
+                                    adjusted_start,
+                                    adjusted_end,
+                                    current_entity_label,
+                                )
+                            )
                     current_entity_start = None
                     current_entity_end = None
                     current_entity_label = None
@@ -82,8 +100,14 @@ def collect_training_data_detailed(source="both"):
                         run_label = None
                         if run.font.highlight_color:
                             color_enum_member = run.font.highlight_color
-                            color_name = color_enum_member.name if color_enum_member else None
-                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(color_name)
+                            color_name = (
+                                color_enum_member.name
+                                if color_enum_member
+                                else None
+                            )
+                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(
+                                color_name
+                            )
 
                         if run_label:
                             # This run is highlighted with a recognized color
@@ -114,13 +138,17 @@ def collect_training_data_detailed(source="both"):
                 if entities:
                     tdoc.extracted_text = full_text.strip()
                     tdoc.save(update_fields=["extracted_text"])
-                    train_data.append((tdoc.extracted_text, {"entities": entities}))
+                    train_data.append(
+                        (tdoc.extracted_text, {"entities": entities})
+                    )
                     training_docs_used.append(tdoc)
             except Exception as e:
                 print(f"Could not process training doc {tdoc.name}: {e}")
 
     if source in ("redactions", "both"):
-        completed_docs = Document.objects.filter(status=Document.Status.COMPLETED)
+        completed_docs = Document.objects.filter(
+            status=Document.Status.COMPLETED
+        )
         for doc in completed_docs:
             text = doc.extracted_text
             if not text:
@@ -130,7 +158,9 @@ def collect_training_data_detailed(source="both"):
             for redaction in doc.redactions.filter(is_accepted=True).exclude(
                 redaction_type=Redaction.RedactionType.DS_INFORMATION
             ):
-                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(redaction.redaction_type)
+                label = REDACTION_TYPE_TO_ENTITY_LABEL.get(
+                    redaction.redaction_type
+                )
                 if label:
                     entities.append(
                         (
@@ -168,7 +198,11 @@ def _build_spancat_pipeline():
         },
         "model": {
             "@architectures": "spacy.SpanCategorizer.v1",
-            "scorer": {"@layers": "spacy.LinearLogistic.v1", "nO": None, "nI": None},
+            "scorer": {
+                "@layers": "spacy.LinearLogistic.v1",
+                "nO": None,
+                "nI": None,
+            },
             "reducer": {
                 "@layers": "spacy.mean_max_reducer.v1",
                 "hidden_size": 128,
@@ -200,7 +234,9 @@ def _prepare_examples(nlp, train_data):
         spans = []
         for start, end, label in annotations["entities"]:
             total_entities += 1
-            span = ref.char_span(start, end, label=label, alignment_mode="contract")
+            span = ref.char_span(
+                start, end, label=label, alignment_mode="contract"
+            )
             if span:
                 spans.append(span)
             else:
@@ -256,7 +292,9 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
             epochs_without_improvement += 1
 
         if epochs_without_improvement >= patience:
-            print(f"Early stopping at epoch {epoch + 1} (no improvement for {patience} epochs)")
+            print(
+                f"Early stopping at epoch {epoch + 1} (no improvement for {patience} epochs)"
+            )
             break
 
     # If no improvement was ever saved (all F1=0), save final state
@@ -279,10 +317,14 @@ def train_model(source="redactions", user=None):
         print("Another training task is already in progress. Aborting.")
         return
 
-    train_data, used_training_docs, used_case_docs = collect_training_data_detailed(source)
+    train_data, used_training_docs, used_case_docs = (
+        collect_training_data_detailed(source)
+    )
 
     if len(train_data) < 25:
-        print(f"Not enough training data ({len(train_data)} examples). Aborting.")
+        print(
+            f"Not enough training data ({len(train_data)} examples). Aborting."
+        )
         return
 
     # Prepare output dir
@@ -310,7 +352,9 @@ def train_model(source="redactions", user=None):
         dev_examples = all_examples[split_point:]
 
         # Train and save best model
-        best_scores = _run_training_loop(nlp, train_examples, dev_examples, output_dir)
+        best_scores = _run_training_loop(
+            nlp, train_examples, dev_examples, output_dir
+        )
 
     except Exception:
         if output_dir.exists():
@@ -331,15 +375,24 @@ def train_model(source="redactions", user=None):
     training_run = TrainingRun.objects.create(model=new_model, source=source)
 
     # Find the corresponding training data for each document to get the text
-    tdoc_texts = {tdoc: data[0] for tdoc, data in zip(used_training_docs, train_data, strict=False)}
+    tdoc_texts = {
+        tdoc: data[0]
+        for tdoc, data in zip(used_training_docs, train_data, strict=False)
+    }
 
     for tdoc, text in tdoc_texts.items():
-        TrainingRunTrainingDoc.objects.create(training_run=training_run, document=tdoc)
+        TrainingRunTrainingDoc.objects.create(
+            training_run=training_run, document=tdoc
+        )
         tdoc.extracted_text = text
         tdoc.processed = True
         tdoc.save(update_fields=["extracted_text", "processed"])
 
     for cdoc in used_case_docs:
-        TrainingRunCaseDoc.objects.create(training_run=training_run, document=cdoc)
+        TrainingRunCaseDoc.objects.create(
+            training_run=training_run, document=cdoc
+        )
 
-    print(f"Model trained and stored at {output_dir}, DB updated, TrainingRun created.")
+    print(
+        f"Model trained and stored at {output_dir}, DB updated, TrainingRun created."
+    )

@@ -135,7 +135,9 @@ if _MEDIA_STORAGE == "s3":
             "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
             "OPTIONS": {
                 "bucket_name": os.environ.get("AWS_STORAGE_BUCKET_NAME"),
-                "region_name": os.environ.get("AWS_S3_REGION_NAME", "us-east-1"),
+                "region_name": os.environ.get(
+                    "AWS_S3_REGION_NAME", "us-east-1"
+                ),
                 "access_key": os.environ.get("AWS_ACCESS_KEY_ID"),
                 "secret_key": os.environ.get("AWS_SECRET_ACCESS_KEY"),
             },
@@ -163,7 +165,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 CORS_ORIGIN_ALLOW_ALL = True
 
-REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",)}
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    )
+}
 
 REST_AUTH = {
     "USE_JWT": True,

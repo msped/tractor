@@ -24,7 +24,8 @@ def _deduplicate_entities(primary_entities, secondary_entities):
     combined = list(primary_entities)
     for sec_ent in secondary_entities:
         overlaps = any(
-            sec_ent["start_char"] < pri_ent["end_char"] and sec_ent["end_char"] > pri_ent["start_char"]
+            sec_ent["start_char"] < pri_ent["end_char"]
+            and sec_ent["end_char"] > pri_ent["start_char"]
             for pri_ent in primary_entities
         )
         if not overlaps:
@@ -42,7 +43,14 @@ def _table_has_borders(table):
     if tbl_borders is None:
         return True
 
-    border_names = ["w:top", "w:left", "w:bottom", "w:right", "w:insideH", "w:insideV"]
+    border_names = [
+        "w:top",
+        "w:left",
+        "w:bottom",
+        "w:right",
+        "w:insideH",
+        "w:insideV",
+    ]
     no_border_values = {"none", "nil"}
 
     for name in border_names:
@@ -135,7 +143,11 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
                     bg_color = f"#{fill}"
 
             # Build cell style
-            cell_style = "border: 1px solid #000; padding: 6px 8px;" if has_borders else "padding: 6px 8px;"
+            cell_style = (
+                "border: 1px solid #000; padding: 6px 8px;"
+                if has_borders
+                else "padding: 6px 8px;"
+            )
             if bg_color:
                 cell_style += f" background-color: {bg_color};"
 
@@ -155,10 +167,17 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
                     if run.font.color and run.font.color.rgb:
                         styles.append(f"color: #{run.font.color.rgb}")
 
-                    text_runs.append({"text": text, "style": "; ".join(styles) if styles else None})
+                    text_runs.append(
+                        {
+                            "text": text,
+                            "style": "; ".join(styles) if styles else None,
+                        }
+                    )
 
                     if styles:
-                        cell_html += f'<span style="{"; ".join(styles)}">{text}</span>'
+                        cell_html += (
+                            f'<span style="{"; ".join(styles)}">{text}</span>'
+                        )
                     else:
                         cell_html += text
                 cell_html += "<br>"
@@ -221,7 +240,11 @@ def extract_document_structure(path):
                         continue
 
                     style_name = para.style.name if para.style else "Normal"
-                    element_type = "heading" if style_name.startswith("Heading") else "paragraph"
+                    element_type = (
+                        "heading"
+                        if style_name.startswith("Heading")
+                        else "paragraph"
+                    )
                     level = None
                     if element_type == "heading":
                         try:
@@ -249,7 +272,9 @@ def extract_document_structure(path):
                     # Build plain text for NER (tab-separated values)
                     text_rows = []
                     for row in tbl.rows:
-                        row_cells = [cell.text.replace("\n", " ") for cell in row.cells]
+                        row_cells = [
+                            cell.text.replace("\n", " ") for cell in row.cells
+                        ]
                         text_rows.append("\t".join(row_cells))
                     table_text = "\n".join(text_rows)
 
@@ -257,7 +282,9 @@ def extract_document_structure(path):
                     has_borders = _table_has_borders(tbl)
 
                     # Extract styled HTML and cell data with positions
-                    html, cells = extract_table_with_styling(tbl, position, has_borders)
+                    html, cells = extract_table_with_styling(
+                        tbl, position, has_borders
+                    )
 
                     # Extract column widths from DOCX XML as percentages of total table width
                     col_widths = []
@@ -265,7 +292,10 @@ def extract_document_structure(path):
                         raw_widths = [col.width for col in tbl.columns]
                         total = sum(w for w in raw_widths if w)
                         if total:
-                            col_widths = [round(w / total * 100, 2) if w else None for w in raw_widths]
+                            col_widths = [
+                                round(w / total * 100, 2) if w else None
+                                for w in raw_widths
+                            ]
                     except Exception:
                         pass
 
@@ -323,7 +353,10 @@ def extract_entities_from_text(path):
     """
     # Lazy imports to avoid loading transformers/pandas at module import time
     from .extractors.gliner_extractor import extract_with_gliner
-    from .extractors.presidio_extractor import extract_operational_with_presidio, extract_with_presidio
+    from .extractors.presidio_extractor import (
+        extract_operational_with_presidio,
+        extract_with_presidio,
+    )
     from .extractors.spancat_extractor import extract_with_spancat
 
     gliner_model = GLiNERModelManager.get_instance().get_model()
@@ -345,7 +378,9 @@ def extract_entities_from_text(path):
         gliner_results = extract_with_gliner(gliner_model, ner_text)
         presidio_tp = extract_with_presidio(ner_text)
         presidio_op = extract_operational_with_presidio(ner_text)
-        spancat_results = extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
+        spancat_results = (
+            extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
+        )
 
         # SpanCat > GLiNER > Presidio
         combined = _deduplicate_entities(spancat_results, gliner_results)
@@ -366,7 +401,9 @@ def extract_entities_from_text(path):
     gliner_results = extract_with_gliner(gliner_model, ner_text)
     presidio_tp = extract_with_presidio(ner_text)
     presidio_op = extract_operational_with_presidio(ner_text)
-    spancat_results = extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
+    spancat_results = (
+        extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
+    )
 
     # SpanCat > GLiNER > Presidio
     combined = _deduplicate_entities(spancat_results, gliner_results)

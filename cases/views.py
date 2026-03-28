@@ -2,12 +2,23 @@ from django.shortcuts import get_object_or_404
 from django_q.models import OrmQ
 from django_q.tasks import async_task
 from rest_framework import status
-from rest_framework.generics import ListCreateAPIView, RetrieveAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Case, Document, DocumentExportSettings, ExemptionTemplate, Redaction, RedactionContext
+from .models import (
+    Case,
+    Document,
+    DocumentExportSettings,
+    ExemptionTemplate,
+    Redaction,
+    RedactionContext,
+)
 from .serializers import (
     CaseDetailSerializer,
     CaseSerializer,
@@ -28,11 +39,15 @@ class DocumentExportSettingsView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        serializer = DocumentExportSettingsSerializer(DocumentExportSettings.get())
+        serializer = DocumentExportSettingsSerializer(
+            DocumentExportSettings.get()
+        )
         return Response(serializer.data)
 
     def patch(self, request):
-        serializer = DocumentExportSettingsSerializer(DocumentExportSettings.get(), data=request.data, partial=True)
+        serializer = DocumentExportSettingsSerializer(
+            DocumentExportSettings.get(), data=request.data, partial=True
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
@@ -70,17 +85,25 @@ class CaseExportView(APIView):
         case = get_object_or_404(Case, id=case_id)
 
         if not case.documents.exists():
-            return Response({"detail": "There are no documents to export."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "There are no documents to export."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if case.documents.exclude(status=Document.Status.COMPLETED).exists():
             return Response(
-                {"detail": "All documents must be marked as completed before generating a disclosure package."},
+                {
+                    "detail": "All documents must be marked as completed before generating a disclosure package."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         task_id = case.start_export()
 
-        return Response({"message": "Export process started.", "task_id": task_id}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"message": "Export process started.", "task_id": task_id},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class CaseListCreateView(ListCreateAPIView):
@@ -141,7 +164,10 @@ class DocumentListCreateView(ListCreateAPIView):
 
         files = request.FILES.getlist("original_file")
         if not files:
-            return Response({"detail": "No files were provided in the request."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "No files were provided in the request."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         documents_data = [{"case": case.pk, "original_file": f} for f in files]
         serializer = self.get_serializer(data=documents_data, many=True)
@@ -172,12 +198,19 @@ class DocumentResubmitView(APIView):
 
     def post(self, request, document_id, *args, **kwargs):
         document = get_object_or_404(Document, id=document_id)
-        if document.status in [Document.Status.ERROR, Document.Status.READY_FOR_REVIEW, Document.Status.UNPROCESSED]:
+        if document.status in [
+            Document.Status.ERROR,
+            Document.Status.READY_FOR_REVIEW,
+            Document.Status.UNPROCESSED,
+        ]:
             # Delete existing redactions to avoid duplicates
             document.redactions.all().delete()
             document.status = Document.Status.PROCESSING
             document.save(update_fields=["status"])
-            async_task("cases.services.process_document_and_create_redactions", document.id)
+            async_task(
+                "cases.services.process_document_and_create_redactions",
+                document.id,
+            )
             return Response(status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -292,11 +325,16 @@ class RedactionContextView(APIView):
         # Use update_or_create to handle both creation of a new context
         # and update of an existing one.
         context, created = RedactionContext.objects.update_or_create(
-            redaction=redaction, defaults={"text": serializer.validated_data["text"]}
+            redaction=redaction,
+            defaults={"text": serializer.validated_data["text"]},
         )
 
-        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response(self.serializer_class(context).data, status=status_code)
+        status_code = (
+            status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        )
+        return Response(
+            self.serializer_class(context).data, status=status_code
+        )
 
     def delete(self, request, redaction_id, *args, **kwargs):
         context = get_object_or_404(RedactionContext, pk=redaction_id)

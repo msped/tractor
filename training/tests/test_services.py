@@ -20,7 +20,9 @@ from .base import NetworkBlockerMixin
 
 class ServicesTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
-        self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        self.temp_file = tempfile.NamedTemporaryFile(
+            delete=False, suffix=".pdf"
+        )
         self.temp_file.close()
         self.file_path = self.temp_file.name
 
@@ -30,35 +32,61 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         os.remove(self.file_path)
 
     @patch("training.services._extract_text_from_pdf")
-    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
     def test_extract_entities_from_text_success(
-        self, mock_gliner_mgr, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
     ):
         """
         Test successful entity extraction with GLiNER + Presidio for a non-DOCX file.
         SpanCat returns None (not yet trained) — graceful degradation.
         """
         mock_gliner_model = MagicMock()
-        mock_gliner_mgr.get_instance.return_value.get_model.return_value = mock_gliner_model
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            mock_gliner_model
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
 
         mock_pdf.return_value = "Hello, I'm John Doe and I live in London."
 
         mock_gliner.return_value = [
-            {"text": "John Doe", "label": "THIRD_PARTY", "start_char": 12, "end_char": 20},
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 12,
+                "end_char": 20,
+            },
         ]
         mock_presidio.return_value = [
-            {"text": "London", "label": "THIRD_PARTY", "start_char": 35, "end_char": 41},
+            {
+                "text": "London",
+                "label": "THIRD_PARTY",
+                "start_char": 35,
+                "end_char": 41,
+            },
         ]
         mock_presidio_op.return_value = []
 
-        extracted_text, results, tables, structure = extract_entities_from_text(self.file_path)
+        extracted_text, results, tables, structure = (
+            extract_entities_from_text(self.file_path)
+        )
 
-        self.assertEqual(extracted_text, "Hello, I'm John Doe and I live in London.")
+        self.assertEqual(
+            extracted_text, "Hello, I'm John Doe and I live in London."
+        )
         self.assertEqual(len(results), 2)
         self.assertEqual(results[0]["text"], "John Doe")
         self.assertEqual(results[0]["label"], "THIRD_PARTY")
@@ -67,34 +95,61 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(tables, [])
         self.assertIsNone(structure)
 
-        mock_gliner.assert_called_once_with(mock_gliner_model, "Hello, I'm John Doe and I live in London.")
-        mock_presidio.assert_called_once_with("Hello, I'm John Doe and I live in London.")
+        mock_gliner.assert_called_once_with(
+            mock_gliner_model, "Hello, I'm John Doe and I live in London."
+        )
+        mock_presidio.assert_called_once_with(
+            "Hello, I'm John Doe and I live in London."
+        )
 
     @patch("training.services._extract_text_from_pdf")
-    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.extractors.spancat_extractor.extract_with_spancat")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
     def test_extract_entities_with_spancat(
-        self, mock_gliner_mgr, mock_spancat_mgr, mock_spancat, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_spancat,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
     ):
         """
         Test that SpanCat results take priority over GLiNER and Presidio.
         """
         mock_gliner_model = MagicMock()
         mock_spancat_nlp = MagicMock()
-        mock_gliner_mgr.get_instance.return_value.get_model.return_value = mock_gliner_model
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = mock_spancat_nlp
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            mock_gliner_model
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            mock_spancat_nlp
+        )
 
         mock_pdf.return_value = "John Doe attended the scene."
 
         mock_spancat.return_value = [
-            {"text": "attended the scene", "label": "OPERATIONAL", "start_char": 9, "end_char": 27},
+            {
+                "text": "attended the scene",
+                "label": "OPERATIONAL",
+                "start_char": 9,
+                "end_char": 27,
+            },
         ]
         mock_gliner.return_value = [
-            {"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8},
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 8,
+            },
         ]
         mock_presidio.return_value = []
         mock_presidio_op.return_value = []
@@ -105,86 +160,142 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         labels = {r["label"] for r in results}
         self.assertIn("OPERATIONAL", labels)
         self.assertIn("THIRD_PARTY", labels)
-        mock_spancat.assert_called_once_with(mock_spancat_nlp, "John Doe attended the scene.")
+        mock_spancat.assert_called_once_with(
+            mock_spancat_nlp, "John Doe attended the scene."
+        )
 
     @patch("training.services._extract_text_from_pdf")
-    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
     def test_spancat_none_skips_spancat_extractor(
-        self, mock_gliner_mgr, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
     ):
         """
         When SpanCat returns None (not trained), extract_with_spancat is not called.
         """
-        mock_gliner_mgr.get_instance.return_value.get_model.return_value = MagicMock()
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
 
         mock_pdf.return_value = "Some text here."
         mock_gliner.return_value = []
         mock_presidio.return_value = []
         mock_presidio_op.return_value = []
 
-        with patch("training.extractors.spancat_extractor.extract_with_spancat") as mock_spancat:
+        with patch(
+            "training.extractors.spancat_extractor.extract_with_spancat"
+        ) as mock_spancat:
             _, results, _, _ = extract_entities_from_text(self.file_path)
             mock_spancat.assert_not_called()
 
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
-    def test_extract_entities_no_model_found(self, mock_manager, mock_spancat_mgr):
+    def test_extract_entities_no_model_found(
+        self, mock_manager, mock_spancat_mgr
+    ):
         """
         Test that a ValueError is raised if get_model() returns None.
         """
         mock_manager.get_instance.return_value.get_model.return_value = None
 
-        with self.assertRaisesMessage(ValueError, "No GLiNER model available."):
+        with self.assertRaisesMessage(
+            ValueError, "No GLiNER model available."
+        ):
             extract_entities_from_text(self.file_path)
 
     @patch("training.services._extract_text_from_pdf")
-    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
     def test_extract_entities_no_text_in_document(
-        self, mock_manager, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+        self,
+        mock_manager,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
     ):
         """
         Test that a ValueError is raised if the document contains no text.
         """
-        mock_manager.get_instance.return_value.get_model.return_value = MagicMock()
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_manager.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
         mock_pdf.return_value = ""
 
-        with self.assertRaisesMessage(ValueError, "No text found in the document."):
+        with self.assertRaisesMessage(
+            ValueError, "No text found in the document."
+        ):
             extract_entities_from_text(self.file_path)
 
     @patch("training.services._extract_text_from_pdf")
-    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
     def test_extract_entities_deduplicates_overlapping(
-        self, mock_manager, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_pdf
+        self,
+        mock_manager,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
     ):
         """
         Test that overlapping GLiNER and Presidio results are deduplicated,
         with GLiNER taking priority.
         """
-        mock_manager.get_instance.return_value.get_model.return_value = MagicMock()
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_manager.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
         mock_pdf.return_value = "John Doe lives in London."
 
         # GLiNER finds "John Doe" at 0-8
         mock_gliner.return_value = [
-            {"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8},
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 8,
+            },
         ]
         # Presidio also finds "John" at 0-4 (overlaps with GLiNER result)
         mock_presidio.return_value = [
-            {"text": "John", "label": "THIRD_PARTY", "start_char": 0, "end_char": 4},
+            {
+                "text": "John",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 4,
+            },
         ]
         mock_presidio_op.return_value = []
 
@@ -195,21 +306,29 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(results[0]["text"], "John Doe")
 
 
-def _make_tbl_xml(border_values=None, include_tbl_pr=True, include_tbl_borders=True):
+def _make_tbl_xml(
+    border_values=None, include_tbl_pr=True, include_tbl_borders=True
+):
     """
     Build a minimal w:tbl lxml element for testing _table_has_borders.
     border_values: dict mapping border names to w:val values, e.g.
         {"top": "single", "bottom": "none"}
     """
-    nsmap = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+    nsmap = {
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    }
     tbl = etree.Element(f"{{{nsmap['w']}}}tbl", nsmap=nsmap)
 
     if include_tbl_pr:
         tbl_pr = etree.SubElement(tbl, f"{{{nsmap['w']}}}tblPr")
         if include_tbl_borders and border_values is not None:
-            tbl_borders = etree.SubElement(tbl_pr, f"{{{nsmap['w']}}}tblBorders")
+            tbl_borders = etree.SubElement(
+                tbl_pr, f"{{{nsmap['w']}}}tblBorders"
+            )
             for name, val in border_values.items():
-                border_el = etree.SubElement(tbl_borders, f"{{{nsmap['w']}}}{name}")
+                border_el = etree.SubElement(
+                    tbl_borders, f"{{{nsmap['w']}}}{name}"
+                )
                 border_el.set(f"{{{nsmap['w']}}}val", val)
 
     return tbl
@@ -222,7 +341,14 @@ class TableHasBordersTests(NetworkBlockerMixin, TestCase):
         return mock_table
 
     def test_single_borders_returns_true(self):
-        tbl = _make_tbl_xml({"top": "single", "bottom": "single", "left": "single", "right": "single"})
+        tbl = _make_tbl_xml(
+            {
+                "top": "single",
+                "bottom": "single",
+                "left": "single",
+                "right": "single",
+            }
+        )
         self.assertTrue(_table_has_borders(self._make_mock_table(tbl)))
 
     def test_double_borders_returns_true(self):
@@ -231,13 +357,27 @@ class TableHasBordersTests(NetworkBlockerMixin, TestCase):
 
     def test_all_none_borders_returns_false(self):
         tbl = _make_tbl_xml(
-            {"top": "none", "bottom": "none", "left": "none", "right": "none", "insideH": "none", "insideV": "none"}
+            {
+                "top": "none",
+                "bottom": "none",
+                "left": "none",
+                "right": "none",
+                "insideH": "none",
+                "insideV": "none",
+            }
         )
         self.assertFalse(_table_has_borders(self._make_mock_table(tbl)))
 
     def test_all_nil_borders_returns_false(self):
         tbl = _make_tbl_xml(
-            {"top": "nil", "bottom": "nil", "left": "nil", "right": "nil", "insideH": "nil", "insideV": "nil"}
+            {
+                "top": "nil",
+                "bottom": "nil",
+                "left": "nil",
+                "right": "nil",
+                "insideH": "nil",
+                "insideV": "nil",
+            }
         )
         self.assertFalse(_table_has_borders(self._make_mock_table(tbl)))
 
@@ -250,7 +390,9 @@ class TableHasBordersTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(_table_has_borders(self._make_mock_table(tbl)))
 
     def test_mixed_borders_returns_true(self):
-        tbl = _make_tbl_xml({"top": "single", "bottom": "none", "left": "nil", "right": "none"})
+        tbl = _make_tbl_xml(
+            {"top": "single", "bottom": "none", "left": "nil", "right": "none"}
+        )
         self.assertTrue(_table_has_borders(self._make_mock_table(tbl)))
 
 
@@ -299,65 +441,159 @@ class ExtractTableWithStylingBorderTests(NetworkBlockerMixin, TestCase):
 
 class DeduplicateEntitiesTests(NetworkBlockerMixin, TestCase):
     def test_no_overlap_keeps_all(self):
-        primary = [{"text": "ref-123", "label": "OPERATIONAL", "start_char": 0, "end_char": 7}]
-        secondary = [{"text": "John", "label": "THIRD_PARTY", "start_char": 10, "end_char": 14}]
+        primary = [
+            {
+                "text": "ref-123",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 7,
+            }
+        ]
+        secondary = [
+            {
+                "text": "John",
+                "label": "THIRD_PARTY",
+                "start_char": 10,
+                "end_char": 14,
+            }
+        ]
         result = _deduplicate_entities(primary, secondary)
         self.assertEqual(len(result), 2)
 
     def test_overlap_removes_secondary_entity(self):
-        primary = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
-        secondary = [{"text": "John", "label": "THIRD_PARTY", "start_char": 0, "end_char": 4}]
+        primary = [
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 8,
+            }
+        ]
+        secondary = [
+            {
+                "text": "John",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 4,
+            }
+        ]
         result = _deduplicate_entities(primary, secondary)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["text"], "John Doe")
 
     def test_partial_overlap_removes_secondary_entity(self):
-        primary = [{"text": "John Doe ref", "label": "OPERATIONAL", "start_char": 0, "end_char": 12}]
-        secondary = [{"text": "John Doe", "label": "THIRD_PARTY", "start_char": 0, "end_char": 8}]
+        primary = [
+            {
+                "text": "John Doe ref",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 12,
+            }
+        ]
+        secondary = [
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 8,
+            }
+        ]
         result = _deduplicate_entities(primary, secondary)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["label"], "OPERATIONAL")
 
     def test_empty_inputs(self):
         self.assertEqual(_deduplicate_entities([], []), [])
-        primary = [{"text": "a", "label": "OPERATIONAL", "start_char": 0, "end_char": 1}]
+        primary = [
+            {
+                "text": "a",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 1,
+            }
+        ]
         self.assertEqual(len(_deduplicate_entities(primary, [])), 1)
-        secondary = [{"text": "b", "label": "THIRD_PARTY", "start_char": 5, "end_char": 6}]
+        secondary = [
+            {
+                "text": "b",
+                "label": "THIRD_PARTY",
+                "start_char": 5,
+                "end_char": 6,
+            }
+        ]
         self.assertEqual(len(_deduplicate_entities([], secondary)), 1)
 
 
 class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
     def test_hash_prefix_expands_start_char(self):
         text = "Crime ref #42/12345/24 was recorded."
-        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 11, "end_char": 22}]
+        entities = [
+            {
+                "text": "42/12345/24",
+                "label": "OPERATIONAL",
+                "start_char": 11,
+                "end_char": 22,
+            }
+        ]
         result = _expand_prefix_symbols(entities, text)
         self.assertEqual(result[0]["start_char"], 10)
         self.assertEqual(result[0]["text"], "#42/12345/24")
 
     def test_no_prefix_leaves_entity_unchanged(self):
         text = "Crime ref 42/12345/24 was recorded."
-        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 10, "end_char": 21}]
+        entities = [
+            {
+                "text": "42/12345/24",
+                "label": "OPERATIONAL",
+                "start_char": 10,
+                "end_char": 21,
+            }
+        ]
         result = _expand_prefix_symbols(entities, text)
         self.assertEqual(result[0]["start_char"], 10)
         self.assertEqual(result[0]["text"], "42/12345/24")
 
     def test_entity_at_start_of_text_not_expanded(self):
         text = "42/12345/24 was recorded."
-        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 0, "end_char": 11}]
+        entities = [
+            {
+                "text": "42/12345/24",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 11,
+            }
+        ]
         result = _expand_prefix_symbols(entities, text)
         self.assertEqual(result[0]["start_char"], 0)
 
     def test_non_hash_prefix_not_expanded(self):
         text = "ref:42/12345/24 was recorded."
-        entities = [{"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 4, "end_char": 15}]
+        entities = [
+            {
+                "text": "42/12345/24",
+                "label": "OPERATIONAL",
+                "start_char": 4,
+                "end_char": 15,
+            }
+        ]
         result = _expand_prefix_symbols(entities, text)
         self.assertEqual(result[0]["start_char"], 4)
 
     def test_multiple_entities_expanded_independently(self):
         text = "refs #42/12345/24 and 43/67890/24"
         entities = [
-            {"text": "42/12345/24", "label": "OPERATIONAL", "start_char": 6, "end_char": 17},
-            {"text": "43/67890/24", "label": "OPERATIONAL", "start_char": 22, "end_char": 33},
+            {
+                "text": "42/12345/24",
+                "label": "OPERATIONAL",
+                "start_char": 6,
+                "end_char": 17,
+            },
+            {
+                "text": "43/67890/24",
+                "label": "OPERATIONAL",
+                "start_char": 22,
+                "end_char": 33,
+            },
         ]
         result = _expand_prefix_symbols(entities, text)
         self.assertEqual(result[0]["start_char"], 5)
@@ -368,28 +604,51 @@ class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
 
 class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
     @patch("training.services.extract_document_structure")
-    @patch("training.extractors.presidio_extractor.extract_operational_with_presidio")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
     def test_extract_entities_docx_path(
-        self, mock_gliner_mgr, mock_spancat_mgr, mock_gliner, mock_presidio, mock_presidio_op, mock_doc_struct
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_doc_struct,
     ):
         """DOCX path: extract_document_structure returns structure, tables, and text."""
         mock_gliner_model = MagicMock()
-        mock_gliner_mgr.get_instance.return_value.get_model.return_value = mock_gliner_model
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            mock_gliner_model
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
 
-        structure = [{"type": "paragraph", "text": "Hello world", "start": 0, "end": 11}]
+        structure = [
+            {"type": "paragraph", "text": "Hello world", "start": 0, "end": 11}
+        ]
         tables = []
         mock_doc_struct.return_value = (structure, tables, "Hello world")
 
-        mock_gliner.return_value = [{"text": "world", "label": "THIRD_PARTY", "start_char": 6, "end_char": 11}]
+        mock_gliner.return_value = [
+            {
+                "text": "world",
+                "label": "THIRD_PARTY",
+                "start_char": 6,
+                "end_char": 11,
+            }
+        ]
         mock_presidio.return_value = []
         mock_presidio_op.return_value = []
 
-        ner_text, results, returned_tables, returned_structure = extract_entities_from_text("/fake/path.docx")
+        ner_text, results, returned_tables, returned_structure = (
+            extract_entities_from_text("/fake/path.docx")
+        )
 
         self.assertEqual(ner_text, "Hello world")
         self.assertEqual(len(results), 1)
@@ -399,13 +658,21 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
     @patch("training.services.extract_document_structure")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
-    def test_extract_entities_docx_empty_text_raises(self, mock_gliner_mgr, mock_spancat_mgr, mock_doc_struct):
+    def test_extract_entities_docx_empty_text_raises(
+        self, mock_gliner_mgr, mock_spancat_mgr, mock_doc_struct
+    ):
         """DOCX path with empty text raises ValueError."""
-        mock_gliner_mgr.get_instance.return_value.get_model.return_value = MagicMock()
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
         mock_doc_struct.return_value = ([], [], "")
 
-        with self.assertRaisesMessage(ValueError, "No text found in the document."):
+        with self.assertRaisesMessage(
+            ValueError, "No text found in the document."
+        ):
             extract_entities_from_text("/fake/path.docx")
 
 
@@ -508,7 +775,9 @@ class ExtractDocumentStructureTests(NetworkBlockerMixin, TestCase):
             # style name ends in a non-integer (mock the style within a real docx)
             elements, tables, full_text = extract_document_structure(path)
             headings = [e for e in elements if e["type"] == "heading"]
-            self.assertGreaterEqual(len(headings), 0)  # just ensure no exception raised
+            self.assertGreaterEqual(
+                len(headings), 0
+            )  # just ensure no exception raised
         finally:
             os.remove(path)
 
@@ -544,7 +813,9 @@ class ExtractTextFromPDFTests(NetworkBlockerMixin, TestCase):
 
     def test_valid_pdf_reads_pages(self):
         """A syntactically valid PDF enters the page-reading loop."""
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, mode="wb") as f:
+        with tempfile.NamedTemporaryFile(
+            suffix=".pdf", delete=False, mode="wb"
+        ) as f:
             f.write(self.MINIMAL_PDF)
             path = f.name
         try:
@@ -558,7 +829,9 @@ class ExtractTextFromPDFTests(NetworkBlockerMixin, TestCase):
 class ExtractTableWithStylingFormattingTests(NetworkBlockerMixin, TestCase):
     """Tests for run-level formatting in extract_table_with_styling."""
 
-    def _make_mock_table(self, bold=False, italic=False, color_rgb=None, fill=None):
+    def _make_mock_table(
+        self, bold=False, italic=False, color_rgb=None, fill=None
+    ):
         mock_table = MagicMock()
         mock_cell = MagicMock()
         mock_cell.text = "test"
@@ -566,7 +839,9 @@ class ExtractTableWithStylingFormattingTests(NetworkBlockerMixin, TestCase):
         mock_tc_pr = MagicMock()
         if fill:
             mock_shading = MagicMock()
-            mock_shading.get.side_effect = lambda attr: fill if "fill" in attr else None
+            mock_shading.get.side_effect = (
+                lambda attr: fill if "fill" in attr else None
+            )
             mock_tc_pr.find.return_value = mock_shading
         else:
             mock_tc_pr.find.return_value = None
@@ -631,7 +906,9 @@ class ExtractTableWithStylingFormattingTests(NetworkBlockerMixin, TestCase):
         mock_row.cells = [mock_cell]
         mock_table.rows = [mock_row]
 
-        html, cells = extract_table_with_styling(mock_table, 0, has_borders=False)
+        html, cells = extract_table_with_styling(
+            mock_table, 0, has_borders=False
+        )
         self.assertEqual(cells[0]["bgColor"], "#FF0000")
         self.assertIn("background-color: #FF0000", cells[0]["style"])
 
@@ -659,7 +936,9 @@ class ExtractTableWithStylingFormattingTests(NetworkBlockerMixin, TestCase):
         mock_row.cells = [mock_cell]
         mock_table.rows = [mock_row]
 
-        html, cells = extract_table_with_styling(mock_table, 0, has_borders=False)
+        html, cells = extract_table_with_styling(
+            mock_table, 0, has_borders=False
+        )
         self.assertEqual(len(cells), 1)
         # No span tags since the empty run was skipped
         self.assertNotIn("<span", html)

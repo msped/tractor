@@ -60,7 +60,9 @@ def extract_with_gliner(model, text):
     """
     results = []
     for chunk, offset in _chunk_text(text):
-        raw = model.predict_entities(chunk, GLINER_LABELS, flat_ner=True, threshold=0.35)
+        raw = model.predict_entities(
+            chunk, GLINER_LABELS, flat_ner=True, threshold=0.35
+        )
         for ent in raw:
             redaction_label = _LABEL_TO_REDACTION_TYPE.get(ent["label"])
             if redaction_label is None:
