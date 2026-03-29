@@ -3,12 +3,14 @@
 import { Box } from '@mui/material';
 import { NavSidebar } from '@/components/NavSidebar';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
+import { SessionWatcher } from '@/components/SessionWatcher';
 
 function DashboardContent({ children }) {
     const { width } = useSidebar();
 
     return (
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+            <SessionWatcher />
             <NavSidebar />
             <Box
                 component="main"

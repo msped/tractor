@@ -67,6 +67,11 @@ describe('<LoginComponent />', () => {
     });
   });
 
+  it('should display session expired message when sessionError is SessionExpired', () => {
+    cy.mount(<LoginComponent sessionError="SessionExpired" />);
+    cy.contains('Your session has expired, please log in again.').should('be.visible');
+  });
+
   it('should render external provider buttons and trigger signIn', () => {
     const providers = {
       "microsoft-entra-id": {

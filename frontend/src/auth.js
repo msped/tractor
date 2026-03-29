@@ -95,14 +95,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             }
             // Refresh the backend token if necessary
             if (getCurrentEpochTime() > token["ref"]) {
-                const response = await apiClient.post("auth/token/refresh",
-                    {
-                        refresh: token["refresh_token"],
-                    },
-                );
-                token["access_token"] = response.data.access;
-                token["refresh_token"] = response.data.refresh;
-                token["ref"] = getCurrentEpochTime() + BACKEND_ACCESS_TOKEN_LIFETIME;
+                try {
+                    const response = await apiClient.post("auth/token/refresh",
+                        {
+                            refresh: token["refresh_token"],
+                        },
+                    );
+                    token["access_token"] = response.data.access;
+                    token["refresh_token"] = response.data.refresh;
+                    token["ref"] = getCurrentEpochTime() + BACKEND_ACCESS_TOKEN_LIFETIME;
+                } catch (error) {
+                    token["error"] = "RefreshTokenError";
+                }
             }
             return token;
         },
@@ -110,7 +114,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         async authorized({req, token}) {
-            if (token && token.user) {
+            if (token && token.user && !token.error) {
                 return true;
             }
             return false;
