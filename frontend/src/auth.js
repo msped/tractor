@@ -114,7 +114,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         async authorized({req, token}) {
-            if (token && token.user) {
+            if (token && token.user && !token.error) {
                 return true;
             }
             return false;
