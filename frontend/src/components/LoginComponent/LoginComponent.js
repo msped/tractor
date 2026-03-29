@@ -3,10 +3,12 @@ import React, { useState, useEffect } from "react";
 import { signIn as RealSignIn, getProviders } from "next-auth/react"
 import { Box, Button, TextField, Typography, Paper, Divider } from "@mui/material";
 
-export const LoginComponent = ({ signIn = RealSignIn }) => {
+export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
-    const [error, setError] = useState("");
+    const [error, setError] = useState(
+        sessionError === "SessionExpired" ? "Your session has expired, please log in again." : ""
+    );
     const [providers, setProviders] = useState(null);
 
     useEffect(() => {
