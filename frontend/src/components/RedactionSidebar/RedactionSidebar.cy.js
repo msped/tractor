@@ -442,4 +442,33 @@ describe('<RedactionSidebar />', () => {
             cy.get('button[aria-label="change redaction type and accept"]').should('not.exist');
         });
     });
+
+    context('REMOVE Highlight Tool button', () => {
+        it('renders the Remove button when documentCompleted is false', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={cy.stub()} documentCompleted={false} />, mountOpts);
+            cy.contains('button', 'Remove').should('be.visible');
+        });
+
+        it('does not render the Remove button when documentCompleted is true', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={cy.stub()} documentCompleted={true} />, mountOpts);
+            cy.contains('button', 'Remove').should('not.exist');
+        });
+
+        it('calls onToggleHighlightTool with REMOVE when the Remove button is clicked', () => {
+            const onToggleHighlightTool = cy.stub().as('onToggleHighlightTool');
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={onToggleHighlightTool} documentCompleted={false} />, mountOpts);
+            cy.contains('button', 'Remove').click();
+            cy.get('@onToggleHighlightTool').should('have.been.calledOnceWith', 'REMOVE');
+        });
+
+        it('shows the Remove button as active when activeHighlightType is REMOVE', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="REMOVE" onToggleHighlightTool={cy.stub()} documentCompleted={false} />, mountOpts);
+            cy.contains('button', 'Remove').should('have.css', 'opacity', '1');
+        });
+
+        it('shows the Remove button as inactive when a different tool is active', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="PII" onToggleHighlightTool={cy.stub()} documentCompleted={false} />, mountOpts);
+            cy.contains('button', 'Remove').should('have.css', 'opacity', '0.45');
+        });
+    });
 });

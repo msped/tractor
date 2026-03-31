@@ -5,6 +5,8 @@ import { Box, Typography, Button, Container, Tooltip, CircularProgress, Dialog, 
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import UndoIcon from '@mui/icons-material/Undo';
+import RedoIcon from '@mui/icons-material/Redo';
 import NextLink from 'next/link';
 import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
@@ -13,6 +15,7 @@ import { DocumentViewer } from '@/components/DocumentViewer';
 import { markAsComplete, resubmitDocument } from '@/services/documentService'
 import { createRedaction, updateRedaction, deleteRedaction, bulkUpdateRedactions, getExemptionTemplates } from '@/services/redactionService';
 import { mergeAdjacentSpans, groupByTextAndType } from '@/utils/mergeRedactionSpans';
+import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -61,18 +64,36 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // State for merged span splits (display-only)
     const [splitMerges, setSplitMerges] = useState(new Set());
 
-    // State for active highlight tool (null | 'PII' | 'OP_DATA' | 'DS_INFO')
+    // State for active highlight tool (null | 'PII' | 'OP_DATA' | 'DS_INFO' | 'REMOVE')
     const [activeHighlightType, setActiveHighlightType] = useState(null);
 
     const handleToggleHighlightTool = useCallback((type) => {
         setActiveHighlightType(prev => prev === type ? null : type);
     }, []);
 
+    // Undo/redo history
+    const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
+
+    // Keyboard shortcuts: Escape clears active tool; Ctrl+Z undoes; Ctrl+Y redoes
     useEffect(() => {
-        const handler = (e) => { if (e.key === 'Escape') setActiveHighlightType(null); };
+        const handler = (e) => {
+            if (e.key === 'Escape') {
+                setActiveHighlightType(null);
+                return;
+            }
+            const inInput = ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable;
+            if (inInput) return;
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                undo();
+            } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                e.preventDefault();
+                redo();
+            }
+        };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, []);
+    }, [undo, redo]);
 
     // Font size controls
     const [fontSizeIndex, setFontSizeIndex] = useState(2);
@@ -122,6 +143,8 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
 
     const handleAcceptSuggestion = useCallback(async (redactionId) => {
         setScrollToId(null);
+        const prev = redactions.find(r => r.id === redactionId);
+        if (!prev) return;
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId, { is_accepted: true },
@@ -130,10 +153,20 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
+            pushHistory(
+                async () => {
+                    const reverted = await updateRedaction(redactionId, { is_accepted: false, justification: null }, session?.access_token);
+                    setRedactions(s => s.map(r => r.id === redactionId ? reverted : r));
+                },
+                async () => {
+                    const reapplied = await updateRedaction(redactionId, { is_accepted: true }, session?.access_token);
+                    setRedactions(s => s.map(r => r.id === redactionId ? reapplied : r));
+                }
+            );
         } catch (error) {
             toast.error("Failed to accept suggestion. Please try again.");
         }
-    }, [session?.access_token]);
+    }, [redactions, session?.access_token, pushHistory]);
 
     const handleBulkAccept = useCallback(async (ids) => {
         setScrollToId(null);
@@ -145,10 +178,26 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
                 return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
             });
+            pushHistory(
+                async () => {
+                    const reverted = await bulkUpdateRedactions(document.id, ids, false, null, session?.access_token);
+                    setRedactions(s => {
+                        const m = new Map(reverted.map(r => [r.id, r]));
+                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                    });
+                },
+                async () => {
+                    const reapplied = await bulkUpdateRedactions(document.id, ids, true, null, session?.access_token);
+                    setRedactions(s => {
+                        const m = new Map(reapplied.map(r => [r.id, r]));
+                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                    });
+                }
+            );
         } catch (error) {
             toast.error("Failed to accept suggestions. Please try again.");
         }
-    }, [document.id, session?.access_token]);
+    }, [document.id, session?.access_token, pushHistory]);
 
     const handleRejectAsDisclosable = useCallback(async (ids, justification) => {
         setScrollToId(null);
@@ -158,6 +207,16 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     ids[0], { is_accepted: false, justification }, session?.access_token
                 );
                 setRedactions(prev => prev.map(r => r.id === ids[0] ? updated : r));
+                pushHistory(
+                    async () => {
+                        const reverted = await updateRedaction(ids[0], { is_accepted: false, justification: null }, session?.access_token);
+                        setRedactions(s => s.map(r => r.id === ids[0] ? reverted : r));
+                    },
+                    async () => {
+                        const reapplied = await updateRedaction(ids[0], { is_accepted: false, justification }, session?.access_token);
+                        setRedactions(s => s.map(r => r.id === ids[0] ? reapplied : r));
+                    }
+                );
             } else {
                 const updatedList = await bulkUpdateRedactions(
                     document.id, ids, false, justification, session?.access_token
@@ -166,34 +225,63 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     const updatedMap = new Map(updatedList.map(r => [r.id, r]));
                     return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
                 });
+                pushHistory(
+                    async () => {
+                        const reverted = await bulkUpdateRedactions(document.id, ids, false, null, session?.access_token);
+                        setRedactions(s => {
+                            const m = new Map(reverted.map(r => [r.id, r]));
+                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    },
+                    async () => {
+                        const reapplied = await bulkUpdateRedactions(document.id, ids, false, justification, session?.access_token);
+                        setRedactions(s => {
+                            const m = new Map(reapplied.map(r => [r.id, r]));
+                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    }
+                );
             }
         } catch (error) {
             toast.error("Failed to reject suggestion. Please try again.");
         }
-    }, [document.id, session?.access_token]);
+    }, [document.id, session?.access_token, pushHistory]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         setScrollToId(null);
+        const prev = redactions.find(r => r.id === redactionId);
+        if (!prev) return;
+        const originalType = prev.redaction_type;
+        const originalIsAccepted = prev.is_accepted;
+        const originalIsSuggestion = prev.is_suggestion;
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId,
-                {
-                    redaction_type: newType,
-                    is_accepted: true,
-                    is_suggestion: false
-                }, session?.access_token
+                { redaction_type: newType, is_accepted: true, is_suggestion: false },
+                session?.access_token
             );
             setRedactions(prev => prev.map(r =>
                 r.id === redactionId ? updatedRedaction : r
             ));
             toast.success("Suggestion type changed and accepted.");
+            pushHistory(
+                async () => {
+                    const reverted = await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion }, session?.access_token);
+                    setRedactions(s => s.map(r => r.id === redactionId ? reverted : r));
+                },
+                async () => {
+                    const reapplied = await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token);
+                    setRedactions(s => s.map(r => r.id === redactionId ? reapplied : r));
+                }
+            );
         } catch (error) {
             toast.error("Failed to change suggestion type. Please try again.");
         }
-    }, [session?.access_token]);
+    }, [redactions, session?.access_token, pushHistory]);
 
     const handleBulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
         setScrollToId(null);
+        const originals = ids.map(id => redactions.find(r => r.id === id)).filter(Boolean);
         try {
             const updates = await Promise.all(
                 ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
@@ -203,10 +291,30 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
             });
             toast.success("Suggestions type changed and accepted.");
+            pushHistory(
+                async () => {
+                    const reverted = await Promise.all(
+                        originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, session?.access_token))
+                    );
+                    setRedactions(s => {
+                        const m = new Map(reverted.map(r => [r.id, r]));
+                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                    });
+                },
+                async () => {
+                    const reapplied = await Promise.all(
+                        ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
+                    );
+                    setRedactions(s => {
+                        const m = new Map(reapplied.map(r => [r.id, r]));
+                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                    });
+                }
+            );
         } catch (error) {
             toast.error("Failed to change suggestion types. Please try again.");
         }
-    }, [session?.access_token]);
+    }, [redactions, session?.access_token, pushHistory]);
 
     const handleOpenRejectDialog = useCallback((redaction) => {
         setBulkRejectIds([]);
@@ -223,14 +331,31 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     const handleRejectConfirm = useCallback(async (redactionId, reason) => {
         setScrollToId(null);
         if (bulkRejectIds.length > 0) {
+            const capturedIds = [...bulkRejectIds];
             try {
                 const updatedRedactions = await bulkUpdateRedactions(
-                    document.id, bulkRejectIds, false, reason, session?.access_token
+                    document.id, capturedIds, false, reason, session?.access_token
                 );
                 setRedactions(prev => {
                     const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
                     return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
                 });
+                pushHistory(
+                    async () => {
+                        const reverted = await bulkUpdateRedactions(document.id, capturedIds, false, null, session?.access_token);
+                        setRedactions(s => {
+                            const m = new Map(reverted.map(r => [r.id, r]));
+                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    },
+                    async () => {
+                        const reapplied = await bulkUpdateRedactions(document.id, capturedIds, false, reason, session?.access_token);
+                        setRedactions(s => {
+                            const m = new Map(reapplied.map(r => [r.id, r]));
+                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    }
+                );
             } catch (error) {
                 toast.error("Failed to reject suggestions. Please try again.");
             } finally {
@@ -248,6 +373,16 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 setRedactions(prev => prev.map(r =>
                     r.id === redactionId ? updatedRedaction : r
                 ));
+                pushHistory(
+                    async () => {
+                        const reverted = await updateRedaction(redactionId, { is_accepted: false, justification: null }, session?.access_token);
+                        setRedactions(s => s.map(r => r.id === redactionId ? reverted : r));
+                    },
+                    async () => {
+                        const reapplied = await updateRedaction(redactionId, { is_accepted: false, justification: reason }, session?.access_token);
+                        setRedactions(s => s.map(r => r.id === redactionId ? reapplied : r));
+                    }
+                );
             } catch (error) {
                 toast.error("Failed to reject suggestion. Please try again.");
             } finally {
@@ -255,43 +390,78 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 setRejectionTarget(null);
             }
         }
-    }, [bulkRejectIds, document.id, session?.access_token]);
+    }, [bulkRejectIds, document.id, session?.access_token, pushHistory]);
 
     const handleSplitMerge = useCallback((mergeKey) => {
         setSplitMerges(prev => new Set(prev).add(mergeKey));
-    }, []);
+        pushHistory(
+            async () => setSplitMerges(prev => { const n = new Set(prev); n.delete(mergeKey); return n; }),
+            async () => setSplitMerges(prev => new Set(prev).add(mergeKey))
+        );
+    }, [pushHistory]);
 
-    const handleRemoveRedaction = useCallback(async (redactionId) => {
-        const redactionToRemove = redactions.find(r => r.id === redactionId);
-        if (!redactionToRemove) return;
-
-        // If it was a user-created redaction, delete it from the server.
+    // Internal helper: perform the remove API call + state update without pushing history.
+    // Returns the snapshot of the redaction before removal, or null on failure.
+    const _removeRedactionById = useCallback(async (redactionToRemove) => {
         if (!redactionToRemove.is_suggestion) {
-            try {
-                await deleteRedaction(redactionId, session?.access_token);
-                setRedactions(prev => prev.filter(r => r.id !== redactionId));
-                toast.success("Redaction deleted.");
-            } catch (error) {
-                toast.error("Failed to delete redaction. Please try again.");
-            }
-            return;
-        }
-
-        // If it was an AI suggestion (accepted or rejected), revert it to a pending suggestion.
-        try {
-            const updatedRedaction = await updateRedaction(
-                redactionId,
+            await deleteRedaction(redactionToRemove.id, session?.access_token);
+            setRedactions(prev => prev.filter(r => r.id !== redactionToRemove.id));
+            toast.success("Redaction deleted.");
+        } else {
+            const updated = await updateRedaction(
+                redactionToRemove.id,
                 { is_accepted: false, justification: null },
                 session?.access_token
             );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
+            setRedactions(prev => prev.map(r => r.id === redactionToRemove.id ? updated : r));
             toast.success("Suggestion reverted to pending.");
-        } catch (error) {
-            toast.error("Failed to revert suggestion. Please try again.");
         }
-    }, [redactions, session?.access_token]);
+    }, [session?.access_token]);
+
+    const handleRemoveRedaction = useCallback(async (redactionId) => {
+        const snap = redactions.find(r => r.id === redactionId);
+        if (!snap) return;
+        try {
+            await _removeRedactionById(snap);
+            if (!snap.is_suggestion) {
+                // Manual redaction deleted — undo recreates it
+                let currentId = snap.id;
+                pushHistory(
+                    async () => {
+                        const created = await createRedaction(document.id, {
+                            text: snap.text,
+                            start_char: snap.start_char,
+                            end_char: snap.end_char,
+                            document: document.id,
+                            redaction_type: snap.redaction_type,
+                            is_suggestion: false,
+                            is_accepted: true,
+                        }, session?.access_token);
+                        currentId = created.id;
+                        setRedactions(prev => [...prev, created]);
+                    },
+                    async () => {
+                        await deleteRedaction(currentId, session?.access_token);
+                        setRedactions(prev => prev.filter(r => r.id !== currentId));
+                    }
+                );
+            } else {
+                // AI suggestion reverted to pending — undo restores prior state
+                pushHistory(
+                    async () => {
+                        const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
+                    },
+                    async () => {
+                        const reverted = await updateRedaction(snap.id, { is_accepted: false, justification: null }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? reverted : r));
+                    }
+                );
+            }
+        } catch (error) {
+            toast.error("Failed to remove redaction. Please try again.");
+        }
+    }, [redactions, session?.access_token, pushHistory, _removeRedactionById, document.id]);
 
     const handleCloseManualRedactionPopover = useCallback(() => {
         setManualRedactionAnchor(null);
@@ -311,6 +481,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     }, []);
 
     const handleCreateManualRedaction = useCallback(async (redactionType, selectionOverride = null) => {
+        if (redactionType === 'REMOVE') return;
         const sel = selectionOverride ?? newSelection;
         const isToolMode = selectionOverride !== null;
         if (!sel) return;
@@ -324,6 +495,8 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             if (isToolMode) {
                 // Tool mode: accept/update every overlapping redaction, preserving is_suggestion,
                 // then create new user redactions for any uncovered gaps within the selection.
+                const originalOverlapping = overlapping.map(r => ({ id: r.id, redaction_type: r.redaction_type, is_accepted: r.is_accepted, is_suggestion: r.is_suggestion }));
+                let currentCreatedIds = [];
                 try {
                     const updates = await Promise.all(
                         overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true }, session?.access_token))
@@ -367,12 +540,59 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                     is_accepted: true,
                                 }, session?.access_token))
                             );
+                            currentCreatedIds = created.map(r => r.id);
                             setRedactions(prev => [...prev, ...created]);
                         } catch (error) {
                             toast.error("Failed to redact uncovered areas. Please try again.");
                         }
                     }
                 }
+
+                pushHistory(
+                    async () => {
+                        // Delete gap-filled redactions
+                        await Promise.all(currentCreatedIds.map(id => deleteRedaction(id, session?.access_token)));
+                        setRedactions(prev => prev.filter(r => !currentCreatedIds.includes(r.id)));
+                        // Revert updated overlapping redactions
+                        const reverted = await Promise.all(
+                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted }, session?.access_token))
+                        );
+                        setRedactions(prev => {
+                            const m = new Map(reverted.map(r => [r.id, r]));
+                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    },
+                    async () => {
+                        const reUpdated = await Promise.all(
+                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true }, session?.access_token))
+                        );
+                        setRedactions(prev => {
+                            const m = new Map(reUpdated.map(r => [r.id, r]));
+                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                        if (gaps.length > 0) {
+                            const docText = document.extracted_text || '';
+                            const substantiveGaps = gaps.filter(gap =>
+                                docText.substring(gap.start_char, gap.end_char).trim().length > 0
+                            );
+                            if (substantiveGaps.length > 0) {
+                                const reCreated = await Promise.all(
+                                    substantiveGaps.map(gap => createRedaction(document.id, {
+                                        text: docText.substring(gap.start_char, gap.end_char),
+                                        start_char: gap.start_char,
+                                        end_char: gap.end_char,
+                                        document: document.id,
+                                        redaction_type: redactionType,
+                                        is_suggestion: false,
+                                        is_accepted: true,
+                                    }, session?.access_token))
+                                );
+                                currentCreatedIds = reCreated.map(r => r.id);
+                                setRedactions(prev => [...prev, ...reCreated]);
+                            }
+                        }
+                    }
+                );
 
                 handleCloseManualRedactionPopover();
                 return;
@@ -386,6 +606,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 return;
             }
             // Different classification — overwrite the existing redaction(s)
+            const originalOverlapping = overlapping.map(r => ({ id: r.id, redaction_type: r.redaction_type, is_accepted: r.is_accepted, is_suggestion: r.is_suggestion }));
             try {
                 const updates = await Promise.all(
                     overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
@@ -396,6 +617,26 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 });
                 handleCloseManualRedactionPopover();
                 toast.success("Redaction classification updated.");
+                pushHistory(
+                    async () => {
+                        const reverted = await Promise.all(
+                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, session?.access_token))
+                        );
+                        setRedactions(prev => {
+                            const m = new Map(reverted.map(r => [r.id, r]));
+                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    },
+                    async () => {
+                        const reapplied = await Promise.all(
+                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
+                        );
+                        setRedactions(prev => {
+                            const m = new Map(reapplied.map(r => [r.id, r]));
+                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
+                        });
+                    }
+                );
             } catch (error) {
                 handleCloseManualRedactionPopover();
                 toast.error("Failed to update redaction. Please try again.");
@@ -410,19 +651,33 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             is_suggestion: false,
             is_accepted: true,
         };
+        let currentCreatedId = null;
         try {
             const createdRedaction = await createRedaction(document.id, newRedaction, session?.access_token);
+            currentCreatedId = createdRedaction.id;
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
             toast.success("Redaction created successfully.");
+            pushHistory(
+                async () => {
+                    await deleteRedaction(currentCreatedId, session?.access_token);
+                    setRedactions(prev => prev.filter(r => r.id !== currentCreatedId));
+                },
+                async () => {
+                    const reCreated = await createRedaction(document.id, newRedaction, session?.access_token);
+                    currentCreatedId = reCreated.id;
+                    setRedactions(prev => [...prev, reCreated]);
+                }
+            );
         } catch (error) {
             handleCloseManualRedactionPopover();
             toast.error("Failed to create redaction. Please try again.");
         }
 
-    }, [newSelection, document.id, document.extracted_text, handleCloseManualRedactionPopover, session?.access_token, redactions]);
+    }, [newSelection, document.id, document.extracted_text, handleCloseManualRedactionPopover, session?.access_token, redactions, pushHistory]);
 
     const handleTextSelect = useCallback((selection, rect) => {
+        if (activeHighlightType === 'REMOVE') return;
         if (activeHighlightType) {
             setNewSelection(selection);
             setPendingRedaction(selection);
@@ -434,6 +689,155 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         const virtualEl = { getBoundingClientRect: () => rect, nodeType: 1 };
         setManualRedactionAnchor(virtualEl);
     }, [activeHighlightType, handleCreateManualRedaction]);
+
+    // When Remove tool is active and text is selected, trim/remove the overlapping accepted redaction(s).
+    const handleRemoveSelect = useCallback(async (selection) => {
+        const selStart = selection.start_char;
+        const selEnd = selection.end_char;
+        const extractedText = document.extracted_text;
+
+        const overlapping = redactions.filter(r =>
+            (r.is_accepted || !r.is_suggestion) &&
+            r.start_char < selEnd && r.end_char > selStart
+        );
+
+        if (overlapping.length === 0) return;
+
+        const snapshots = overlapping.map(r => ({ ...r }));
+
+        // For split operations a new record is created; track its ID so undo can delete it.
+        // Using a mutable ref-style variable so redo can keep it current after re-creation.
+        let splitCreatedId = null;
+
+        try {
+            for (const r of overlapping) {
+                const fullyContained = selStart <= r.start_char && selEnd >= r.end_char;
+                const trimEnd = !fullyContained && selEnd >= r.end_char;
+                const trimStart = !fullyContained && selStart <= r.start_char;
+                const splitMiddle = !fullyContained && !trimEnd && !trimStart;
+
+                if (fullyContained) {
+                    if (!r.is_suggestion) {
+                        await deleteRedaction(r.id, session?.access_token);
+                        setRedactions(prev => prev.filter(x => x.id !== r.id));
+                    } else {
+                        const updated = await updateRedaction(r.id, { is_accepted: false, justification: null }, session?.access_token);
+                        setRedactions(prev => prev.map(x => x.id === r.id ? updated : x));
+                    }
+                } else if (trimEnd) {
+                    const updated = await updateRedaction(r.id, {
+                        end_char: selStart,
+                        text: extractedText.substring(r.start_char, selStart),
+                    }, session?.access_token);
+                    setRedactions(prev => prev.map(x => x.id === r.id ? updated : x));
+                } else if (trimStart) {
+                    const updated = await updateRedaction(r.id, {
+                        start_char: selEnd,
+                        text: extractedText.substring(selEnd, r.end_char),
+                    }, session?.access_token);
+                    setRedactions(prev => prev.map(x => x.id === r.id ? updated : x));
+                } else if (splitMiddle) {
+                    const updatedFirst = await updateRedaction(r.id, {
+                        end_char: selStart,
+                        text: extractedText.substring(r.start_char, selStart),
+                    }, session?.access_token);
+                    setRedactions(prev => prev.map(x => x.id === r.id ? updatedFirst : x));
+                    const createdSecond = await createRedaction(document.id, {
+                        text: extractedText.substring(selEnd, r.end_char),
+                        start_char: selEnd,
+                        end_char: r.end_char,
+                        document: document.id,
+                        redaction_type: r.redaction_type,
+                        is_suggestion: r.is_suggestion,
+                        is_accepted: r.is_accepted,
+                        justification: r.justification,
+                    }, session?.access_token);
+                    setRedactions(prev => [...prev, createdSecond]);
+                    splitCreatedId = createdSecond.id;
+                }
+            }
+        } catch {
+            toast.error("Failed to modify redaction. Please try again.");
+            return;
+        }
+
+        pushHistory(
+            async () => {
+                // Undo: restore all original positions/state
+                for (const snap of snapshots) {
+                    const fullyContained = selStart <= snap.start_char && selEnd >= snap.end_char;
+                    const splitMiddle = !fullyContained && selStart > snap.start_char && selEnd < snap.end_char;
+
+                    if (fullyContained) {
+                        if (!snap.is_suggestion) {
+                            const created = await createRedaction(document.id, {
+                                text: snap.text, start_char: snap.start_char, end_char: snap.end_char,
+                                document: document.id, redaction_type: snap.redaction_type,
+                                is_suggestion: false, is_accepted: true,
+                            }, session?.access_token);
+                            setRedactions(prev => [...prev, created]);
+                        } else {
+                            const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token);
+                            setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
+                        }
+                    } else {
+                        const restored = await updateRedaction(snap.id, {
+                            start_char: snap.start_char, end_char: snap.end_char, text: snap.text,
+                        }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
+                        if (splitMiddle && splitCreatedId) {
+                            await deleteRedaction(splitCreatedId, session?.access_token);
+                            setRedactions(prev => prev.filter(r => r.id !== splitCreatedId));
+                            splitCreatedId = null;
+                        }
+                    }
+                }
+            },
+            async () => {
+                // Redo: re-apply the trim/remove operations
+                for (const snap of snapshots) {
+                    const fullyContained = selStart <= snap.start_char && selEnd >= snap.end_char;
+                    const trimEnd = !fullyContained && selEnd >= snap.end_char;
+                    const trimStart = !fullyContained && selStart <= snap.start_char;
+                    const splitMiddle = !fullyContained && !trimEnd && !trimStart;
+
+                    if (fullyContained) {
+                        if (!snap.is_suggestion) {
+                            await deleteRedaction(snap.id, session?.access_token);
+                            setRedactions(prev => prev.filter(r => r.id !== snap.id));
+                        } else {
+                            const updated = await updateRedaction(snap.id, { is_accepted: false, justification: null }, session?.access_token);
+                            setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                        }
+                    } else if (trimEnd) {
+                        const updated = await updateRedaction(snap.id, {
+                            end_char: selStart, text: extractedText.substring(snap.start_char, selStart),
+                        }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                    } else if (trimStart) {
+                        const updated = await updateRedaction(snap.id, {
+                            start_char: selEnd, text: extractedText.substring(selEnd, snap.end_char),
+                        }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                    } else if (splitMiddle) {
+                        const updated = await updateRedaction(snap.id, {
+                            end_char: selStart, text: extractedText.substring(snap.start_char, selStart),
+                        }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                        const created = await createRedaction(document.id, {
+                            text: extractedText.substring(selEnd, snap.end_char),
+                            start_char: selEnd, end_char: snap.end_char,
+                            document: document.id, redaction_type: snap.redaction_type,
+                            is_suggestion: snap.is_suggestion, is_accepted: snap.is_accepted,
+                            justification: snap.justification,
+                        }, session?.access_token);
+                        setRedactions(prev => [...prev, created]);
+                        splitCreatedId = created.id;
+                    }
+                }
+            }
+        );
+    }, [redactions, pushHistory, session?.access_token, document.id, document.extracted_text]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);
@@ -466,34 +870,6 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         setScrollToDocumentId(null);
     }, [scrollToDocumentId]);
 
-    const handleMarkAsComplete = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const updatedDocument = await markAsComplete(currentDocument.id, session?.access_token);
-            console.log(updatedDocument);
-            toast.success("Document is ready for disclosure.");
-            router.push(`/cases/${currentDocument.case}`);
-        } catch (error) {
-            toast.error("Failed to mark document as complete. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
-    }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
-
-    const handleResubmit = useCallback(async () => {
-        setIsResubmitting(true);
-        try {
-            await resubmitDocument(currentDocument.id, session?.access_token);
-            toast.success("Document resubmitted for processing.");
-            router.push(`/cases/${currentDocument.case}`);
-        } catch (error) {
-            toast.error("Failed to resubmit document. Please try again.");
-        } finally {
-            setIsResubmitting(false);
-            setResubmitDialogOpen(false);
-        }
-    }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
-
     // Compute grouped/merged display sections for the sidebar
     const displaySections = useMemo(() => {
         const pending = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
@@ -513,6 +889,89 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             manual: processSection(manual),
         };
     }, [redactions, splitMerges]);
+
+    // When the REMOVE tool is active and a highlight is clicked in the document,
+    // find all IDs in the same merge group and remove them as a single undo step.
+    const handleUnhighlightClick = useCallback(async (clickedId) => {
+        // Find all IDs in the same merge group
+        let targetIds = [clickedId];
+        outer: for (const section of Object.values(displaySections)) {
+            for (const item of section.items) {
+                const candidates = item.isGroup
+                    ? item.items.flatMap(gi => gi.ids ?? [gi.id])
+                    : (item.ids ?? [item.id]);
+                if (candidates.includes(clickedId)) {
+                    targetIds = candidates;
+                    break outer;
+                }
+            }
+        }
+
+        const snapshots = targetIds.map(id => redactions.find(r => r.id === id)).filter(Boolean);
+        if (snapshots.length === 0) return;
+
+        try {
+            await Promise.all(snapshots.map(snap => _removeRedactionById(snap)));
+        } catch {
+            toast.error("Failed to remove redaction. Please try again.");
+            return;
+        }
+
+        pushHistory(
+            async () => {
+                for (const snap of snapshots) {
+                    if (!snap.is_suggestion) {
+                        const created = await createRedaction(document.id, {
+                            text: snap.text,
+                            start_char: snap.start_char,
+                            end_char: snap.end_char,
+                            document: document.id,
+                            redaction_type: snap.redaction_type,
+                            is_suggestion: false,
+                            is_accepted: true,
+                        }, session?.access_token);
+                        setRedactions(prev => [...prev, created]);
+                    } else {
+                        const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token);
+                        setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
+                    }
+                }
+            },
+            async () => {
+                await Promise.all(snapshots.map(snap => _removeRedactionById(snap)));
+            }
+        );
+    }, [displaySections, redactions, pushHistory, _removeRedactionById, document.id, session?.access_token]);
+
+    const handleMarkAsComplete = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const updatedDocument = await markAsComplete(currentDocument.id, session?.access_token);
+            console.log(updatedDocument);
+            clearHistory();
+            toast.success("Document is ready for disclosure.");
+            router.push(`/cases/${currentDocument.case}`);
+        } catch (error) {
+            toast.error("Failed to mark document as complete. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    }, [currentDocument.id, currentDocument.case, session?.access_token, router, clearHistory]);
+
+    const handleResubmit = useCallback(async () => {
+        setIsResubmitting(true);
+        try {
+            await resubmitDocument(currentDocument.id, session?.access_token);
+            clearHistory();
+            toast.success("Document resubmitted for processing.");
+            router.push(`/cases/${currentDocument.case}`);
+        } catch (error) {
+            toast.error("Failed to resubmit document. Please try again.");
+        } finally {
+            setIsResubmitting(false);
+            setResubmitDialogOpen(false);
+        }
+    }, [currentDocument.id, currentDocument.case, session?.access_token, router, clearHistory]);
 
     const pendingCount = displaySections.pending.total;
 
@@ -552,6 +1011,30 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                     sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}
                                 >
                                     <TextIncreaseIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Undo (Ctrl+Z)">
+                            <span>
+                                <IconButton
+                                    aria-label="Undo"
+                                    onClick={undo}
+                                    disabled={!canUndo}
+                                    size="small"
+                                >
+                                    <UndoIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Redo (Ctrl+Y)">
+                            <span>
+                                <IconButton
+                                    aria-label="Redo"
+                                    onClick={redo}
+                                    disabled={!canRedo}
+                                    size="small"
+                                >
+                                    <RedoIcon />
                                 </IconButton>
                             </span>
                         </Tooltip>
@@ -600,7 +1083,9 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     pendingRedaction={pendingRedaction}
                     hoveredSuggestionId={hoveredSuggestionId}
                     onTextSelect={handleTextSelect}
+                    onRemoveSelect={handleRemoveSelect}
                     onHighlightClick={handleHighlightClick}
+                    onUnhighlightClick={handleUnhighlightClick}
                     reviewComplete={pendingCount === 0}
                     baseFontSize={baseFontSize}
                     activeHighlightType={activeHighlightType}

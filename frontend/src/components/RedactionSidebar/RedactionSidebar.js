@@ -31,6 +31,7 @@ const HIGHLIGHT_TOOLS = [
     { type: 'PII',     label: 'PII',        fullLabel: 'Third-Party PII',         color: 'rgb(46, 204, 113)'  },
     { type: 'OP_DATA', label: 'Op. Data',   fullLabel: 'Operational Data',         color: 'rgb(0, 221, 255)'   },
     { type: 'DS_INFO', label: 'DS Info',    fullLabel: 'Data Subject Information', color: 'rgb(177, 156, 217)' },
+    { type: 'REMOVE',  label: 'Remove',     fullLabel: 'Remove Highlight',         color: 'rgb(231, 76, 60)'   },
 ];
 
 export const RedactionSidebar = ({
@@ -299,7 +300,7 @@ export const RedactionSidebar = ({
                         {HIGHLIGHT_TOOLS.map(({ type, label, fullLabel, color }) => {
                             const isActive = activeHighlightType === type;
                             return (
-                                <Tooltip key={type} title={isActive ? `Deactivate: ${fullLabel}` : `Highlight as: ${fullLabel}`}>
+                                <Tooltip key={type} title={isActive ? `Deactivate: ${fullLabel}` : type === 'REMOVE' ? `Click a highlight to remove it` : `Highlight as: ${fullLabel}`}>
                                     <Button
                                         size="small"
                                         variant="contained"

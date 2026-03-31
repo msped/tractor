@@ -287,6 +287,77 @@ describe('<DocumentViewer />', () => {
         });
     });
 
+    context('REMOVE Tool', () => {
+        it('calls onUnhighlightClick instead of onHighlightClick when REMOVE tool is active', () => {
+            const onHighlightClick = cy.spy().as('onHighlightClick');
+            const onUnhighlightClick = cy.spy().as('onUnhighlightClick');
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    onHighlightClick={onHighlightClick}
+                    onUnhighlightClick={onUnhighlightClick}
+                    activeHighlightType="REMOVE"
+                />
+            );
+            cy.contains('span', 'operational data').click();
+            cy.get('@onUnhighlightClick').should('have.been.calledOnceWith', 'redaction-2');
+            cy.get('@onHighlightClick').should('not.have.been.called');
+        });
+
+        it('calls onHighlightClick normally when REMOVE tool is not active', () => {
+            const onHighlightClick = cy.spy().as('onHighlightClick');
+            const onUnhighlightClick = cy.spy().as('onUnhighlightClick');
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    onHighlightClick={onHighlightClick}
+                    onUnhighlightClick={onUnhighlightClick}
+                />
+            );
+            cy.contains('span', 'operational data').click();
+            cy.get('@onHighlightClick').should('have.been.calledOnceWith', 'redaction-2');
+            cy.get('@onUnhighlightClick').should('not.have.been.called');
+        });
+
+        it('does not call onTextSelect on mouseup when REMOVE tool is active', () => {
+            const onTextSelect = cy.spy().as('onTextSelect');
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    onTextSelect={onTextSelect}
+                    activeHighlightType="REMOVE"
+                />
+            );
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+            cy.get('@onTextSelect').should('not.have.been.called');
+        });
+
+        it('shows text cursor on the paper when REMOVE tool is active', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    activeHighlightType="REMOVE"
+                />
+            );
+            cy.get('[data-testid="document-viewer"]').should('have.css', 'cursor', 'text');
+        });
+
+        it('shows text cursor on the paper when a create tool is active', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    activeHighlightType="PII"
+                />
+            );
+            cy.get('[data-testid="document-viewer"]').should('have.css', 'cursor', 'text');
+        });
+    });
+
     context('Color-Coded Mode', () => {
         it('renders accepted redactions with solid colors and hides suggestions', () => {
             cy.mount(

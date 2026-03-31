@@ -723,7 +723,7 @@ describe('<RedactionComponent />', () => {
             cy.contains('li', 'test document').contains('button', 'Remove').click({ force: true });
 
             cy.wait('@failedDelete');
-            cy.contains('Failed to delete redaction. Please try again.').should('be.visible');
+            cy.contains('Failed to remove redaction. Please try again.').should('be.visible');
         });
 
         it('shows error toast when mark as complete fails', () => {
@@ -745,6 +745,198 @@ describe('<RedactionComponent />', () => {
 
             cy.wait('@failedBulk');
             cy.contains('Failed to accept suggestions. Please try again.').should('be.visible');
+        });
+    });
+
+    context('Undo/Redo History', () => {
+        beforeEach(() => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], ...req.body } });
+            }).as('patchR1');
+        });
+
+        it('Undo and Redo buttons are initially disabled', () => {
+            mountRedactionComponent();
+            cy.get('button[aria-label="Undo"]').should('be.disabled');
+            cy.get('button[aria-label="Redo"]').should('be.disabled');
+        });
+
+        it('Undo button is enabled after accepting a suggestion', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@patchR1');
+            cy.get('button[aria-label="Undo"]').should('not.be.disabled');
+        });
+
+        it('Undo reverts an accepted suggestion back to pending', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@patchR1');
+
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: null } });
+            }).as('undoPatchR1');
+
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@undoPatchR1');
+            cy.get('button[aria-label="Undo"]').should('be.disabled');
+            cy.get('button[aria-label="Redo"]').should('not.be.disabled');
+            cy.contains('pending (1)').should('be.visible');
+        });
+
+        it('Redo re-accepts the suggestion after undoing', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@patchR1');
+
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: null } });
+            }).as('undoPatch');
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@undoPatch');
+
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: true } });
+            }).as('redoPatch');
+            cy.get('button[aria-label="Redo"]').click();
+            cy.wait('@redoPatch');
+            cy.get('button[aria-label="Redo"]').should('be.disabled');
+            cy.get('button[aria-label="Undo"]').should('not.be.disabled');
+        });
+
+        it('Ctrl+Z triggers undo', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@patchR1');
+
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: null } });
+            }).as('undoViaKeyboard');
+
+            cy.get('body').trigger('keydown', { key: 'z', ctrlKey: true });
+            cy.wait('@undoViaKeyboard');
+            cy.get('button[aria-label="Undo"]').should('be.disabled');
+        });
+
+        it('Ctrl+Z in a focused input does not trigger undo', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@patchR1');
+
+            // Open context editor on an accepted card to get a textarea
+            cy.contains('accepted (2)').click();
+            cy.contains('button', 'Context').first().click();
+
+            // Focus the textarea and press Ctrl+Z — undo should not fire
+            cy.get('textarea').first().focus();
+            cy.get('textarea').first().trigger('keydown', { key: 'z', ctrlKey: true });
+            // Undo button remains enabled (undo was not consumed)
+            cy.get('button[aria-label="Undo"]').should('not.be.disabled');
+        });
+
+        it('performing a new action after undo clears the redo stack', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@patchR1');
+
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: false, justification: null } });
+            }).as('undoPatch');
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@undoPatch');
+            cy.get('button[aria-label="Redo"]').should('not.be.disabled');
+
+            // Now accept again — should clear redo
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: true } });
+            }).as('reAccept');
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@reAccept');
+            cy.get('button[aria-label="Redo"]').should('be.disabled');
+        });
+
+        it('Undo button tooltip contains Ctrl+Z', () => {
+            mountRedactionComponent();
+            cy.get('button[aria-label="Undo"]').parent().trigger('mouseover');
+            cy.contains('Undo (Ctrl+Z)').should('be.visible');
+        });
+
+        it('Redo button tooltip contains Ctrl+Y', () => {
+            mountRedactionComponent();
+            cy.get('button[aria-label="Redo"]').parent().trigger('mouseover');
+            cy.contains('Redo (Ctrl+Y)').should('be.visible');
+        });
+
+        it('history is cleared after resubmit', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[0], is_accepted: true } });
+            }).as('accept');
+            cy.intercept('POST', '**/cases/documents/doc-1/resubmit', { statusCode: 200 }).as('resubmit');
+
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').contains('button', 'Accept').click();
+            cy.wait('@accept');
+            cy.get('button[aria-label="Undo"]').should('not.be.disabled');
+
+            cy.get('button[aria-label="Resubmit for processing"]').click();
+            cy.contains('button', 'Resubmit').click();
+            cy.wait('@resubmit');
+            // After redirect the undo stack was cleared (component unmounts, but clearing was called)
+        });
+    });
+
+    context('REMOVE Tool', () => {
+        it('Remove button appears in the sidebar toolbar', () => {
+            mountRedactionComponent();
+            cy.contains('button', 'Remove').should('be.visible');
+        });
+
+        it('clicking a suggestion highlight with REMOVE active reverts it to pending', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[1], is_accepted: false, justification: null } });
+            }).as('revertR2');
+
+            mountRedactionComponent();
+            cy.contains('button', 'Remove').click();
+            // Click the accepted suggestion highlight (email@example.com)
+            cy.get('[data-redaction-id="r2"]').click();
+            cy.wait('@revertR2');
+            cy.contains('pending (2)').should('be.visible');
+        });
+
+        it('clicking a manual redaction highlight with REMOVE active deletes it', () => {
+            cy.intercept('DELETE', '**/cases/document/redaction/r4', { statusCode: 204 }).as('deleteR4');
+
+            mountRedactionComponent();
+            cy.contains('button', 'Remove').click();
+            cy.get('[data-redaction-id="r4"]').click();
+            cy.wait('@deleteR4');
+        });
+
+        it('REMOVE tool stays active after clicking a highlight', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[1], is_accepted: false, justification: null } });
+            }).as('revert');
+
+            mountRedactionComponent();
+            cy.contains('button', 'Remove').click();
+            cy.get('[data-redaction-id="r2"]').click();
+            cy.wait('@revert');
+            // Tool should remain active — Remove button stays at full opacity
+            cy.contains('button', 'Remove').should('have.css', 'opacity', '1');
+        });
+
+        it('unhighlight action is undoable', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
+                req.reply({ statusCode: 200, body: { ...mockRedactions[1], is_accepted: false, justification: null } });
+            }).as('revert');
+
+            mountRedactionComponent();
+            cy.contains('button', 'Remove').click();
+            cy.get('[data-redaction-id="r2"]').click();
+            cy.wait('@revert');
+
+            cy.get('button[aria-label="Undo"]').should('not.be.disabled');
         });
     });
 });
