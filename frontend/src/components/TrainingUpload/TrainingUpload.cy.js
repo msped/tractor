@@ -52,6 +52,15 @@ describe('<TrainingUpload />', () => {
       cy.contains('2 document(s) uploaded successfully.').should('be.visible');
     });
 
+    it('shows error toast when only non-docx files are selected', () => {
+      cy.fullMount(<TrainingUpload unprocessedDocsCount={0} />, mountOpts);
+      cy.get('input[type="file"]').selectFile(
+        { contents: Cypress.Buffer.from('plain text'), fileName: 'notes.txt' },
+        { force: true }
+      );
+      cy.contains('No .docx files selected. Only .docx files are supported.').should('be.visible');
+    });
+
     it('ignores non-docx files and shows a toast message', () => {
       cy.fullMount(<TrainingUpload unprocessedDocsCount={0} />, mountOpts);
 
@@ -73,6 +82,24 @@ describe('<TrainingUpload />', () => {
       cy.get('input[type="file"]').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'fail.docx' }, { force: true });
 
       cy.contains('An error occurred during upload: Network Failure').should('be.visible');
+    });
+  });
+
+  context('Drag and Drop', () => {
+    it('handles dragenter and dragleave on the upload button', () => {
+      cy.fullMount(<TrainingUpload unprocessedDocsCount={0} />, mountOpts);
+      cy.get('button').first().trigger('dragenter');
+      cy.get('button').first().trigger('dragleave');
+    });
+
+    it('uploads a file dropped onto the upload button', () => {
+      cy.fullMount(<TrainingUpload unprocessedDocsCount={0} />, mountOpts);
+      cy.get('button').first().selectFile([{
+        contents: Cypress.Buffer.from('file content'),
+        fileName: 'test.docx',
+      }], { action: 'drag-drop', force: true });
+      cy.wait('@uploadTrainingDoc');
+      cy.contains('1 document(s) uploaded successfully.').should('be.visible');
     });
   });
 

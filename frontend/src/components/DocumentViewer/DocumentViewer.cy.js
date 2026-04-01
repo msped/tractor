@@ -358,6 +358,160 @@ describe('<DocumentViewer />', () => {
         });
     });
 
+    context('Structured Document Rendering', () => {
+        const structuredText = 'Hello World\nThis is a paragraph.';
+        const structuredStructure = [
+            { type: 'heading', level: 2, text: 'Hello World', start: 0, end: 11 },
+            { type: 'paragraph', text: 'This is a paragraph.', start: 12, end: 32 },
+        ];
+
+        it('renders heading elements in structured mode', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={structuredText}
+                    structure={structuredStructure}
+                    redactions={[]}
+                />
+            );
+            cy.get('h2').should('contain.text', 'Hello World');
+        });
+
+        it('renders heading with redaction highlight', () => {
+            const headingRedaction = [
+                { id: 'hr1', start_char: 6, end_char: 11, text: 'World', redaction_type: 'PII', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(
+                <DocumentViewer
+                    text={structuredText}
+                    structure={structuredStructure}
+                    redactions={headingRedaction}
+                />
+            );
+            cy.get('h2').contains('span', 'World').should('have.css', 'background-color', 'rgba(46, 204, 113, 0.7)');
+        });
+
+        it('renders table as HTML when no cell data is provided (fallback)', () => {
+            const htmlTableStructure = [
+                { type: 'table', table_id: 0, start: 0, end: 20 },
+            ];
+            const htmlTables = [{
+                id: 0,
+                hasBorders: true,
+                html: '<table><tr><td>HTML Cell</td></tr></table>',
+                ner_start: 0,
+                ner_end: 20,
+            }];
+            cy.mount(
+                <DocumentViewer
+                    text="table content here"
+                    structure={htmlTableStructure}
+                    tables={htmlTables}
+                    redactions={[]}
+                />
+            );
+            cy.contains('td', 'HTML Cell').should('be.visible');
+        });
+
+        it('calculates correct character offsets for text selection in structured mode', () => {
+            const onTextSelect = cy.spy().as('onTextSelect');
+            cy.mount(
+                <DocumentViewer
+                    text={structuredText}
+                    structure={structuredStructure}
+                    redactions={[]}
+                    onTextSelect={onTextSelect}
+                />
+            );
+
+            // Select "is a" within the paragraph element
+            // Paragraph text: "This is a paragraph." starts at char 12
+            // "is a" starts at offset 5 within the paragraph → global char 17
+            cy.contains('p', 'This is a paragraph.').then($para => {
+                const para = $para[0];
+                const textNode = para.firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 5);
+                range.setEnd(textNode, 9);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            cy.get('@onTextSelect').should('have.been.calledOnce');
+            cy.get('@onTextSelect').should((spy) => {
+                const [selection] = spy.getCall(0).args;
+                expect(selection.text).to.equal('is a');
+                expect(selection.start_char).to.equal(17);
+                expect(selection.end_char).to.equal(21);
+            });
+        });
+    });
+
+    context('Review Complete Mode', () => {
+        it('hides rejected redactions when reviewComplete is true', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    viewMode="review"
+                    reviewComplete={true}
+                />
+            );
+            // Accepted redactions still visible
+            cy.contains('span', 'PII').should('be.visible');
+            // Rejected suggestion hidden when reviewComplete
+            cy.contains('span', 'rejected suggestion').should('not.exist');
+        });
+
+        it('shows a rejected redaction when hovered even with reviewComplete', () => {
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={redactions}
+                    viewMode="review"
+                    reviewComplete={true}
+                    hoveredSuggestionId="redaction-4"
+                />
+            );
+            cy.contains('span', 'rejected suggestion').should('be.visible');
+        });
+    });
+
+    context('onRemoveSelect callback', () => {
+        it('calls onRemoveSelect (not onTextSelect) when text is selected in REMOVE mode', () => {
+            const onRemoveSelect = cy.spy().as('onRemoveSelect');
+            const onTextSelect = cy.spy().as('onTextSelect');
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={[]}
+                    onTextSelect={onTextSelect}
+                    onRemoveSelect={onRemoveSelect}
+                    activeHighlightType="REMOVE"
+                />
+            );
+
+            cy.get('[data-testid="document-viewer"]').then($paper => {
+                const textNode = $paper[0].firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, 4);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            cy.get('@onRemoveSelect').should('have.been.calledOnce');
+            cy.get('@onTextSelect').should('not.have.been.called');
+            cy.get('@onRemoveSelect').should((spy) => {
+                const [selection] = spy.getCall(0).args;
+                expect(selection.text).to.equal('This');
+                expect(selection.start_char).to.equal(0);
+                expect(selection.end_char).to.equal(4);
+            });
+        });
+    });
+
     context('Color-Coded Mode', () => {
         it('renders accepted redactions with solid colors and hides suggestions', () => {
             cy.mount(
