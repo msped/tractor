@@ -74,6 +74,19 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     // Undo/redo history
     const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
 
+    // Merge an array of updated redaction objects into state by id.
+    const applyUpdates = useCallback((updates) => {
+        setRedactions(prev => {
+            const m = new Map(updates.map(r => [r.id, r]));
+            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
+        });
+    }, []);
+
+    // Replace a single redaction in state (matched by updated.id).
+    const applySingle = useCallback((updated) => {
+        setRedactions(prev => prev.map(r => r.id === updated.id ? updated : r));
+    }, []);
+
     // Keyboard shortcuts: Escape clears active tool; Ctrl+Z undoes; Ctrl+Y redoes
     useEffect(() => {
         const handler = (e) => {
@@ -150,23 +163,15 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 redactionId, { is_accepted: true },
                 session?.access_token
             );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
+            applySingle(updatedRedaction);
             pushHistory(
-                async () => {
-                    const reverted = await updateRedaction(redactionId, { is_accepted: false, justification: null }, session?.access_token);
-                    setRedactions(s => s.map(r => r.id === redactionId ? reverted : r));
-                },
-                async () => {
-                    const reapplied = await updateRedaction(redactionId, { is_accepted: true }, session?.access_token);
-                    setRedactions(s => s.map(r => r.id === redactionId ? reapplied : r));
-                }
+                async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null }, session?.access_token)),
+                async () => applySingle(await updateRedaction(redactionId, { is_accepted: true }, session?.access_token))
             );
         } catch (error) {
             toast.error("Failed to accept suggestion. Please try again.");
         }
-    }, [redactions, session?.access_token, pushHistory]);
+    }, [redactions, session?.access_token, pushHistory, applySingle]);
 
     const handleBulkAccept = useCallback(async (ids) => {
         setScrollToId(null);
@@ -174,30 +179,15 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             const updatedRedactions = await bulkUpdateRedactions(
                 document.id, ids, true, null, session?.access_token
             );
-            setRedactions(prev => {
-                const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
-                return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-            });
+            applyUpdates(updatedRedactions);
             pushHistory(
-                async () => {
-                    const reverted = await bulkUpdateRedactions(document.id, ids, false, null, session?.access_token);
-                    setRedactions(s => {
-                        const m = new Map(reverted.map(r => [r.id, r]));
-                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                    });
-                },
-                async () => {
-                    const reapplied = await bulkUpdateRedactions(document.id, ids, true, null, session?.access_token);
-                    setRedactions(s => {
-                        const m = new Map(reapplied.map(r => [r.id, r]));
-                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                    });
-                }
+                async () => applyUpdates(await bulkUpdateRedactions(document.id, ids, false, null, session?.access_token)),
+                async () => applyUpdates(await bulkUpdateRedactions(document.id, ids, true, null, session?.access_token))
             );
         } catch (error) {
             toast.error("Failed to accept suggestions. Please try again.");
         }
-    }, [document.id, session?.access_token, pushHistory]);
+    }, [document.id, session?.access_token, pushHistory, applyUpdates]);
 
     const handleRejectAsDisclosable = useCallback(async (ids, justification) => {
         setScrollToId(null);
@@ -206,46 +196,25 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 const updated = await updateRedaction(
                     ids[0], { is_accepted: false, justification }, session?.access_token
                 );
-                setRedactions(prev => prev.map(r => r.id === ids[0] ? updated : r));
+                applySingle(updated);
                 pushHistory(
-                    async () => {
-                        const reverted = await updateRedaction(ids[0], { is_accepted: false, justification: null }, session?.access_token);
-                        setRedactions(s => s.map(r => r.id === ids[0] ? reverted : r));
-                    },
-                    async () => {
-                        const reapplied = await updateRedaction(ids[0], { is_accepted: false, justification }, session?.access_token);
-                        setRedactions(s => s.map(r => r.id === ids[0] ? reapplied : r));
-                    }
+                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification: null }, session?.access_token)),
+                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification }, session?.access_token))
                 );
             } else {
                 const updatedList = await bulkUpdateRedactions(
                     document.id, ids, false, justification, session?.access_token
                 );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updatedList.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
+                applyUpdates(updatedList);
                 pushHistory(
-                    async () => {
-                        const reverted = await bulkUpdateRedactions(document.id, ids, false, null, session?.access_token);
-                        setRedactions(s => {
-                            const m = new Map(reverted.map(r => [r.id, r]));
-                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                    },
-                    async () => {
-                        const reapplied = await bulkUpdateRedactions(document.id, ids, false, justification, session?.access_token);
-                        setRedactions(s => {
-                            const m = new Map(reapplied.map(r => [r.id, r]));
-                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                    }
+                    async () => applyUpdates(await bulkUpdateRedactions(document.id, ids, false, null, session?.access_token)),
+                    async () => applyUpdates(await bulkUpdateRedactions(document.id, ids, false, justification, session?.access_token))
                 );
             }
         } catch (error) {
             toast.error("Failed to reject suggestion. Please try again.");
         }
-    }, [document.id, session?.access_token, pushHistory]);
+    }, [document.id, session?.access_token, pushHistory, applySingle, applyUpdates]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         setScrollToId(null);
@@ -260,24 +229,16 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 { redaction_type: newType, is_accepted: true, is_suggestion: false },
                 session?.access_token
             );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
+            applySingle(updatedRedaction);
             toast.success("Suggestion type changed and accepted.");
             pushHistory(
-                async () => {
-                    const reverted = await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion }, session?.access_token);
-                    setRedactions(s => s.map(r => r.id === redactionId ? reverted : r));
-                },
-                async () => {
-                    const reapplied = await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token);
-                    setRedactions(s => s.map(r => r.id === redactionId ? reapplied : r));
-                }
+                async () => applySingle(await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion }, session?.access_token)),
+                async () => applySingle(await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
             );
         } catch (error) {
             toast.error("Failed to change suggestion type. Please try again.");
         }
-    }, [redactions, session?.access_token, pushHistory]);
+    }, [redactions, session?.access_token, pushHistory, applySingle]);
 
     const handleBulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
         setScrollToId(null);
@@ -286,35 +247,20 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             const updates = await Promise.all(
                 ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
             );
-            setRedactions(prev => {
-                const updatedMap = new Map(updates.map(r => [r.id, r]));
-                return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-            });
+            applyUpdates(updates);
             toast.success("Suggestions type changed and accepted.");
             pushHistory(
-                async () => {
-                    const reverted = await Promise.all(
-                        originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, session?.access_token))
-                    );
-                    setRedactions(s => {
-                        const m = new Map(reverted.map(r => [r.id, r]));
-                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                    });
-                },
-                async () => {
-                    const reapplied = await Promise.all(
-                        ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
-                    );
-                    setRedactions(s => {
-                        const m = new Map(reapplied.map(r => [r.id, r]));
-                        return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                    });
-                }
+                async () => applyUpdates(await Promise.all(
+                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, session?.access_token))
+                )),
+                async () => applyUpdates(await Promise.all(
+                    ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
+                ))
             );
         } catch (error) {
             toast.error("Failed to change suggestion types. Please try again.");
         }
-    }, [redactions, session?.access_token, pushHistory]);
+    }, [redactions, session?.access_token, pushHistory, applyUpdates]);
 
     const handleOpenRejectDialog = useCallback((redaction) => {
         setBulkRejectIds([]);
@@ -336,25 +282,10 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 const updatedRedactions = await bulkUpdateRedactions(
                     document.id, capturedIds, false, reason, session?.access_token
                 );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
+                applyUpdates(updatedRedactions);
                 pushHistory(
-                    async () => {
-                        const reverted = await bulkUpdateRedactions(document.id, capturedIds, false, null, session?.access_token);
-                        setRedactions(s => {
-                            const m = new Map(reverted.map(r => [r.id, r]));
-                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                    },
-                    async () => {
-                        const reapplied = await bulkUpdateRedactions(document.id, capturedIds, false, reason, session?.access_token);
-                        setRedactions(s => {
-                            const m = new Map(reapplied.map(r => [r.id, r]));
-                            return s.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                    }
+                    async () => applyUpdates(await bulkUpdateRedactions(document.id, capturedIds, false, null, session?.access_token)),
+                    async () => applyUpdates(await bulkUpdateRedactions(document.id, capturedIds, false, reason, session?.access_token))
                 );
             } catch (error) {
                 toast.error("Failed to reject suggestions. Please try again.");
@@ -370,18 +301,10 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     { is_accepted: false, justification: reason },
                     session?.access_token
                 );
-                setRedactions(prev => prev.map(r =>
-                    r.id === redactionId ? updatedRedaction : r
-                ));
+                applySingle(updatedRedaction);
                 pushHistory(
-                    async () => {
-                        const reverted = await updateRedaction(redactionId, { is_accepted: false, justification: null }, session?.access_token);
-                        setRedactions(s => s.map(r => r.id === redactionId ? reverted : r));
-                    },
-                    async () => {
-                        const reapplied = await updateRedaction(redactionId, { is_accepted: false, justification: reason }, session?.access_token);
-                        setRedactions(s => s.map(r => r.id === redactionId ? reapplied : r));
-                    }
+                    async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null }, session?.access_token)),
+                    async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: reason }, session?.access_token))
                 );
             } catch (error) {
                 toast.error("Failed to reject suggestion. Please try again.");
@@ -390,7 +313,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 setRejectionTarget(null);
             }
         }
-    }, [bulkRejectIds, document.id, session?.access_token, pushHistory]);
+    }, [bulkRejectIds, document.id, session?.access_token, pushHistory, applySingle, applyUpdates]);
 
     const handleSplitMerge = useCallback((mergeKey) => {
         setSplitMerges(prev => new Set(prev).add(mergeKey));
@@ -408,15 +331,14 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             setRedactions(prev => prev.filter(r => r.id !== redactionToRemove.id));
             toast.success("Redaction deleted.");
         } else {
-            const updated = await updateRedaction(
+            applySingle(await updateRedaction(
                 redactionToRemove.id,
                 { is_accepted: false, justification: null },
                 session?.access_token
-            );
-            setRedactions(prev => prev.map(r => r.id === redactionToRemove.id ? updated : r));
+            ));
             toast.success("Suggestion reverted to pending.");
         }
-    }, [session?.access_token]);
+    }, [session?.access_token, applySingle]);
 
     const handleRemoveRedaction = useCallback(async (redactionId) => {
         const snap = redactions.find(r => r.id === redactionId);
@@ -448,20 +370,14 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             } else {
                 // AI suggestion reverted to pending — undo restores prior state
                 pushHistory(
-                    async () => {
-                        const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token);
-                        setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
-                    },
-                    async () => {
-                        const reverted = await updateRedaction(snap.id, { is_accepted: false, justification: null }, session?.access_token);
-                        setRedactions(prev => prev.map(r => r.id === snap.id ? reverted : r));
-                    }
+                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token)),
+                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }, session?.access_token))
                 );
             }
         } catch (error) {
             toast.error("Failed to remove redaction. Please try again.");
         }
-    }, [redactions, session?.access_token, pushHistory, _removeRedactionById, document.id]);
+    }, [redactions, session?.access_token, pushHistory, _removeRedactionById, document.id, applySingle]);
 
     const handleCloseManualRedactionPopover = useCallback(() => {
         setManualRedactionAnchor(null);
@@ -498,13 +414,9 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 const originalOverlapping = overlapping.map(r => ({ id: r.id, redaction_type: r.redaction_type, is_accepted: r.is_accepted, is_suggestion: r.is_suggestion }));
                 let currentCreatedIds = [];
                 try {
-                    const updates = await Promise.all(
+                    applyUpdates(await Promise.all(
                         overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true }, session?.access_token))
-                    );
-                    setRedactions(prev => {
-                        const updatedMap = new Map(updates.map(r => [r.id, r]));
-                        return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                    });
+                    ));
                 } catch (error) {
                     handleCloseManualRedactionPopover();
                     toast.error("Failed to update redactions. Please try again.");
@@ -522,75 +434,51 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 }
                 if (cursor < sel.end_char) gaps.push({ start_char: cursor, end_char: sel.end_char });
 
-                if (gaps.length > 0) {
+                // Creates redactions for any substantive gap ranges, adds them to state, and
+                // returns their IDs (so callers can track them for undo/redo).
+                const fillGaps = async (gapList) => {
                     const docText = document.extracted_text || '';
-                    const substantiveGaps = gaps.filter(gap =>
+                    const substantiveGaps = gapList.filter(gap =>
                         docText.substring(gap.start_char, gap.end_char).trim().length > 0
                     );
-                    if (substantiveGaps.length > 0) {
-                        try {
-                            const created = await Promise.all(
-                                substantiveGaps.map(gap => createRedaction(document.id, {
-                                    text: docText.substring(gap.start_char, gap.end_char),
-                                    start_char: gap.start_char,
-                                    end_char: gap.end_char,
-                                    document: document.id,
-                                    redaction_type: redactionType,
-                                    is_suggestion: false,
-                                    is_accepted: true,
-                                }, session?.access_token))
-                            );
-                            currentCreatedIds = created.map(r => r.id);
-                            setRedactions(prev => [...prev, ...created]);
-                        } catch (error) {
-                            toast.error("Failed to redact uncovered areas. Please try again.");
-                        }
+                    if (substantiveGaps.length === 0) return [];
+                    const created = await Promise.all(
+                        substantiveGaps.map(gap => createRedaction(document.id, {
+                            text: docText.substring(gap.start_char, gap.end_char),
+                            start_char: gap.start_char,
+                            end_char: gap.end_char,
+                            document: document.id,
+                            redaction_type: redactionType,
+                            is_suggestion: false,
+                            is_accepted: true,
+                        }, session?.access_token))
+                    );
+                    setRedactions(prev => [...prev, ...created]);
+                    return created.map(r => r.id);
+                };
+
+                if (gaps.length > 0) {
+                    try {
+                        currentCreatedIds = await fillGaps(gaps);
+                    } catch (error) {
+                        toast.error("Failed to redact uncovered areas. Please try again.");
                     }
                 }
 
                 pushHistory(
                     async () => {
-                        // Delete gap-filled redactions
+                        // Delete gap-filled redactions, then revert the updated overlapping ones
                         await Promise.all(currentCreatedIds.map(id => deleteRedaction(id, session?.access_token)));
                         setRedactions(prev => prev.filter(r => !currentCreatedIds.includes(r.id)));
-                        // Revert updated overlapping redactions
-                        const reverted = await Promise.all(
+                        applyUpdates(await Promise.all(
                             originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted }, session?.access_token))
-                        );
-                        setRedactions(prev => {
-                            const m = new Map(reverted.map(r => [r.id, r]));
-                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
+                        ));
                     },
                     async () => {
-                        const reUpdated = await Promise.all(
+                        applyUpdates(await Promise.all(
                             originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true }, session?.access_token))
-                        );
-                        setRedactions(prev => {
-                            const m = new Map(reUpdated.map(r => [r.id, r]));
-                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                        if (gaps.length > 0) {
-                            const docText = document.extracted_text || '';
-                            const substantiveGaps = gaps.filter(gap =>
-                                docText.substring(gap.start_char, gap.end_char).trim().length > 0
-                            );
-                            if (substantiveGaps.length > 0) {
-                                const reCreated = await Promise.all(
-                                    substantiveGaps.map(gap => createRedaction(document.id, {
-                                        text: docText.substring(gap.start_char, gap.end_char),
-                                        start_char: gap.start_char,
-                                        end_char: gap.end_char,
-                                        document: document.id,
-                                        redaction_type: redactionType,
-                                        is_suggestion: false,
-                                        is_accepted: true,
-                                    }, session?.access_token))
-                                );
-                                currentCreatedIds = reCreated.map(r => r.id);
-                                setRedactions(prev => [...prev, ...reCreated]);
-                            }
-                        }
+                        ));
+                        if (gaps.length > 0) currentCreatedIds = await fillGaps(gaps);
                     }
                 );
 
@@ -608,34 +496,18 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             // Different classification — overwrite the existing redaction(s)
             const originalOverlapping = overlapping.map(r => ({ id: r.id, redaction_type: r.redaction_type, is_accepted: r.is_accepted, is_suggestion: r.is_suggestion }));
             try {
-                const updates = await Promise.all(
+                applyUpdates(await Promise.all(
                     overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
-                );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updates.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
+                ));
                 handleCloseManualRedactionPopover();
                 toast.success("Redaction classification updated.");
                 pushHistory(
-                    async () => {
-                        const reverted = await Promise.all(
-                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, session?.access_token))
-                        );
-                        setRedactions(prev => {
-                            const m = new Map(reverted.map(r => [r.id, r]));
-                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                    },
-                    async () => {
-                        const reapplied = await Promise.all(
-                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
-                        );
-                        setRedactions(prev => {
-                            const m = new Map(reapplied.map(r => [r.id, r]));
-                            return prev.map(r => m.has(r.id) ? m.get(r.id) : r);
-                        });
-                    }
+                    async () => applyUpdates(await Promise.all(
+                        originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, session?.access_token))
+                    )),
+                    async () => applyUpdates(await Promise.all(
+                        originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
+                    ))
                 );
             } catch (error) {
                 handleCloseManualRedactionPopover();
@@ -674,7 +546,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
             toast.error("Failed to create redaction. Please try again.");
         }
 
-    }, [newSelection, document.id, document.extracted_text, handleCloseManualRedactionPopover, session?.access_token, redactions, pushHistory]);
+    }, [newSelection, document.id, document.extracted_text, handleCloseManualRedactionPopover, session?.access_token, redactions, pushHistory, applyUpdates]);
 
     const handleTextSelect = useCallback((selection, rect) => {
         if (activeHighlightType === 'REMOVE') return;
@@ -721,27 +593,23 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                         await deleteRedaction(r.id, session?.access_token);
                         setRedactions(prev => prev.filter(x => x.id !== r.id));
                     } else {
-                        const updated = await updateRedaction(r.id, { is_accepted: false, justification: null }, session?.access_token);
-                        setRedactions(prev => prev.map(x => x.id === r.id ? updated : x));
+                        applySingle(await updateRedaction(r.id, { is_accepted: false, justification: null }, session?.access_token));
                     }
                 } else if (trimEnd) {
-                    const updated = await updateRedaction(r.id, {
+                    applySingle(await updateRedaction(r.id, {
                         end_char: selStart,
                         text: extractedText.substring(r.start_char, selStart),
-                    }, session?.access_token);
-                    setRedactions(prev => prev.map(x => x.id === r.id ? updated : x));
+                    }, session?.access_token));
                 } else if (trimStart) {
-                    const updated = await updateRedaction(r.id, {
+                    applySingle(await updateRedaction(r.id, {
                         start_char: selEnd,
                         text: extractedText.substring(selEnd, r.end_char),
-                    }, session?.access_token);
-                    setRedactions(prev => prev.map(x => x.id === r.id ? updated : x));
+                    }, session?.access_token));
                 } else if (splitMiddle) {
-                    const updatedFirst = await updateRedaction(r.id, {
+                    applySingle(await updateRedaction(r.id, {
                         end_char: selStart,
                         text: extractedText.substring(r.start_char, selStart),
-                    }, session?.access_token);
-                    setRedactions(prev => prev.map(x => x.id === r.id ? updatedFirst : x));
+                    }, session?.access_token));
                     const createdSecond = await createRedaction(document.id, {
                         text: extractedText.substring(selEnd, r.end_char),
                         start_char: selEnd,
@@ -777,14 +645,12 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                             }, session?.access_token);
                             setRedactions(prev => [...prev, created]);
                         } else {
-                            const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token);
-                            setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
+                            applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, session?.access_token));
                         }
                     } else {
-                        const restored = await updateRedaction(snap.id, {
+                        applySingle(await updateRedaction(snap.id, {
                             start_char: snap.start_char, end_char: snap.end_char, text: snap.text,
-                        }, session?.access_token);
-                        setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
+                        }, session?.access_token));
                         if (splitMiddle && splitCreatedId) {
                             await deleteRedaction(splitCreatedId, session?.access_token);
                             setRedactions(prev => prev.filter(r => r.id !== splitCreatedId));
@@ -806,24 +672,20 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                             await deleteRedaction(snap.id, session?.access_token);
                             setRedactions(prev => prev.filter(r => r.id !== snap.id));
                         } else {
-                            const updated = await updateRedaction(snap.id, { is_accepted: false, justification: null }, session?.access_token);
-                            setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                            applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }, session?.access_token));
                         }
                     } else if (trimEnd) {
-                        const updated = await updateRedaction(snap.id, {
+                        applySingle(await updateRedaction(snap.id, {
                             end_char: selStart, text: extractedText.substring(snap.start_char, selStart),
-                        }, session?.access_token);
-                        setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                        }, session?.access_token));
                     } else if (trimStart) {
-                        const updated = await updateRedaction(snap.id, {
+                        applySingle(await updateRedaction(snap.id, {
                             start_char: selEnd, text: extractedText.substring(selEnd, snap.end_char),
-                        }, session?.access_token);
-                        setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                        }, session?.access_token));
                     } else if (splitMiddle) {
-                        const updated = await updateRedaction(snap.id, {
+                        applySingle(await updateRedaction(snap.id, {
                             end_char: selStart, text: extractedText.substring(snap.start_char, selStart),
-                        }, session?.access_token);
-                        setRedactions(prev => prev.map(r => r.id === snap.id ? updated : r));
+                        }, session?.access_token));
                         const created = await createRedaction(document.id, {
                             text: extractedText.substring(selEnd, snap.end_char),
                             start_char: selEnd, end_char: snap.end_char,
@@ -837,7 +699,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 }
             }
         );
-    }, [redactions, pushHistory, session?.access_token, document.id, document.extracted_text]);
+    }, [redactions, pushHistory, session?.access_token, document.id, document.extracted_text, applySingle]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);
