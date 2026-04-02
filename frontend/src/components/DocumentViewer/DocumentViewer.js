@@ -204,7 +204,7 @@ const renderSegmentWithTables = (segText, segStart, tableRegions, parts, keyPref
  * Render text content with redaction highlights applied.
  * Returns an array of React elements with highlights for marks that fall within the text range.
  */
-const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick) => {
+const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick) => {
     const elementEnd = elementStart + elementText.length;
     const parts = [];
     let cursor = 0;
@@ -246,7 +246,15 @@ const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hovere
                 }}
                 key={`mark-${mark.id}-${index}`}
                 data-redaction-id={mark.id}
-                onClick={viewMode === 'review' && onHighlightClick ? () => onHighlightClick(mark.id) : undefined}
+                onClick={viewMode === 'review'
+                    ? () => {
+                        if (activeHighlightType === 'REMOVE' && onUnhighlightClick) {
+                            onUnhighlightClick(mark.id);
+                        } else if (onHighlightClick) {
+                            onHighlightClick(mark.id);
+                        }
+                    }
+                    : undefined}
             >
                 {elementText.substring(localStart, localEnd)}
             </Box>
@@ -266,15 +274,16 @@ const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hovere
     return parts.length > 0 ? parts : elementText;
 };
 
-export const DocumentViewer = ({ text, tables, structure, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onHighlightClick, reviewComplete, viewMode = 'review', baseFontSize = 1, activeHighlightType = null }) => {
+export const DocumentViewer = ({ text, tables, structure, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onRemoveSelect = null, onHighlightClick, onUnhighlightClick = null, reviewComplete, viewMode = 'review', baseFontSize = 1, activeHighlightType = null }) => {
     const viewerRef = useRef(null);
     const tableRegions = useMemo(() => buildTableRegions(tables), [tables]);
     const scaledFontSize = `${baseFontSize}rem`;
     const headingStyles = useMemo(() => getHeadingStyles(baseFontSize), [baseFontSize]);
 
     const handleMouseUp = () => {
-        // onTextSelect is only passed in review mode.
-        if (!onTextSelect) return;
+        const isRemoveMode = activeHighlightType === 'REMOVE';
+        if (isRemoveMode && !onRemoveSelect) return;
+        if (!isRemoveMode && !onTextSelect) return;
         const selection = window.getSelection();
 
         if (!selection.isCollapsed && viewerRef.current && viewerRef.current.contains(selection.anchorNode)) {
@@ -322,7 +331,11 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
             const end = start + selectedText.length;
             const rect = range.getBoundingClientRect();
             selection.removeAllRanges();
-            onTextSelect({ text: selectedText, start_char: start, end_char: end }, rect);
+            if (isRemoveMode) {
+                onRemoveSelect({ text: selectedText, start_char: start, end_char: end });
+            } else {
+                onTextSelect({ text: selectedText, start_char: start, end_char: end }, rect);
+            }
         }
     };
 
@@ -384,7 +397,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                             fontFamily: fontFamily,
                         }}
                     >
-                        {renderTextWithHighlights(element.text, element.start, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick)}
+                        {renderTextWithHighlights(element.text, element.start, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick)}
                     </Typography>
                 );
             }
@@ -401,7 +414,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                             fontSize: scaledFontSize,
                         }}
                     >
-                        {renderTextWithHighlights(element.text, element.start, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick)}
+                        {renderTextWithHighlights(element.text, element.start, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick)}
                     </Typography>
                 );
             }
@@ -450,7 +463,9 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                                                         sortedMarks,
                                                         hoveredSuggestionId,
                                                         viewMode,
-                                                        onHighlightClick
+                                                        onHighlightClick,
+                                                        activeHighlightType,
+                                                        onUnhighlightClick
                                                     )}
                                                 </td>
                                             ))}
@@ -517,7 +532,15 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                     }}
                     key={key}
                     data-redaction-id={mark.id}
-                    onClick={viewMode === 'review' && onHighlightClick ? () => onHighlightClick(mark.id) : undefined}
+                    onClick={viewMode === 'review'
+                        ? () => {
+                            if (activeHighlightType === 'REMOVE' && onUnhighlightClick) {
+                                onUnhighlightClick(mark.id);
+                            } else if (onHighlightClick) {
+                                onHighlightClick(mark.id);
+                            }
+                        }
+                        : undefined}
                 >
                     {markText}
                 </Box>

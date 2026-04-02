@@ -14,7 +14,6 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
     useEffect(() => {
         const fetchProviders = async () => {
             const res = await getProviders();
-            console.log(res);
             setProviders(res);
         };
         fetchProviders();

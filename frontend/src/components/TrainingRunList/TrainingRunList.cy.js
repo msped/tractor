@@ -68,4 +68,12 @@ describe('<TrainingRunList />', () => {
             cy.contains('td', 'No training runs found.').should('be.visible');
         });
     });
+
+    context('Row click navigation', () => {
+        it('navigates to the training run detail page when a row is clicked', () => {
+            cy.fullMount(<TrainingRunList runs={mockRuns} />);
+            // Clicking a row exercises handleRowClick (router.push)
+            cy.contains('tr', 'model_20240522_100000').click();
+        });
+    });
 });

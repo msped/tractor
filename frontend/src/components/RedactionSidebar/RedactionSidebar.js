@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { getExemptionTemplates } from '@/services/redactionService';
 import {
     Box, Typography, Accordion, AccordionSummary, AccordionDetails,
     List, ListItem, Card, CardContent, CardActions, Button, Chip,
@@ -10,6 +12,8 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import UndoIcon from '@mui/icons-material/Undo';
+import RedoIcon from '@mui/icons-material/Redo';
 import { RedactionContextManager } from '../RedactionContextManager.js';
 
 const REDACTION_TYPE_LABELS = {
@@ -31,6 +35,7 @@ const HIGHLIGHT_TOOLS = [
     { type: 'PII',     label: 'PII',        fullLabel: 'Third-Party PII',         color: 'rgb(46, 204, 113)'  },
     { type: 'OP_DATA', label: 'Op. Data',   fullLabel: 'Operational Data',         color: 'rgb(0, 221, 255)'   },
     { type: 'DS_INFO', label: 'DS Info',    fullLabel: 'Data Subject Information', color: 'rgb(177, 156, 217)' },
+    { type: 'REMOVE',  label: 'Remove',     fullLabel: 'Remove Highlight',         color: 'rgb(231, 76, 60)'   },
 ];
 
 export const RedactionSidebar = ({
@@ -50,11 +55,24 @@ export const RedactionSidebar = ({
     removeScrollId,
     onContextSave,
     onCardClick = () => {},
-    exemptionTemplates = [],
     activeHighlightType = null,
     onToggleHighlightTool = () => {},
     documentCompleted = false,
+    onUndo = () => {},
+    onRedo = () => {},
+    canUndo = false,
+    canRedo = false,
 }) => {
+    const { data: session } = useSession();
+    const [exemptionTemplates, setExemptionTemplates] = useState([]);
+
+    useEffect(() => {
+        if (!session?.access_token) return;
+        getExemptionTemplates(session.access_token)
+            .then(setExemptionTemplates)
+            .catch(() => {});
+    }, [session?.access_token]);
+
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
     const [expandedGroups, setExpandedGroups] = useState(new Set());
@@ -293,13 +311,31 @@ export const RedactionSidebar = ({
     return (
         <Box sx={{ width: '100%', borderLeft: 1, borderColor: 'divider', height: 'calc(100vh - 64px)', overflowY: 'auto', bgcolor: 'background.default' }}>
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
-                <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
+                    <Box>
+                        <Tooltip title="Undo (Ctrl+Z)">
+                            <span>
+                                <IconButton aria-label="Undo" onClick={onUndo} disabled={!canUndo} size="small">
+                                    <UndoIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Redo (Ctrl+Y)">
+                            <span>
+                                <IconButton aria-label="Redo" onClick={onRedo} disabled={!canRedo} size="small">
+                                    <RedoIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    </Box>
+                </Box>
                 {!documentCompleted && (
                     <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
                         {HIGHLIGHT_TOOLS.map(({ type, label, fullLabel, color }) => {
                             const isActive = activeHighlightType === type;
                             return (
-                                <Tooltip key={type} title={isActive ? `Deactivate: ${fullLabel}` : `Highlight as: ${fullLabel}`}>
+                                <Tooltip key={type} title={isActive ? `Deactivate: ${fullLabel}` : type === 'REMOVE' ? `Click a highlight to remove it` : `Highlight as: ${fullLabel}`}>
                                     <Button
                                         size="small"
                                         variant="contained"

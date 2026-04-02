@@ -124,6 +124,61 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.get('input[aria-label="include case reference in watermark"]').should('not.be.disabled');
     });
 
+    it('resets fields to original values when Cancel is clicked after modifications', () => {
+        cy.intercept('GET', '**/cases/settings/export', { body: mockSettings }).as('getSettingsMockCancel');
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettingsMockCancel');
+
+        cy.get('textarea[aria-label="header text"]').clear().type('MODIFIED VALUE');
+        cy.get('textarea[aria-label="header text"]').should('have.value', 'MODIFIED VALUE');
+
+        cy.contains('button', 'Cancel').click();
+        cy.get('[role="dialog"]').should('not.exist');
+
+        // Reopen — fields should show original values (reset by handleCloseConfigure from cached SWR data)
+        cy.contains('button', 'Configure').click();
+        cy.get('textarea[aria-label="header text"]').should('have.value', 'OFFICIAL');
+    });
+
+    it('shows error toast when save fails', () => {
+        cy.intercept('PATCH', '**/cases/settings/export', { statusCode: 500, body: {} }).as('patchFail');
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettings');
+        cy.contains('button', 'Save').click();
+        cy.wait('@patchFail');
+        cy.contains('Failed to update export settings. Please try again.').should('be.visible');
+    });
+
+    it('changes font family when a different option is selected', () => {
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettings');
+        cy.get('[aria-labelledby="font-family-label"]').click();
+        cy.get('[role="listbox"]').contains('Times New Roman').click();
+        cy.get('[aria-labelledby="font-family-label"]').should('contain.text', 'Times New Roman');
+    });
+
+    it('toggles the page numbers switch', () => {
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettings');
+        cy.get('input[aria-label="show page numbers"]').should('not.be.checked');
+        cy.get('input[aria-label="show page numbers"]').click({ force: true });
+        cy.get('input[aria-label="show page numbers"]').should('be.checked');
+    });
+
+    it('toggles the case reference switch when watermark text is present', () => {
+        cy.intercept('GET', '**/cases/settings/export', { body: mockSettings }).as('getSettingsWithWatermark');
+        cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);
+        cy.contains('button', 'Configure').click();
+        cy.wait('@getSettingsWithWatermark');
+        cy.get('input[aria-label="include case reference in watermark"]').should('be.checked');
+        cy.get('input[aria-label="include case reference in watermark"]').click({ force: true });
+        cy.get('input[aria-label="include case reference in watermark"]').should('not.be.checked');
+    });
+
     it('shows error message when GET fails', () => {
         cy.intercept('GET', '**/cases/settings/export', { statusCode: 500, body: {} }).as('getSettingsError');
         cy.fullMount(<TestWrapper><DocumentExportSettingsCard /></TestWrapper>, mountOpts);

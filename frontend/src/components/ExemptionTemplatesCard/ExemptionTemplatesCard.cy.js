@@ -117,6 +117,42 @@ describe('<ExemptionTemplatesCard />', () => {
         });
     });
 
+    it('shows error toast when creating a template fails', () => {
+        cy.intercept('POST', '**/cases/exemptions', { statusCode: 500, body: {} }).as('createFail');
+
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
+        cy.contains('button', 'Manage').click();
+        cy.get('button').contains('Add').click();
+        cy.get('input[aria-label="template name"]').type('S.43 - Test');
+        cy.get('button').contains('Save').click();
+        cy.wait('@createFail');
+        // Add form should remain open after error
+        cy.get('input[aria-label="template name"]').should('exist');
+    });
+
+    it('shows error toast when deleting a template fails', () => {
+        cy.intercept('DELETE', '**/cases/exemptions/1', { statusCode: 500, body: {} }).as('deleteFail');
+
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
+        cy.contains('button', 'Manage').click();
+        cy.get(`button[aria-label="delete S.40 - Personal Information"]`).click();
+        cy.get('button').contains('Delete').last().click();
+        cy.wait('@deleteFail');
+        // Template should still be visible after failed delete
+        cy.contains('S.40 - Personal Information').should('be.visible');
+    });
+
+    it('closes the dialog when the X button is clicked', () => {
+        cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+        cy.wait('@getTemplates');
+        cy.contains('button', 'Manage').click();
+        cy.get('[role="dialog"]').should('be.visible');
+        cy.get('button[aria-label="close"]').click();
+        cy.get('[role="dialog"]').should('not.exist');
+    });
+
     it('deletes a template after confirmation', () => {
         cy.intercept('DELETE', '**/cases/exemptions/1', { statusCode: 204 }).as('deleteTemplate');
 

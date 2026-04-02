@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Box, Typography, Button, Container, Tooltip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, IconButton } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -9,510 +9,115 @@ import NextLink from 'next/link';
 import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
+import { ResubmitDialog } from '@/components/ResubmitDialog';
 import { DocumentViewer } from '@/components/DocumentViewer';
-import { markAsComplete, resubmitDocument } from '@/services/documentService'
-import { createRedaction, updateRedaction, deleteRedaction, bulkUpdateRedactions, getExemptionTemplates } from '@/services/redactionService';
-import { mergeAdjacentSpans, groupByTextAndType } from '@/utils/mergeRedactionSpans';
+import { useUndoHistory } from '@/hooks/useUndoHistory';
+import { useDocumentControls } from '@/hooks/useDocumentControls';
+import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
+import { useRedactionActions } from '@/hooks/useRedactionActions';
+import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
+import { useManualRedaction } from '@/hooks/useManualRedaction';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
 
-const FONT_SIZE_STEPS = [0.75, 0.85, 1, 1.15, 1.3, 1.5];
-
-export const RedactionComponent = ({ document, initialRedactions }) => {
+export const RedactionComponent = ({ document: currentDocument, initialRedactions }) => {
     const { data: session } = useSession();
     const router = useRouter();
     const [redactions, setRedactions] = useState(initialRedactions || []);
-    const [currentDocument, setCurrentDocument] = useState(document);
-    const [isLoading, setIsLoading] = useState(false);
-
-    // State for manual redaction popover
-    const [manualRedactionAnchor, setManualRedactionAnchor] = useState(null);
-    const [newSelection, setNewSelection] = useState(null);
-
-    // State for highlighting text for manual redaction
-    const [pendingRedaction, setPendingRedaction] = useState(null);
 
     // State for rejection dialog (single and bulk)
     const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
     const [rejectionTarget, setRejectionTarget] = useState(null);
     const [bulkRejectIds, setBulkRejectIds] = useState([]);
 
-    // State for hovering suggestions
-    const [hoveredSuggestionId, setHoveredSuggestionId] = useState(null);
+    // Undo/redo history
+    const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
 
-    // State to trigger scroll-to-view in the sidebar
-    const [scrollToId, setScrollToId] = useState(null);
+    const {
+        displaySections,
+        setSplitMerges,
+        hoveredSuggestionId,
+        scrollToId,
+        setScrollToId,
+        handleSuggestionMouseEnter,
+        handleSuggestionMouseLeave,
+        handleHighlightClick,
+        handleRemoveScrollId,
+        handleCardClick,
+    } = useRedactionDisplay({ redactions });
 
-    // State for resubmit confirmation dialog
-    const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
-    const [isResubmitting, setIsResubmitting] = useState(false);
+    const {
+        isLoading,
+        isResubmitting,
+        resubmitDialogOpen,
+        setResubmitDialogOpen,
+        baseFontSize,
+        canIncreaseFont,
+        canDecreaseFont,
+        sidebarWidth,
+        activeHighlightType,
+        handleToggleHighlightTool,
+        handleFontDecrease,
+        handleFontIncrease,
+        handleResizeStart,
+        handleMarkAsComplete,
+        handleResubmit,
+    } = useDocumentControls({ accessToken: session?.access_token, undo, redo, clearHistory, currentDocument, router });
 
-    // Exemption templates for the reject dropdown
-    const [exemptionTemplates, setExemptionTemplates] = useState([]);
-
-    useEffect(() => {
-        if (!session?.access_token) return;
-        getExemptionTemplates(session.access_token)
-            .then(setExemptionTemplates)
-            .catch(() => {});
-    }, [session?.access_token]);
-
-    // State for merged span splits (display-only)
-    const [splitMerges, setSplitMerges] = useState(new Set());
-
-    // State for active highlight tool (null | 'PII' | 'OP_DATA' | 'DS_INFO')
-    const [activeHighlightType, setActiveHighlightType] = useState(null);
-
-    const handleToggleHighlightTool = useCallback((type) => {
-        setActiveHighlightType(prev => prev === type ? null : type);
-    }, []);
-
-    useEffect(() => {
-        const handler = (e) => { if (e.key === 'Escape') setActiveHighlightType(null); };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, []);
-
-    // Font size controls
-    const [fontSizeIndex, setFontSizeIndex] = useState(2);
-    const baseFontSize = FONT_SIZE_STEPS[fontSizeIndex];
-    const handleFontDecrease = useCallback(() => setFontSizeIndex(prev => Math.max(0, prev - 1)), []);
-    const handleFontIncrease = useCallback(() => setFontSizeIndex(prev => Math.min(FONT_SIZE_STEPS.length - 1, prev + 1)), []);
-
-    // Sidebar resize controls
-    const [sidebarWidth, setSidebarWidth] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('sidebarWidth');
-            return saved ? parseInt(saved, 10) : 450;
-        }
-        return 450;
+    const {
+        handleAcceptSuggestion,
+        handleBulkAccept,
+        handleRejectAsDisclosable,
+        handleChangeTypeAndAccept,
+        handleBulkChangeTypeAndAccept,
+        handleOpenRejectDialog,
+        handleOpenBulkRejectDialog,
+        handleRejectConfirm,
+        handleSplitMerge,
+    } = useRedactionActions({
+        documentId: currentDocument.id,
+        accessToken: session?.access_token,
+        redactions,
+        setRedactions,
+        pushHistory,
+        setSplitMerges,
+        setScrollToId,
+        bulkRejectIds,
+        setBulkRejectIds,
+        setRejectionDialogOpen,
+        setRejectionTarget,
     });
-    const isResizing = useRef(false);
 
-    const handleResizeStart = useCallback((e) => {
-        e.preventDefault();
-        isResizing.current = true;
-        const doc = e.target.ownerDocument;
+    const {
+        handleRemoveRedaction,
+        handleRemoveSelect,
+        handleUnhighlightClick,
+    } = useRemoveRedaction({
+        documentId: currentDocument.id,
+        extractedText: currentDocument.extracted_text,
+        accessToken: session?.access_token,
+        redactions,
+        setRedactions,
+        pushHistory,
+        displaySections,
+    });
 
-        const handleResize = (e) => {
-            if (!isResizing.current) return;
-            const newWidth = doc.defaultView.innerWidth - e.clientX;
-            const maxWidth = doc.defaultView.innerWidth * 0.6;
-            const clamped = Math.min(maxWidth, Math.max(250, newWidth));
-            setSidebarWidth(clamped);
-            localStorage.setItem('sidebarWidth', String(Math.round(clamped)));
-        };
-
-        const handleResizeEnd = () => {
-            isResizing.current = false;
-            doc.removeEventListener('mousemove', handleResize);
-            doc.removeEventListener('mouseup', handleResizeEnd);
-        };
-
-        doc.addEventListener('mousemove', handleResize);
-        doc.addEventListener('mouseup', handleResizeEnd);
-    }, []);
-
-    useEffect(() => {
-        return () => {
-            isResizing.current = false;
-        };
-    }, []);
-
-    const handleAcceptSuggestion = useCallback(async (redactionId) => {
-        setScrollToId(null);
-        try {
-            const updatedRedaction = await updateRedaction(
-                redactionId, { is_accepted: true },
-                session?.access_token
-            );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
-        } catch (error) {
-            toast.error("Failed to accept suggestion. Please try again.");
-        }
-    }, [session?.access_token]);
-
-    const handleBulkAccept = useCallback(async (ids) => {
-        setScrollToId(null);
-        try {
-            const updatedRedactions = await bulkUpdateRedactions(
-                document.id, ids, true, null, session?.access_token
-            );
-            setRedactions(prev => {
-                const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
-                return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-            });
-        } catch (error) {
-            toast.error("Failed to accept suggestions. Please try again.");
-        }
-    }, [document.id, session?.access_token]);
-
-    const handleRejectAsDisclosable = useCallback(async (ids, justification) => {
-        setScrollToId(null);
-        try {
-            if (ids.length === 1) {
-                const updated = await updateRedaction(
-                    ids[0], { is_accepted: false, justification }, session?.access_token
-                );
-                setRedactions(prev => prev.map(r => r.id === ids[0] ? updated : r));
-            } else {
-                const updatedList = await bulkUpdateRedactions(
-                    document.id, ids, false, justification, session?.access_token
-                );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updatedList.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
-            }
-        } catch (error) {
-            toast.error("Failed to reject suggestion. Please try again.");
-        }
-    }, [document.id, session?.access_token]);
-
-    const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
-        setScrollToId(null);
-        try {
-            const updatedRedaction = await updateRedaction(
-                redactionId,
-                {
-                    redaction_type: newType,
-                    is_accepted: true,
-                    is_suggestion: false
-                }, session?.access_token
-            );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
-            toast.success("Suggestion type changed and accepted.");
-        } catch (error) {
-            toast.error("Failed to change suggestion type. Please try again.");
-        }
-    }, [session?.access_token]);
-
-    const handleBulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
-        setScrollToId(null);
-        try {
-            const updates = await Promise.all(
-                ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, session?.access_token))
-            );
-            setRedactions(prev => {
-                const updatedMap = new Map(updates.map(r => [r.id, r]));
-                return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-            });
-            toast.success("Suggestions type changed and accepted.");
-        } catch (error) {
-            toast.error("Failed to change suggestion types. Please try again.");
-        }
-    }, [session?.access_token]);
-
-    const handleOpenRejectDialog = useCallback((redaction) => {
-        setBulkRejectIds([]);
-        setRejectionTarget(redaction);
-        setRejectionDialogOpen(true);
-    }, []);
-
-    const handleOpenBulkRejectDialog = useCallback((ids) => {
-        setBulkRejectIds(ids);
-        setRejectionTarget({ id: null, text: `${ids.length} selected items` });
-        setRejectionDialogOpen(true);
-    }, []);
-
-    const handleRejectConfirm = useCallback(async (redactionId, reason) => {
-        setScrollToId(null);
-        if (bulkRejectIds.length > 0) {
-            try {
-                const updatedRedactions = await bulkUpdateRedactions(
-                    document.id, bulkRejectIds, false, reason, session?.access_token
-                );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updatedRedactions.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
-            } catch (error) {
-                toast.error("Failed to reject suggestions. Please try again.");
-            } finally {
-                setRejectionDialogOpen(false);
-                setRejectionTarget(null);
-                setBulkRejectIds([]);
-            }
-        } else {
-            try {
-                const updatedRedaction = await updateRedaction(
-                    redactionId,
-                    { is_accepted: false, justification: reason },
-                    session?.access_token
-                );
-                setRedactions(prev => prev.map(r =>
-                    r.id === redactionId ? updatedRedaction : r
-                ));
-            } catch (error) {
-                toast.error("Failed to reject suggestion. Please try again.");
-            } finally {
-                setRejectionDialogOpen(false);
-                setRejectionTarget(null);
-            }
-        }
-    }, [bulkRejectIds, document.id, session?.access_token]);
-
-    const handleSplitMerge = useCallback((mergeKey) => {
-        setSplitMerges(prev => new Set(prev).add(mergeKey));
-    }, []);
-
-    const handleRemoveRedaction = useCallback(async (redactionId) => {
-        const redactionToRemove = redactions.find(r => r.id === redactionId);
-        if (!redactionToRemove) return;
-
-        // If it was a user-created redaction, delete it from the server.
-        if (!redactionToRemove.is_suggestion) {
-            try {
-                await deleteRedaction(redactionId, session?.access_token);
-                setRedactions(prev => prev.filter(r => r.id !== redactionId));
-                toast.success("Redaction deleted.");
-            } catch (error) {
-                toast.error("Failed to delete redaction. Please try again.");
-            }
-            return;
-        }
-
-        // If it was an AI suggestion (accepted or rejected), revert it to a pending suggestion.
-        try {
-            const updatedRedaction = await updateRedaction(
-                redactionId,
-                { is_accepted: false, justification: null },
-                session?.access_token
-            );
-            setRedactions(prev => prev.map(r =>
-                r.id === redactionId ? updatedRedaction : r
-            ));
-            toast.success("Suggestion reverted to pending.");
-        } catch (error) {
-            toast.error("Failed to revert suggestion. Please try again.");
-        }
-    }, [redactions, session?.access_token]);
-
-    const handleCloseManualRedactionPopover = useCallback(() => {
-        setManualRedactionAnchor(null);
-        setNewSelection(null);
-        setPendingRedaction(null);
-    }, []);
-
-    const handleOnContextSave = useCallback((redactionId, newContextText) => {
-        setRedactions(prevRedactions =>
-            prevRedactions.map(r => {
-                if (r.id === redactionId) {
-                    return { ...r, context: newContextText ? { text: newContextText } : null };
-                }
-                return r;
-            })
-        );
-    }, []);
-
-    const handleCreateManualRedaction = useCallback(async (redactionType, selectionOverride = null) => {
-        const sel = selectionOverride ?? newSelection;
-        const isToolMode = selectionOverride !== null;
-        if (!sel) return;
-
-        // Find any existing redactions that overlap with the selection
-        const overlapping = redactions.filter(r =>
-            r.start_char < sel.end_char && r.end_char > sel.start_char
-        );
-
-        if (overlapping.length > 0) {
-            if (isToolMode) {
-                // Tool mode: accept/update every overlapping redaction, preserving is_suggestion,
-                // then create new user redactions for any uncovered gaps within the selection.
-                try {
-                    const updates = await Promise.all(
-                        overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true }, session?.access_token))
-                    );
-                    setRedactions(prev => {
-                        const updatedMap = new Map(updates.map(r => [r.id, r]));
-                        return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                    });
-                } catch (error) {
-                    handleCloseManualRedactionPopover();
-                    toast.error("Failed to update redactions. Please try again.");
-                    return;
-                }
-
-                // Find gaps within the selection not covered by any overlapping redaction
-                const sorted = [...overlapping].sort((a, b) => a.start_char - b.start_char);
-                const gaps = [];
-                let cursor = sel.start_char;
-                for (const r of sorted) {
-                    const rStart = Math.max(r.start_char, sel.start_char);
-                    if (rStart > cursor) gaps.push({ start_char: cursor, end_char: rStart });
-                    cursor = Math.max(cursor, Math.min(r.end_char, sel.end_char));
-                }
-                if (cursor < sel.end_char) gaps.push({ start_char: cursor, end_char: sel.end_char });
-
-                if (gaps.length > 0) {
-                    const docText = document.extracted_text || '';
-                    const substantiveGaps = gaps.filter(gap =>
-                        docText.substring(gap.start_char, gap.end_char).trim().length > 0
-                    );
-                    if (substantiveGaps.length > 0) {
-                        try {
-                            const created = await Promise.all(
-                                substantiveGaps.map(gap => createRedaction(document.id, {
-                                    text: docText.substring(gap.start_char, gap.end_char),
-                                    start_char: gap.start_char,
-                                    end_char: gap.end_char,
-                                    document: document.id,
-                                    redaction_type: redactionType,
-                                    is_suggestion: false,
-                                    is_accepted: true,
-                                }, session?.access_token))
-                            );
-                            setRedactions(prev => [...prev, ...created]);
-                        } catch (error) {
-                            toast.error("Failed to redact uncovered areas. Please try again.");
-                        }
-                    }
-                }
-
-                handleCloseManualRedactionPopover();
-                return;
-            }
-
-            // Popover mode
-            const sameType = overlapping.every(r => r.redaction_type === redactionType);
-            if (sameType) {
-                handleCloseManualRedactionPopover();
-                toast("This text is already redacted with this classification.");
-                return;
-            }
-            // Different classification — overwrite the existing redaction(s)
-            try {
-                const updates = await Promise.all(
-                    overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, session?.access_token))
-                );
-                setRedactions(prev => {
-                    const updatedMap = new Map(updates.map(r => [r.id, r]));
-                    return prev.map(r => updatedMap.has(r.id) ? updatedMap.get(r.id) : r);
-                });
-                handleCloseManualRedactionPopover();
-                toast.success("Redaction classification updated.");
-            } catch (error) {
-                handleCloseManualRedactionPopover();
-                toast.error("Failed to update redaction. Please try again.");
-            }
-            return;
-        }
-
-        const newRedaction = {
-            ...sel,
-            document: document.id,
-            redaction_type: redactionType,
-            is_suggestion: false,
-            is_accepted: true,
-        };
-        try {
-            const createdRedaction = await createRedaction(document.id, newRedaction, session?.access_token);
-            setRedactions(prev => [...prev, createdRedaction]);
-            handleCloseManualRedactionPopover();
-            toast.success("Redaction created successfully.");
-        } catch (error) {
-            handleCloseManualRedactionPopover();
-            toast.error("Failed to create redaction. Please try again.");
-        }
-
-    }, [newSelection, document.id, document.extracted_text, handleCloseManualRedactionPopover, session?.access_token, redactions]);
-
-    const handleTextSelect = useCallback((selection, rect) => {
-        if (activeHighlightType) {
-            setNewSelection(selection);
-            setPendingRedaction(selection);
-            handleCreateManualRedaction(activeHighlightType, selection);
-            return;
-        }
-        setNewSelection(selection);
-        setPendingRedaction(selection);
-        const virtualEl = { getBoundingClientRect: () => rect, nodeType: 1 };
-        setManualRedactionAnchor(virtualEl);
-    }, [activeHighlightType, handleCreateManualRedaction]);
-
-    const handleSuggestionMouseEnter = useCallback((suggestionId) => {
-        setHoveredSuggestionId(suggestionId);
-    }, []);
-
-    const handleSuggestionMouseLeave = useCallback(() => {
-        setHoveredSuggestionId(null);
-    }, []);
-
-    const handleHighlightClick = useCallback((redactionId) => {
-        setScrollToId(redactionId);
-    }, []);
-
-    const handleRemoveScrollId = useCallback(() => {
-        setScrollToId(null);
-    }, []);
-
-    const [scrollToDocumentId, setScrollToDocumentId] = useState(null);
-
-    const handleCardClick = useCallback((redactionId) => {
-        setScrollToDocumentId(redactionId);
-    }, []);
-
-    useEffect(() => {
-        if (!scrollToDocumentId) return;
-        const el = window.document.querySelector(`[data-redaction-id="${scrollToDocumentId}"]`);
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        setScrollToDocumentId(null);
-    }, [scrollToDocumentId]);
-
-    const handleMarkAsComplete = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const updatedDocument = await markAsComplete(currentDocument.id, session?.access_token);
-            console.log(updatedDocument);
-            toast.success("Document is ready for disclosure.");
-            router.push(`/cases/${currentDocument.case}`);
-        } catch (error) {
-            toast.error("Failed to mark document as complete. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
-    }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
-
-    const handleResubmit = useCallback(async () => {
-        setIsResubmitting(true);
-        try {
-            await resubmitDocument(currentDocument.id, session?.access_token);
-            toast.success("Document resubmitted for processing.");
-            router.push(`/cases/${currentDocument.case}`);
-        } catch (error) {
-            toast.error("Failed to resubmit document. Please try again.");
-        } finally {
-            setIsResubmitting(false);
-            setResubmitDialogOpen(false);
-        }
-    }, [currentDocument.id, currentDocument.case, session?.access_token, router]);
-
-    // Compute grouped/merged display sections for the sidebar
-    const displaySections = useMemo(() => {
-        const pending = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
-        const accepted = redactions.filter(r => r.is_suggestion && r.is_accepted);
-        const rejected = redactions.filter(r => r.is_suggestion && !r.is_accepted && !!r.justification);
-        const manual = redactions.filter(r => !r.is_suggestion);
-
-        const processSection = (items) => ({
-            total: items.length,
-            items: groupByTextAndType(mergeAdjacentSpans(items, splitMerges)),
-        });
-
-        return {
-            pending: processSection(pending),
-            accepted: processSection(accepted),
-            rejected: processSection(rejected),
-            manual: processSection(manual),
-        };
-    }, [redactions, splitMerges]);
+    const {
+        manualRedactionAnchor,
+        pendingRedaction,
+        handleTextSelect,
+        handleCreateManualRedaction,
+        handleCloseManualRedactionPopover,
+        handleOnContextSave,
+    } = useManualRedaction({
+        documentId: currentDocument.id,
+        extractedText: currentDocument.extracted_text,
+        accessToken: session?.access_token,
+        redactions,
+        setRedactions,
+        pushHistory,
+        activeHighlightType,
+    });
 
     const pendingCount = displaySections.pending.total;
 
@@ -534,7 +139,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                 <IconButton
                                     aria-label="Decrease font size"
                                     onClick={handleFontDecrease}
-                                    disabled={fontSizeIndex === 0}
+                                    disabled={!canDecreaseFont}
                                     size="small"
                                     sx={{ fontSize: '0.85rem', fontWeight: 'bold' }}
                                 >
@@ -547,7 +152,7 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                 <IconButton
                                     aria-label="Increase font size"
                                     onClick={handleFontIncrease}
-                                    disabled={fontSizeIndex === FONT_SIZE_STEPS.length - 1}
+                                    disabled={!canIncreaseFont}
                                     size="small"
                                     sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}
                                 >
@@ -600,7 +205,9 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     pendingRedaction={pendingRedaction}
                     hoveredSuggestionId={hoveredSuggestionId}
                     onTextSelect={handleTextSelect}
+                    onRemoveSelect={handleRemoveSelect}
                     onHighlightClick={handleHighlightClick}
+                    onUnhighlightClick={handleUnhighlightClick}
                     reviewComplete={pendingCount === 0}
                     baseFontSize={baseFontSize}
                     activeHighlightType={activeHighlightType}
@@ -636,10 +243,13 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     removeScrollId={handleRemoveScrollId}
                     onContextSave={handleOnContextSave}
                     onCardClick={handleCardClick}
-                    exemptionTemplates={exemptionTemplates}
                     activeHighlightType={activeHighlightType}
                     onToggleHighlightTool={handleToggleHighlightTool}
                     documentCompleted={currentDocument.status === 'Completed'}
+                    onUndo={undo}
+                    onRedo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
                 />
             </Box>
 
@@ -662,30 +272,12 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                 />
             )}
 
-            <Dialog
+            <ResubmitDialog
                 open={resubmitDialogOpen}
                 onClose={() => setResubmitDialogOpen(false)}
-            >
-                <DialogTitle>Resubmit Document</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        This will delete all current redactions (including any manual redactions you have made) and reprocess the document with the current AI model. This action cannot be undone.
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setResubmitDialogOpen(false)} disabled={isResubmitting}>
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleResubmit}
-                        color="warning"
-                        variant="contained"
-                        disabled={isResubmitting}
-                    >
-                        {isResubmitting ? <CircularProgress size={24} color="inherit" /> : 'Resubmit'}
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                onConfirm={handleResubmit}
+                isConfirming={isResubmitting}
+            />
         </Box>
     );
 }
