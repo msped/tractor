@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { getExemptionTemplates } from '@/services/redactionService';
 import {
     Box, Typography, Accordion, AccordionSummary, AccordionDetails,
     List, ListItem, Card, CardContent, CardActions, Button, Chip,
@@ -51,11 +53,20 @@ export const RedactionSidebar = ({
     removeScrollId,
     onContextSave,
     onCardClick = () => {},
-    exemptionTemplates = [],
     activeHighlightType = null,
     onToggleHighlightTool = () => {},
     documentCompleted = false,
 }) => {
+    const { data: session } = useSession();
+    const [exemptionTemplates, setExemptionTemplates] = useState([]);
+
+    useEffect(() => {
+        if (!session?.access_token) return;
+        getExemptionTemplates(session.access_token)
+            .then(setExemptionTemplates)
+            .catch(() => {});
+    }, [session?.access_token]);
+
     const redactionSections = Object.keys(redactions);
     const [expanded, setExpanded] = useState(new Set(['pending']));
     const [expandedGroups, setExpandedGroups] = useState(new Set());

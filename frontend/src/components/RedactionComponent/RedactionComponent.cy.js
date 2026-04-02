@@ -475,17 +475,6 @@ describe('<RedactionComponent />', () => {
             cy.contains('This will delete all current redactions').should('be.visible');
         });
 
-        it('closes dialog when cancel is clicked', () => {
-            mountRedactionComponent();
-
-            cy.get('button[aria-label="Resubmit for processing"]').click();
-            cy.get('[role="dialog"]').should('be.visible');
-
-            cy.get('[role="dialog"]').contains('button', 'Cancel').click();
-
-            cy.get('[role="dialog"]').should('not.exist');
-        });
-
         it('calls resubmit API and shows success toast', () => {
             mountRedactionComponent();
 

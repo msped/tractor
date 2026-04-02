@@ -4,6 +4,10 @@ import { RedactionSidebar } from './RedactionSidebar';
 const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
 
 describe('<RedactionSidebar />', () => {
+    beforeEach(() => {
+        cy.intercept('GET', '**/cases/exemptions', { body: mockExemptionTemplates }).as('getExemptions');
+    });
+
     // Individual (non-merged, non-group) display items in new format
     const mockRedactions = {
         pending: {
@@ -56,7 +60,6 @@ describe('<RedactionSidebar />', () => {
             removeScrollId: cy.stub().as('removeScrollId'),
             onContextSave: cy.stub().as('onContextSave'),
             onCardClick: cy.stub().as('onCardClick'),
-            exemptionTemplates: mockExemptionTemplates,
         };
     });
 
@@ -179,10 +182,9 @@ describe('<RedactionSidebar />', () => {
         });
 
         it('shows "No exemptions found" when no templates are configured', () => {
-            cy.fullMount(
-                <RedactionSidebar {...baseProps} redactions={mockRedactions} exemptionTemplates={[]} />,
-                mountOpts
-            );
+            cy.intercept('GET', '**/cases/exemptions', { body: [] }).as('getExemptionsEmpty');
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
+            cy.wait('@getExemptionsEmpty');
             cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
             cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
         });
