@@ -15,14 +15,15 @@ import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useDocumentControls } from '@/hooks/useDocumentControls';
 import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
 import { useRedactionActions } from '@/hooks/useRedactionActions';
+import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
+import { useManualRedaction } from '@/hooks/useManualRedaction';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
-export const RedactionComponent = ({ document, initialRedactions }) => {
+export const RedactionComponent = ({ document: currentDocument, initialRedactions }) => {
     const { data: session } = useSession();
     const router = useRouter();
     const [redactions, setRedactions] = useState(initialRedactions || []);
-    const [currentDocument, setCurrentDocument] = useState(document);
 
     // State for rejection dialog (single and bulk)
     const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
@@ -64,8 +65,6 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
     } = useDocumentControls({ accessToken: session?.access_token, undo, redo, clearHistory, currentDocument, router });
 
     const {
-        manualRedactionAnchor,
-        pendingRedaction,
         handleAcceptSuggestion,
         handleBulkAccept,
         handleRejectAsDisclosable,
@@ -75,28 +74,49 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
         handleOpenBulkRejectDialog,
         handleRejectConfirm,
         handleSplitMerge,
-        handleRemoveRedaction,
-        handleUnhighlightClick,
-        handleOnContextSave,
-        handleCreateManualRedaction,
-        handleCloseManualRedactionPopover,
-        handleTextSelect,
-        handleRemoveSelect,
     } = useRedactionActions({
-        documentId: document.id,
-        extractedText: document.extracted_text,
+        documentId: currentDocument.id,
         accessToken: session?.access_token,
         redactions,
         setRedactions,
         pushHistory,
         setSplitMerges,
-        displaySections,
-        activeHighlightType,
         setScrollToId,
         bulkRejectIds,
         setBulkRejectIds,
         setRejectionDialogOpen,
         setRejectionTarget,
+    });
+
+    const {
+        handleRemoveRedaction,
+        handleRemoveSelect,
+        handleUnhighlightClick,
+    } = useRemoveRedaction({
+        documentId: currentDocument.id,
+        extractedText: currentDocument.extracted_text,
+        accessToken: session?.access_token,
+        redactions,
+        setRedactions,
+        pushHistory,
+        displaySections,
+    });
+
+    const {
+        manualRedactionAnchor,
+        pendingRedaction,
+        handleTextSelect,
+        handleCreateManualRedaction,
+        handleCloseManualRedactionPopover,
+        handleOnContextSave,
+    } = useManualRedaction({
+        documentId: currentDocument.id,
+        extractedText: currentDocument.extracted_text,
+        accessToken: session?.access_token,
+        redactions,
+        setRedactions,
+        pushHistory,
+        activeHighlightType,
     });
 
     const pendingCount = displaySections.pending.total;
