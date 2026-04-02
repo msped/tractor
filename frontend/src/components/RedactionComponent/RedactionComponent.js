@@ -5,8 +5,6 @@ import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButt
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import UndoIcon from '@mui/icons-material/Undo';
-import RedoIcon from '@mui/icons-material/Redo';
 import NextLink from 'next/link';
 import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
@@ -142,30 +140,6 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                                 </IconButton>
                             </span>
                         </Tooltip>
-                        <Tooltip title="Undo (Ctrl+Z)">
-                            <span>
-                                <IconButton
-                                    aria-label="Undo"
-                                    onClick={undo}
-                                    disabled={!canUndo}
-                                    size="small"
-                                >
-                                    <UndoIcon />
-                                </IconButton>
-                            </span>
-                        </Tooltip>
-                        <Tooltip title="Redo (Ctrl+Y)">
-                            <span>
-                                <IconButton
-                                    aria-label="Redo"
-                                    onClick={redo}
-                                    disabled={!canRedo}
-                                    size="small"
-                                >
-                                    <RedoIcon />
-                                </IconButton>
-                            </span>
-                        </Tooltip>
                         {currentDocument.status !== 'Completed' ? (
                             <>
                                 <Tooltip title="Resubmit for processing">
@@ -252,6 +226,10 @@ export const RedactionComponent = ({ document, initialRedactions }) => {
                     activeHighlightType={activeHighlightType}
                     onToggleHighlightTool={handleToggleHighlightTool}
                     documentCompleted={currentDocument.status === 'Completed'}
+                    onUndo={undo}
+                    onRedo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
                 />
             </Box>
 

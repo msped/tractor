@@ -12,6 +12,8 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import UndoIcon from '@mui/icons-material/Undo';
+import RedoIcon from '@mui/icons-material/Redo';
 import { RedactionContextManager } from '../RedactionContextManager.js';
 
 const REDACTION_TYPE_LABELS = {
@@ -56,6 +58,10 @@ export const RedactionSidebar = ({
     activeHighlightType = null,
     onToggleHighlightTool = () => {},
     documentCompleted = false,
+    onUndo = () => {},
+    onRedo = () => {},
+    canUndo = false,
+    canRedo = false,
 }) => {
     const { data: session } = useSession();
     const [exemptionTemplates, setExemptionTemplates] = useState([]);
@@ -305,7 +311,25 @@ export const RedactionSidebar = ({
     return (
         <Box sx={{ width: '100%', borderLeft: 1, borderColor: 'divider', height: 'calc(100vh - 64px)', overflowY: 'auto', bgcolor: 'background.default' }}>
             <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
-                <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="h6" component='h2' color='text.primary'>Redactions</Typography>
+                    <Box>
+                        <Tooltip title="Undo (Ctrl+Z)">
+                            <span>
+                                <IconButton aria-label="Undo" onClick={onUndo} disabled={!canUndo} size="small">
+                                    <UndoIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                        <Tooltip title="Redo (Ctrl+Y)">
+                            <span>
+                                <IconButton aria-label="Redo" onClick={onRedo} disabled={!canRedo} size="small">
+                                    <RedoIcon />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    </Box>
+                </Box>
                 {!documentCompleted && (
                     <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
                         {HIGHLIGHT_TOOLS.map(({ type, label, fullLabel, color }) => {
