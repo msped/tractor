@@ -5,10 +5,10 @@ from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib.auth import get_user_model
 from rest_framework import status
-from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .authentication import IsAdminOrSuperuser
 from .models import APIKey
 from .serializers import APIKeyCreateSerializer, APIKeySerializer
 
@@ -29,7 +29,7 @@ class APIKeyListCreateView(APIView):
     POST - generate a new key and return the raw value once (admin only).
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrSuperuser]
 
     def get(self, request):
         keys = APIKey.objects.filter(is_active=True)
@@ -59,7 +59,7 @@ class APIKeyRevokeView(APIView):
     DELETE - revoke (soft-delete) an API key by ID (admin only).
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminOrSuperuser]
 
     def delete(self, request, key_id):
         try:

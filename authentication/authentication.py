@@ -2,8 +2,20 @@ import hashlib
 
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import BasePermission
 
 from .models import APIKey
+
+
+class IsAdminOrSuperuser(BasePermission):
+    """Allows access to staff users and superusers."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and (request.user.is_staff or request.user.is_superuser)
+        )
 
 
 class APIKeyAuthentication(BaseAuthentication):

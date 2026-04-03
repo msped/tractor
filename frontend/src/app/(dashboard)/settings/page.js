@@ -13,7 +13,7 @@ import { ModelManagementCard } from '@/components/ModelManagementCard';
 
 export default function SettingsPage() {
     const { data: session } = useSession();
-    const isAdmin = session?.user?.is_staff === true;
+    const isAdmin = session?.user?.is_staff === true || session?.user?.is_superuser === true;
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4 }}>

@@ -18,6 +18,9 @@ class APIKeyListCreateViewTests(NetworkBlockerMixin, APITestCase):
         self.admin = User.objects.create_user(
             username="admin", password="password", is_staff=True
         )
+        self.superuser = User.objects.create_user(
+            username="superuser", password="password", is_superuser=True
+        )
         self.regular_user = User.objects.create_user(
             username="regular", password="password", is_staff=False
         )
@@ -53,6 +56,17 @@ class APIKeyListCreateViewTests(NetworkBlockerMixin, APITestCase):
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_allowed_for_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_create_allowed_for_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+        response = self.client.post(self.url, {"description": "Superuser key"})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("key", response.data)
 
     def test_list_requires_authentication(self):
         response = self.client.get(self.url)

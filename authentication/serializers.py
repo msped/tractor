@@ -12,9 +12,13 @@ User = get_user_model()
 class UserDetailsSerializer(BaseUserDetailsSerializer):
     class Meta(BaseUserDetailsSerializer.Meta):
         model = User
-        fields = BaseUserDetailsSerializer.Meta.fields + ("is_staff",)
+        fields = BaseUserDetailsSerializer.Meta.fields + (
+            "is_staff",
+            "is_superuser",
+        )
         read_only_fields = BaseUserDetailsSerializer.Meta.read_only_fields + (
             "is_staff",
+            "is_superuser",
         )
 
 
