@@ -3,7 +3,7 @@ from dj_rest_auth.views import LoginView, LogoutView, UserDetailsView
 from django.urls import path
 from rest_framework_simplejwt.views import TokenVerifyView
 
-from .views import MicrosoftLogin
+from .views import APIKeyListCreateView, APIKeyRevokeView, MicrosoftLogin
 
 urlpatterns = [
     path("login", LoginView.as_view(), name="rest_login"),
@@ -12,4 +12,12 @@ urlpatterns = [
     path("token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path("token/refresh", get_refresh_view().as_view(), name="token_refresh"),
     path("microsoft", MicrosoftLogin.as_view(), name="microsoft_login"),
+    path(
+        "api-keys", APIKeyListCreateView.as_view(), name="api-key-list-create"
+    ),
+    path(
+        "api-keys/<int:key_id>",
+        APIKeyRevokeView.as_view(),
+        name="api-key-revoke",
+    ),
 ]

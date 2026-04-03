@@ -163,10 +163,9 @@ elif _MEDIA_STORAGE == "azure":
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CORS_ORIGIN_ALLOW_ALL = True
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "authentication.authentication.APIKeyAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     )
 }
@@ -174,6 +173,7 @@ REST_FRAMEWORK = {
 REST_AUTH = {
     "USE_JWT": True,
     "JWT_AUTH_HTTPONLY": False,
+    "USER_DETAILS_SERIALIZER": "authentication.serializers.UserDetailsSerializer",
 }
 
 APPEND_SLASH = False
