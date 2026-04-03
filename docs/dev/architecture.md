@@ -49,14 +49,17 @@ All endpoints are prefixed with `/api/`.
 
 ### Authentication (`/api/auth/`)
 
-| Method | Endpoint         | Description                  |
-|--------|------------------|------------------------------|
-| POST   | `/login`         | Login with username/password |
-| POST   | `/logout`        | Logout current user          |
-| GET    | `/user`          | Get current user details     |
-| POST   | `/token/verify`  | Verify JWT token             |
-| POST   | `/token/refresh` | Refresh JWT token            |
-| POST   | `/microsoft`     | Microsoft Entra ID callback  |
+| Method | Endpoint           | Description                             |
+|--------|--------------------|-----------------------------------------|
+| POST   | `/login`           | Login with username/password            |
+| POST   | `/logout`          | Logout current user                     |
+| GET    | `/user`            | Get current user details                |
+| POST   | `/token/verify`    | Verify JWT token                        |
+| POST   | `/token/refresh`   | Refresh JWT token                       |
+| POST   | `/microsoft`       | Microsoft Entra ID callback             |
+| GET    | `/api-keys`        | List active API keys (admin only)       |
+| POST   | `/api-keys`        | Generate a new API key (admin only)     |
+| DELETE | `/api-keys/<id>`   | Revoke an API key (admin only)          |
 
 ### Cases (`/api/cases`)
 
@@ -109,8 +112,35 @@ All endpoints are prefixed with `/api/`.
 
 ## Authentication Flow
 
-!!! note "TODO"
-    Document JWT flow and Microsoft Entra ID integration
+Tractor supports two authentication methods, both enforced at the DRF layer.
+
+### JWT (Interactive Users)
+
+1. The Next.js frontend authenticates via **NextAuth v5** using either username/password credentials or **Microsoft Entra ID** OAuth2.
+2. On login, NextAuth calls `POST /api/auth/login` (or `POST /api/auth/microsoft`) and stores the Django-issued JWT access and refresh tokens inside the NextAuth session JWT (server-side only).
+3. All frontend API calls include `Authorization: Bearer <access_token>`.
+4. The access token is valid for 60 minutes. NextAuth transparently refreshes it via `POST /api/auth/token/refresh` using the 7-day refresh token before expiry.
+5. DRF authenticates the request via `rest_framework_simplejwt.authentication.JWTAuthentication`.
+
+### API Key (External Services / Machine-to-Machine)
+
+1. An administrator generates an API key via the Settings page (admin-only card) or Django Admin. The key is stored as a **SHA-256 hash** — the raw value is shown once and never persisted.
+2. External services include the key as `Authorization: Api-Key <key>`.
+3. `authentication.authentication.APIKeyAuthentication` hashes the incoming key and looks it up in the `APIKey` table. On match, `request.user` is set to the `api_service` system account.
+4. `CaseListCreateView.perform_create` attributes the case to `api_service`, providing stable authorship independent of staff changes.
+5. API keys are permanent until revoked (`is_active = False`). Only `is_staff` users can create or revoke keys; API keys themselves authenticate as `api_service` (non-staff) and therefore cannot manage other keys.
+
+### Authentication Class Order
+
+Both classes are listed in `DEFAULT_AUTHENTICATION_CLASSES` in `backend/settings/base.py`. DRF tries them in order:
+
+| Priority | Class | Triggers on |
+|----------|-------|-------------|
+| 1 | `APIKeyAuthentication` | `Authorization: Api-Key …` |
+| 2 | `JWTAuthentication` | `Authorization: Bearer …` |
+
+A class that returns `None` passes control to the next in line. A class that raises `AuthenticationFailed` short-circuits all subsequent classes and returns a 401 response.
+
 
 ## Entity Recognition
 
