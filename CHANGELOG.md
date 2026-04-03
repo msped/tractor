@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- API key management: creation, revocation, and display in settings (admin/superuser only) (#68)
+- `IsAdminOrSuperuser` permission class for API key endpoints (#68)
+- Manual redaction: users can highlight text in the document viewer to create new redactions
+- Remove redaction: users can remove individual redaction highlights directly from the document viewer
+- Undo/Redo functionality on document review
+- Undo/Redo buttons moved into the redaction sidebar
+- `SessionWatcher` component for session management with automatic redirect on expiry
+- Training status banner showing when a training run is in progress
+- Original file auto-deletion after a configurable retention threshold, with settings UI
+- `DS_INFORMATION` redactions excluded from disclosure PDF export
+- Docker multi-stage build setup for frontend and backend, including PostgreSQL configuration
+- Production Django settings split into base, development, and production modules
 - Three-model NLP pipeline: SpanCat (trained, highest priority) + GLiNER (zero-shot THIRD_PARTY) + Presidio (structured THIRD_PARTY PII and OPERATIONAL pattern refs); replaces previous SpanCat + `en_core_web_lg` approach
 - GLiNER added for zero-shot third-party PII detection (names, orgs, locations, DOB, addresses) — works without training data
 - Presidio added with custom UK pattern recognisers for postcodes, NI numbers, crime references, and collar numbers
@@ -36,13 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - NLP stack updated: `en_core_web_lg` replaced by GLiNER + Presidio; SpanCat retained as the primary trained model
 - GLiNER model paths store HuggingFace model IDs; HuggingFace handles local caching. SpanCat models continue to be stored in `nlp_models/`
+- GLiNER model loading now falls back to a local path if available before fetching from HuggingFace
 - CI pipeline now checks linting before running tests (#33)
 - Removed lint.yml as linting now occurs before testing
 - Refactored API calls to use service functions with access tokens instead of direct apiClient usage (#23)
 - Updated theme colours to align with default MUI palette (#29)
+- Updated dependencies to fix CVEs
 
 ### Fixed
 
+- Token refresh error handling and session expiry redirect
 - Mismatched entity label types between SpanCat and NER models (#38)
 - Unauthenticated users could access the training page (#34)
 - Duplicate characters rendered due to inclusive/exclusive character offset mismatch (#31)
