@@ -37,6 +37,7 @@ cp frontend/.env.example frontend/.env
 | `DJANGO_SETTINGS_MODULE` | Settings module path                          | `backend.settings.production` |
 | `DEBUG`                  | Enable debug mode (optional — defaults to `False` in production) | `False`       |
 | `ALLOWED_HOSTS`          | Comma-separated allowed hostnames — must include `backend` when running in Docker, as the frontend container calls the backend directly | `localhost,backend,yourdomain.com` |
+| `CORS_ALLOWED_ORIGINS`   | Comma-separated list of allowed CORS origins. In production, set this to the frontend URL only. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
 | `DATABASE_URL`           | Database URL for connection (optional)        |                            |
 | `POSTGRES_DB`            | Database name (optional)                      | `tractor`                  |
 | `POSTGRES_USER`          | Database user (optional)                      | `tractor`                  |

@@ -68,3 +68,45 @@ Navigate to **Settings** and find the **Exemption Templates** card.
 When reviewing a document, the dropdown arrow on the **Reject** button opens a searchable list of configured exemptions. Reviewers can type to filter the list and click an exemption to reject the suggestion immediately with that reason recorded.
 
 For one-off reasons that do not fit an existing template, reviewers can still click **Reject** directly to open the free-text dialog.
+
+---
+
+## API Keys
+
+!!! note
+    This section is only visible and accessible to administrators.
+
+API keys allow external services to create cases programmatically via the REST API. Each key authenticates as a system service account so cases have a stable `created_by` attribution regardless of staff changes.
+
+### Managing API Keys
+
+Navigate to **Settings** and find the **API Keys** card.
+
+- **Generating a key** — Click **Manage**, then **Generate Key**. Enter a description that identifies the integration (e.g. `Case management integration`), then click **Generate**. The key is displayed **once** immediately after creation — copy it now, as it cannot be retrieved again.
+- **Revoking a key** — Click the delete icon next to a key and confirm the prompt. Revocation is immediate; any integration using that key will receive `401 Unauthorized` responses.
+
+### Using an API Key
+
+Include the key in the `Authorization` header of your HTTP requests:
+
+```
+Authorization: Api-Key <your-key>
+```
+
+**Example — creating a case:**
+
+```bash
+curl -X POST https://your-tractor-instance/api/cases \
+  -H "Authorization: Api-Key <your-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "case_reference": "2025-0001",
+    "data_subject_name": "Jane Smith",
+    "data_subject_dob": "1985-06-15"
+  }'
+```
+
+!!! warning
+    Treat API keys like passwords. Store them in your integration's secret store (e.g. a CI/CD secrets vault or environment variable), not in source code or plain text files.
+
+API keys can also be managed directly through the Django Admin at `/admin/authentication/apikey/`.
