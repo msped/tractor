@@ -162,3 +162,16 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(link.training_run, run)
         self.assertEqual(link.document, self.case_doc)
         self.assertEqual(run.trainingruncasedoc_set.count(), 1)
+
+    def test_delete_training_run_resets_training_doc_processed(self):
+        self.training_doc.processed = True
+        self.training_doc.save()
+        run = TrainingRun.objects.create(
+            model=self.model, source="training_docs"
+        )
+        TrainingRunTrainingDoc.objects.create(
+            training_run=run, document=self.training_doc
+        )
+        run.delete()
+        self.training_doc.refresh_from_db()
+        self.assertFalse(self.training_doc.processed)
