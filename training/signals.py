@@ -4,7 +4,12 @@ from pathlib import Path
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 
-from .models import Model, TrainingDocument, TrainingRun, TrainingRunTrainingDoc
+from .models import (
+    Model,
+    TrainingDocument,
+    TrainingRun,
+    TrainingRunTrainingDoc,
+)
 
 
 @receiver(pre_delete, sender=TrainingRun)
