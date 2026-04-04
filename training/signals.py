@@ -4,7 +4,21 @@ from pathlib import Path
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 
-from .models import Model
+from .models import (
+    Model,
+    TrainingDocument,
+    TrainingRun,
+    TrainingRunTrainingDoc,
+)
+
+
+@receiver(pre_delete, sender=TrainingRun)
+def reset_training_docs_on_run_delete(sender, instance, **kwargs):
+    """Reset processed flag on TrainingDocuments when their training run is deleted."""
+    doc_ids = TrainingRunTrainingDoc.objects.filter(
+        training_run=instance
+    ).values_list("document_id", flat=True)
+    TrainingDocument.objects.filter(id__in=doc_ids).update(processed=False)
 
 
 @receiver(pre_delete, sender=Model)
