@@ -49,6 +49,7 @@ export const RedactionSidebar = ({
     onBulkReject = () => {},
     onRejectAsDisclosable = () => {},
     onSplitMerge = () => {},
+    onRemoveFromMerge = () => {},
     onSuggestionMouseEnter,
     onSuggestionMouseLeave,
     scrollToId,
@@ -104,6 +105,8 @@ export const RedactionSidebar = ({
     const [currentItemForMenu, setCurrentItemForMenu] = useState(null);
     const [rejectMenuAnchorEl, setRejectMenuAnchorEl] = useState(null);
     const [currentItemForRejectMenu, setCurrentItemForRejectMenu] = useState(null);
+    const [removeMenuAnchorEl, setRemoveMenuAnchorEl] = useState(null);
+    const [currentItemForRemoveMenu, setCurrentItemForRemoveMenu] = useState(null);
     const [exemptionSearch, setExemptionSearch] = useState('');
 
     const handleMenuClick = (event, item) => {
@@ -222,16 +225,49 @@ export const RedactionSidebar = ({
                         {sectionKey === 'pending' &&
                             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                 {isMerged && (
-                                    <Tooltip title="Split into individual redactions">
-                                        <IconButton
-                                            size="small"
-                                            onClick={() => onSplitMerge(ids.join(':'))}
-                                            aria-label="split merged redaction"
-                                        >
-                                            <CallSplitIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
+                                    <ButtonGroup size="small" variant="outlined">
+                                        <Tooltip title="Split all into individual redactions">
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => onSplitMerge(ids.join(':'))}
+                                                aria-label="split merged redaction"
+                                            >
+                                                <CallSplitIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        <Tooltip title="Remove a single item from this merge">
+                                            <IconButton
+                                                size="small"
+                                                aria-label="remove constituent from merge"
+                                                onClick={(e) => { setRemoveMenuAnchorEl(e.currentTarget); setCurrentItemForRemoveMenu(item); }}
+                                            >
+                                                <ArrowDropDownIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                    </ButtonGroup>
                                 )}
+                                <Menu
+                                    anchorEl={removeMenuAnchorEl}
+                                    open={Boolean(removeMenuAnchorEl) && currentItemForRemoveMenu?.ids?.[0] === ids[0]}
+                                    onClose={() => { setRemoveMenuAnchorEl(null); setCurrentItemForRemoveMenu(null); }}
+                                >
+                                    <MenuItem disabled sx={{ fontSize: '0.75rem', opacity: '1 !important', color: 'text.secondary' }}>
+                                        Remove item from merge
+                                    </MenuItem>
+                                    <Divider />
+                                    {(currentItemForRemoveMenu?.constituents || []).map(c => (
+                                        <MenuItem
+                                            key={c.id}
+                                            onClick={() => {
+                                                onRemoveFromMerge(c.id);
+                                                setRemoveMenuAnchorEl(null);
+                                                setCurrentItemForRemoveMenu(null);
+                                            }}
+                                        >
+                                            {truncateText(c.text, 40)}
+                                        </MenuItem>
+                                    ))}
+                                </Menu>
                                 {isMerged ? (
                                     <>
                                         <ButtonGroup variant="contained" color="error" size="small">

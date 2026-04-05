@@ -54,6 +54,7 @@ describe('<RedactionSidebar />', () => {
             onBulkReject: cy.stub().as('onBulkReject'),
             onRejectAsDisclosable: cy.stub().as('onRejectAsDisclosable'),
             onSplitMerge: cy.stub().as('onSplitMerge'),
+            onRemoveFromMerge: cy.stub().as('onRemoveFromMerge'),
             onSuggestionMouseEnter: cy.stub().as('onSuggestionMouseEnter'),
             onSuggestionMouseLeave: cy.stub().as('onSuggestionMouseLeave'),
             scrollToId: null,
@@ -395,6 +396,10 @@ describe('<RedactionSidebar />', () => {
                         text: 'John Doe',
                         redaction_type: 'PII',
                         is_suggestion: true,
+                        constituents: [
+                            { id: 'merge1', text: 'John' },
+                            { id: 'merge2', text: 'Doe' },
+                        ],
                     },
                 ],
             },
@@ -442,6 +447,22 @@ describe('<RedactionSidebar />', () => {
 
         it('does not show the change-type dropdown for merged items', () => {
             cy.get('button[aria-label="change redaction type and accept"]').should('not.exist');
+        });
+
+        it('renders a remove-constituent dropdown arrow next to the split button', () => {
+            cy.get('button[aria-label="remove constituent from merge"]').should('be.visible');
+        });
+
+        it('dropdown lists each constituent text as a menu item', () => {
+            cy.get('button[aria-label="remove constituent from merge"]').click();
+            cy.contains('[role="menuitem"]', 'John').should('be.visible');
+            cy.contains('[role="menuitem"]', 'Doe').should('be.visible');
+        });
+
+        it('calls onRemoveFromMerge with the constituent id when a menu item is clicked', () => {
+            cy.get('button[aria-label="remove constituent from merge"]').click();
+            cy.contains('[role="menuitem"]', 'John').click();
+            cy.get('@onRemoveFromMerge').should('have.been.calledOnceWith', 'merge1');
         });
     });
 
