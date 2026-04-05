@@ -124,6 +124,50 @@ describe('mergeAdjacentSpans', () => {
         expect(result[0].isMerged).to.be.true;
     });
 
+    // ── isolatedIds ───────────────────────────────────────────────────────────
+
+    it('merged items include a constituents array with individual id/text pairs', () => {
+        const a = { ...span('a', 0, 3), text: 'John' };
+        const b = { ...span('b', 4, 7), text: 'Doe' };
+        const result = mergeAdjacentSpans([a, b]);
+        expect(result[0].constituents).to.deep.equal([
+            { id: 'a', text: 'John' },
+            { id: 'b', text: 'Doe' },
+        ]);
+    });
+
+    it('isolating the first item of a 3-way merge leaves the rest merged', () => {
+        const redactions = [span('a', 0, 3), span('b', 3, 6), span('c', 6, 9)];
+        const result = mergeAdjacentSpans(redactions, new Set(), 2, new Set(['a']));
+        expect(result).to.have.length(2);
+        expect(result[0].ids).to.deep.equal(['a']);
+        expect(result[0].isMerged).to.be.false;
+        expect(result[1].ids).to.deep.equal(['b', 'c']);
+        expect(result[1].isMerged).to.be.true;
+    });
+
+    it('isolating the last item of a 3-way merge leaves the rest merged', () => {
+        const redactions = [span('a', 0, 3), span('b', 3, 6), span('c', 6, 9)];
+        const result = mergeAdjacentSpans(redactions, new Set(), 2, new Set(['c']));
+        expect(result).to.have.length(2);
+        expect(result[0].ids).to.deep.equal(['a', 'b']);
+        expect(result[0].isMerged).to.be.true;
+        expect(result[1].ids).to.deep.equal(['c']);
+        expect(result[1].isMerged).to.be.false;
+    });
+
+    it('isolating the middle item of a 3-way merge yields three individual items', () => {
+        const redactions = [span('a', 0, 3), span('b', 3, 6), span('c', 6, 9)];
+        const result = mergeAdjacentSpans(redactions, new Set(), 2, new Set(['b']));
+        expect(result).to.have.length(3);
+        expect(result[0].ids).to.deep.equal(['a']);
+        expect(result[0].isMerged).to.be.false;
+        expect(result[1].ids).to.deep.equal(['b']);
+        expect(result[1].isMerged).to.be.false;
+        expect(result[2].ids).to.deep.equal(['c']);
+        expect(result[2].isMerged).to.be.false;
+    });
+
     it('split items retain their original properties', () => {
         const redactions = [
             { id: 'a', start_char: 0, end_char: 5, redaction_type: OPERATIONAL, text: 'hello' },

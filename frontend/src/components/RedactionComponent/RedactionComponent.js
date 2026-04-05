@@ -36,6 +36,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     const {
         displaySections,
         setSplitMerges,
+        setIsolatedIds,
         hoveredSuggestionId,
         scrollToId,
         setScrollToId,
@@ -74,6 +75,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         handleOpenBulkRejectDialog,
         handleRejectConfirm,
         handleSplitMerge,
+        handleRemoveFromMerge,
     } = useRedactionActions({
         documentId: currentDocument.id,
         accessToken: session?.access_token,
@@ -81,6 +83,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         setRedactions,
         pushHistory,
         setSplitMerges,
+        setIsolatedIds,
         setScrollToId,
         bulkRejectIds,
         setBulkRejectIds,
@@ -237,6 +240,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                     onBulkReject={handleOpenBulkRejectDialog}
                     onRejectAsDisclosable={handleRejectAsDisclosable}
                     onSplitMerge={handleSplitMerge}
+                    onRemoveFromMerge={handleRemoveFromMerge}
                     onSuggestionMouseEnter={handleSuggestionMouseEnter}
                     onSuggestionMouseLeave={handleSuggestionMouseLeave}
                     scrollToId={scrollToId}
