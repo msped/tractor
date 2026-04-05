@@ -3,6 +3,7 @@ import { mergeAdjacentSpans, groupByTextAndType } from '@/utils/mergeRedactionSp
 
 export function useRedactionDisplay({ redactions }) {
     const [splitMerges, setSplitMerges] = useState(new Set());
+    const [isolatedIds, setIsolatedIds] = useState(new Set());
     const [hoveredSuggestionId, setHoveredSuggestionId] = useState(null);
     const [scrollToId, setScrollToId] = useState(null);
     const [scrollToDocumentId, setScrollToDocumentId] = useState(null);
@@ -24,7 +25,7 @@ export function useRedactionDisplay({ redactions }) {
 
         const processSection = (items) => ({
             total: items.length,
-            items: groupByTextAndType(mergeAdjacentSpans(items, splitMerges)),
+            items: groupByTextAndType(mergeAdjacentSpans(items, splitMerges, 2, isolatedIds)),
         });
 
         return {
@@ -33,7 +34,7 @@ export function useRedactionDisplay({ redactions }) {
             rejected: processSection(rejected),
             manual: processSection(manual),
         };
-    }, [redactions, splitMerges]);
+    }, [redactions, splitMerges, isolatedIds]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);
@@ -59,6 +60,8 @@ export function useRedactionDisplay({ redactions }) {
         displaySections,
         splitMerges,
         setSplitMerges,
+        isolatedIds,
+        setIsolatedIds,
         hoveredSuggestionId,
         scrollToId,
         setScrollToId,

@@ -9,6 +9,7 @@ export function useRedactionActions({
     setRedactions,
     pushHistory,
     setSplitMerges,
+    setIsolatedIds,
     setScrollToId,
     bulkRejectIds,
     setBulkRejectIds,
@@ -188,12 +189,22 @@ export function useRedactionActions({
     }, [bulkRejectIds, documentId, accessToken, pushHistory, applySingle, applyUpdates, setScrollToId, setRejectionDialogOpen, setRejectionTarget, setBulkRejectIds]);
 
     const handleSplitMerge = useCallback((mergeKey) => {
+        setScrollToId(null);
         setSplitMerges(prev => new Set(prev).add(mergeKey));
         pushHistory(
             async () => setSplitMerges(prev => { const n = new Set(prev); n.delete(mergeKey); return n; }),
             async () => setSplitMerges(prev => new Set(prev).add(mergeKey))
         );
-    }, [pushHistory, setSplitMerges]);
+    }, [pushHistory, setSplitMerges, setScrollToId]);
+
+    const handleRemoveFromMerge = useCallback((id) => {
+        setScrollToId(null);
+        setIsolatedIds(prev => new Set(prev).add(id));
+        pushHistory(
+            async () => setIsolatedIds(prev => { const n = new Set(prev); n.delete(id); return n; }),
+            async () => setIsolatedIds(prev => new Set(prev).add(id))
+        );
+    }, [pushHistory, setIsolatedIds, setScrollToId]);
 
     return {
         handleAcceptSuggestion,
@@ -205,5 +216,6 @@ export function useRedactionActions({
         handleOpenBulkRejectDialog,
         handleRejectConfirm,
         handleSplitMerge,
+        handleRemoveFromMerge,
     };
 }
