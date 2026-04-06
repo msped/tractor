@@ -36,6 +36,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
     const [pendingDeleteDoc, setPendingDeleteDoc] = useState(null);
+    const [isDeletingDoc, setIsDeletingDoc] = useState(false);
     const fileInputRef = useRef(null);
     const { data: session } = useSession();
 
@@ -103,14 +104,17 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
     const handleDeleteDocument = async () => {
         if (!caseId || !pendingDeleteDoc) return;
         const docId = pendingDeleteDoc.id;
-        setPendingDeleteDoc(null);
+        setIsDeletingDoc(true);
 
         try {
             await deleteDocument(docId, session?.access_token);
+            setPendingDeleteDoc(null);
             toast.success('Document deleted.');
             if (onUpdate) await onUpdate();
         } catch (error) {
             toast.error('Failed to delete document. Please try again.');
+        } finally {
+            setIsDeletingDoc(false);
         }
     };
 
@@ -168,6 +172,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
                 description={`Are you sure you want to delete "${pendingDeleteDoc?.filename}"? This cannot be undone.`}
                 confirmLabel="Delete"
                 confirmColor="error"
+                loading={isDeletingDoc}
             />
             <Card variant="outlined">
                 <CardHeader

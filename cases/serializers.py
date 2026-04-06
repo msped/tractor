@@ -88,6 +88,16 @@ class DocumentSerializer(serializers.ModelSerializer):
         Override to handle file uploads and set the filename and file_type.
         """
         original_file = validated_data.pop("original_file")
+        ext = os.path.splitext(original_file.name)[1].lower()
+        if ext == ".doc":
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "Legacy .doc files are not supported. "
+                        "Please save the document as .docx or PDF and re-upload."
+                    )
+                }
+            )
         instance = Document.objects.create(
             original_file=original_file, **validated_data
         )

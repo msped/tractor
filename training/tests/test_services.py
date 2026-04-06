@@ -235,7 +235,7 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_pdf,
     ):
         """
-        Test that a ValueError is raised if the document contains no text.
+        Test that empty text returns empty results rather than raising.
         """
         mock_manager.get_instance.return_value.get_model.return_value = (
             MagicMock()
@@ -245,10 +245,13 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         )
         mock_pdf.return_value = ""
 
-        with self.assertRaisesMessage(
-            ValueError, "No text found in the document."
-        ):
-            extract_entities_from_text(self.file_path)
+        ner_text, results, tables, structure = extract_entities_from_text(
+            self.file_path
+        )
+        self.assertEqual(ner_text, "")
+        self.assertEqual(results, [])
+        self.assertEqual(tables, [])
+        self.assertIsNone(structure)
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
@@ -661,7 +664,7 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
     def test_extract_entities_docx_empty_text_raises(
         self, mock_gliner_mgr, mock_spancat_mgr, mock_doc_struct
     ):
-        """DOCX path with empty text raises ValueError."""
+        """DOCX path with empty text returns empty results rather than raising."""
         mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
             MagicMock()
         )
@@ -670,10 +673,13 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
         )
         mock_doc_struct.return_value = ([], [], "")
 
-        with self.assertRaisesMessage(
-            ValueError, "No text found in the document."
-        ):
-            extract_entities_from_text("/fake/path.docx")
+        ner_text, results, tables, structure = extract_entities_from_text(
+            "/fake/path.docx"
+        )
+        self.assertEqual(ner_text, "")
+        self.assertEqual(results, [])
+        self.assertEqual(tables, [])
+        self.assertEqual(structure, [])
 
 
 class ExtractDocumentStructureTests(NetworkBlockerMixin, TestCase):
