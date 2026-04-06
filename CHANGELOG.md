@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Loading state to confirmation dialog and document deletion process (#72)
+- Isolated constituent management for merged redactions — split items can be individually accepted/rejected/type-changed without affecting the group (#71)
+- Validation to reject legacy `.doc` files on upload with a clear error message (#72)
 - API key management: creation, revocation, and display in settings (admin/superuser only) (#68)
 - `IsAdminOrSuperuser` permission class for API key endpoints (#68)
 - Manual redaction: users can highlight text in the document viewer to create new redactions
@@ -57,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Training documents reset to unprocessed when their associated TrainingRun is deleted (#69)
+- Merged cells in tables not displaying correctly as duplicated content (#72)
+- Scroll behaviour when navigating merged redaction split/remove items (#71)
 - Token refresh error handling and session expiry redirect
 - Mismatched entity label types between SpanCat and NER models (#38)
 - Unauthenticated users could access the training page (#34)
