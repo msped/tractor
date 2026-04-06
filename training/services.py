@@ -306,9 +306,7 @@ def extract_document_structure(path):
                         for cell in row.cells:
                             if cell._tc not in seen_tc_global:
                                 seen_tc_global.add(cell._tc)
-                                row_cells.append(
-                                    cell.text.replace("\n", " ")
-                                )
+                                row_cells.append(cell.text.replace("\n", " "))
                         if row_cells:
                             text_rows.append("\t".join(row_cells))
                     table_text = "\n".join(text_rows)
