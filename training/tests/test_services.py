@@ -248,7 +248,6 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         ner_text, results, tables, structure = extract_entities_from_text(
             self.file_path
         )
-
         self.assertEqual(ner_text, "")
         self.assertEqual(results, [])
         self.assertEqual(tables, [])
@@ -677,7 +676,6 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
         ner_text, results, tables, structure = extract_entities_from_text(
             "/fake/path.docx"
         )
-
         self.assertEqual(ner_text, "")
         self.assertEqual(results, [])
         self.assertEqual(tables, [])

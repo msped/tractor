@@ -10,10 +10,10 @@ _PREFIX_CHARS = {"#"}
 
 
 def _paragraph_is_hidden(para):
-    """Return True if every text-bearing run in the paragraph has white (#FFFFFF) colour.
+    """Return True if every text-bearing run has white (#FFFFFF) colour.
 
-    Word templates use white text to embed invisible content (e.g. form field markers,
-    URN placeholders). These should be excluded from the extracted text.
+    Word templates use white text to embed invisible content (e.g. URN
+    placeholders). These should be excluded from extracted text.
     """
     text_runs = [r for r in para.runs if r.text.strip()]
     if not text_runs:
@@ -135,6 +135,8 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
             if is_continuation:
                 # Continuation cells don't occupy space in the NER text
                 # (deduplication mirrors extract_document_structure table_text)
+                # Continuation cells are excluded from NER text, so they
+                # don't consume position space.
                 cells.append(
                     {
                         "row": row_idx,
@@ -295,9 +297,8 @@ def extract_document_structure(path):
             # Find the matching table object
             for tbl in doc.tables:
                 if tbl._tbl is element:
-                    # Build plain text for NER (tab-separated values).
-                    # Use a global seen set so colspan/rowspan cells only
-                    # contribute their text once across the entire table.
+                    # Build plain text for NER — deduplicate merged cells so
+                    # each cell's text appears exactly once in the NER input.
                     seen_tc_global = set()
                     text_rows = []
                     for row in tbl.rows:
