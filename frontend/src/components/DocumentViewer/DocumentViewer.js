@@ -426,9 +426,10 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
 
                 // If we have cell data, render with React for highlighting support
                 if (tableData.cells && tableData.cells.length > 0) {
-                    // Group cells by row
+                    // Group cells by row, skipping merged continuations
                     const rowMap = new Map();
                     tableData.cells.forEach(cell => {
+                        if (cell.isMergedContinuation) return;
                         if (!rowMap.has(cell.row)) {
                             rowMap.set(cell.row, []);
                         }
@@ -451,6 +452,8 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                                                 <td
                                                     key={`cell-${rowIndex}-${cellIndex}`}
                                                     data-startchar={cell.start}
+                                                    colSpan={cell.colspan > 1 ? cell.colspan : undefined}
+                                                    rowSpan={cell.rowspan > 1 ? cell.rowspan : undefined}
                                                     style={{
                                                         ...(hasBorders ? { border: '1px solid #000' } : {}),
                                                         padding: '6px 8px',
