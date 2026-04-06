@@ -426,7 +426,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
 
                 // If we have cell data, render with React for highlighting support
                 if (tableData.cells && tableData.cells.length > 0) {
-                    // Group cells by row
+                    // Group cells by row, skipping merged continuations
                     const rowMap = new Map();
                     tableData.cells.forEach(cell => {
                         if (cell.isMergedContinuation) return;

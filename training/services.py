@@ -133,6 +133,8 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
             cell_text = cell.text.replace("\n", " ")
 
             if is_continuation:
+                # Continuation cells don't occupy space in the NER text
+                # (deduplication mirrors extract_document_structure table_text)
                 # Continuation cells are excluded from NER text, so they
                 # don't consume position space.
                 cells.append(

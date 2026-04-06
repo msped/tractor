@@ -213,6 +213,25 @@ describe('<CaseDocuments />', () => {
       cy.contains('Document deleted.').should('be.visible');
     });
 
+    it('shows a spinner and disables buttons while deletion is in progress', () => {
+      cy.intercept('DELETE', '/api/cases/documents/*', (req) => {
+        req.reply({ statusCode: 204, delay: 500 });
+      }).as('deleteRequest');
+
+      cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={docs} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+      );
+      cy.get('li').first().find('button[aria-label="delete"]').click();
+      cy.get('[role="dialog"]').contains('button', 'Delete').click();
+
+      cy.get('[role="dialog"]').contains('button', 'Delete').should('be.disabled');
+      cy.get('[role="dialog"]').contains('button', 'Cancel').should('be.disabled');
+      cy.get('[role="dialog"]').find('[role="progressbar"]').should('exist');
+
+      cy.wait('@deleteRequest');
+    });
+
     it('shows delete error toast when service rejects', () => {
       cy.intercept('DELETE', '/api/cases/documents/*', { statusCode: 500 }).as('deleteRequest');
 

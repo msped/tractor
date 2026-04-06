@@ -661,7 +661,7 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
     @patch("training.services.extract_document_structure")
     @patch("training.services.SpanCatModelManager")
     @patch("training.services.GLiNERModelManager")
-    def test_extract_entities_docx_empty_text_raises(
+    def test_extract_entities_docx_empty_text_returns_empty(
         self, mock_gliner_mgr, mock_spancat_mgr, mock_doc_struct
     ):
         """DOCX path with empty text returns empty results rather than raising."""
