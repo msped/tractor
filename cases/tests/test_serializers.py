@@ -123,6 +123,22 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(instance.file_type, ".docx")
         self.assertTrue(os.path.exists(instance.original_file.path))
 
+    def test_document_serializer_rejects_doc_files(self):
+        """Test that legacy .doc files are rejected with a validation error."""
+        from rest_framework.exceptions import ValidationError
+
+        doc_file = SimpleUploadedFile("statement.doc", b"binary content")
+        data = {"case": self.case.pk, "original_file": doc_file}
+
+        serializer = DocumentSerializer(data=data)
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        with self.assertRaises(ValidationError) as ctx:
+            serializer.save()
+        self.assertIn(
+            "Legacy .doc files are not supported",
+            str(ctx.exception.detail),
+        )
+
     def test_document_serializer_update_status(self):
         """Test updating a Document's status via the serializer."""
         data = {"new_status": Document.Status.COMPLETED}

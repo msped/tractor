@@ -9,6 +9,27 @@ from .loader import GLiNERModelManager, SpanCatModelManager
 _PREFIX_CHARS = {"#"}
 
 
+def _paragraph_is_hidden(para):
+    """Return True if every text-bearing run in the paragraph has white (#FFFFFF) colour.
+
+    Word templates use white text to embed invisible content (e.g. form field markers,
+    URN placeholders). These should be excluded from the extracted text.
+    """
+    text_runs = [r for r in para.runs if r.text.strip()]
+    if not text_runs:
+        return False
+    for run in text_runs:
+        rpr = run._element.find(qn("w:rPr"))
+        if rpr is None:
+            return False
+        color_el = rpr.find(qn("w:color"))
+        if color_el is None:
+            return False
+        if color_el.get(qn("w:val"), "").upper() != "FFFFFF":
+            return False
+    return True
+
+
 def _expand_prefix_symbols(entities, text):
     """Extend entity start positions to include an immediately preceding '#' or similar symbol."""
     for ent in entities:
@@ -109,20 +130,18 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
             colspan = row_tc_colspan[row_idx].get(tc, 1)
             rowspan = tc_rowspan.get(tc, 1)
 
-            # Always extract text and advance position to keep NER offsets valid
             cell_text = cell.text.replace("\n", " ")
-            cell_start = position
-            cell_end = position + len(cell_text)
-            position = cell_end + 1
 
             if is_continuation:
+                # Continuation cells don't occupy space in the NER text
+                # (deduplication mirrors extract_document_structure table_text)
                 cells.append(
                     {
                         "row": row_idx,
                         "col": col_idx,
                         "text": cell_text,
-                        "start": cell_start,
-                        "end": cell_end,
+                        "start": position,
+                        "end": position,
                         "style": "",
                         "bgColor": None,
                         "runs": [],
@@ -132,6 +151,11 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
                     }
                 )
                 continue
+
+            # Advance position only for unique (non-continuation) cells
+            cell_start = position
+            cell_end = position + len(cell_text)
+            position = cell_end + 1
 
             # Get cell shading (background color)
             tc_pr = cell._tc.get_or_add_tcPr()
@@ -213,7 +237,7 @@ def extract_table_with_styling(table, table_start_position, has_borders=True):
 
 def extract_document_structure(path):
     """Extract headings, paragraphs, and tables from a DOCX file as a structured list."""
-    if not path.lower().endswith((".docx", ".doc")):
+    if not path.lower().endswith(".docx"):
         return None, None
 
     try:
@@ -237,6 +261,8 @@ def extract_document_structure(path):
                 if para._element is element:
                     text = para.text
                     if not text.strip():
+                        continue
+                    if _paragraph_is_hidden(para):
                         continue
 
                     style_name = para.style.name if para.style else "Normal"
@@ -269,13 +295,21 @@ def extract_document_structure(path):
             # Find the matching table object
             for tbl in doc.tables:
                 if tbl._tbl is element:
-                    # Build plain text for NER (tab-separated values)
+                    # Build plain text for NER (tab-separated values).
+                    # Use a global seen set so colspan/rowspan cells only
+                    # contribute their text once across the entire table.
+                    seen_tc_global = set()
                     text_rows = []
                     for row in tbl.rows:
-                        row_cells = [
-                            cell.text.replace("\n", " ") for cell in row.cells
-                        ]
-                        text_rows.append("\t".join(row_cells))
+                        row_cells = []
+                        for cell in row.cells:
+                            if cell._tc not in seen_tc_global:
+                                seen_tc_global.add(cell._tc)
+                                row_cells.append(
+                                    cell.text.replace("\n", " ")
+                                )
+                        if row_cells:
+                            text_rows.append("\t".join(row_cells))
                     table_text = "\n".join(text_rows)
 
                     # Check if table has visible borders
@@ -373,7 +407,7 @@ def extract_entities_from_text(path):
         structure, tables, ner_text = structure_result
 
         if not ner_text or not ner_text.strip():
-            raise ValueError("No text found in the document.")
+            return "", [], tables, structure
 
         gliner_results = extract_with_gliner(gliner_model, ner_text)
         presidio_tp = extract_with_presidio(ner_text)
@@ -396,7 +430,7 @@ def extract_entities_from_text(path):
     ner_text = re.sub(r"\n{3,}", "\n\n", ner_text)
 
     if not ner_text.strip():
-        raise ValueError("No text found in the document.")
+        return "", [], [], None
 
     gliner_results = extract_with_gliner(gliner_model, ner_text)
     presidio_tp = extract_with_presidio(ner_text)
