@@ -4,7 +4,8 @@ This guide covers setting up a development environment for Tractor.
 
 ## Prerequisites
 
-- Python 3.10 or later
+- Python 3.13 or later
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
 - Node.js 18 or later
 - PostgreSQL 15 **or** MySQL 8.0+ (see [Database Configuration](#database-configuration))
 - Docker (optional, for database)
@@ -17,11 +18,11 @@ git clone https://github.com/msped/tractor
 cd tractor
 
 # Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+uv venv env
+source env/bin/activate  # On Windows: env\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Copy environment file
 cp .env.example .env
@@ -136,16 +137,16 @@ POSTGRES_PORT=5432        # default: 5432
 
 ### MySQL driver
 
-MySQL requires `mysqlclient`, which is **not** in `requirements.txt` because it needs system-level MySQL client libraries. Install it separately after activating the virtual environment:
+MySQL requires `mysqlclient`, which is **not** in `pyproject.toml` because it needs system-level MySQL client libraries. Install it separately after activating the virtual environment:
 
 ```bash
 # Debian/Ubuntu
 sudo apt-get install python3-dev default-libmysqlclient-dev build-essential
-pip install mysqlclient
+uv pip install mysqlclient
 
 # macOS (Homebrew)
 brew install mysql-client
-pip install mysqlclient
+uv pip install mysqlclient
 ```
 
 MySQL 8.0 or later is required. Tractor does not use any PostgreSQL-only field types, so migrations apply cleanly to MySQL without modification.

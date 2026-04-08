@@ -11,3 +11,4 @@ htmlcov/
 nlp_models/
 dev.spacy
 train.spacy
+.vscode

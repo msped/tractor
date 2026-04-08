@@ -35,7 +35,7 @@ The simplist hosting solution is to use [Docker](https://www.docker.com/) to hos
 
 ### Security Measures
 
-* **Dependency Management:** All dependencies are actively managed and scanned for vulnerabilities using `npm audit` (frontend) and `pip-audit` (backend).
+* **Dependency Management:** All dependencies are actively managed and scanned for vulnerabilities using `npm audit` (frontend) and `pip-audit` (backend via `uv`).
 * **Framework Protections:** The service leverages Django's built-in security features, including its ORM to prevent SQL Injection, template auto-escaping to prevent XSS, and CSRF middleware.
 * **Secrets Management:** All secrets (e.g., Django `SECRET_KEY`, database credentials) are managed via environment variables and are not stored in the codebase.
 
@@ -56,7 +56,8 @@ The SpanCat model improves over time as more redactions are accepted and the mod
 ### Prerequisites
 
 * Node.js (v18 or later)
-* Python (v3.10 or later)
+* Python (v3.13 or later)
+* [uv](https://docs.astral.sh/uv/) (Python package manager)
 * Docker
 
 ### Installation & Setup (Development)
@@ -74,11 +75,11 @@ The SpanCat model improves over time as more redactions are accepted and the mod
     cd tractor
 
     # Create and activate a virtual environment
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    uv venv env
+    source env/bin/activate  # On Windows use `env\Scripts\activate`
 
     # Install Python dependencies
-    pip install -r requirements.txt
+    uv sync
 
     # Run database migrations
     python manage.py migrate
