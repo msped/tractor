@@ -1,9 +1,15 @@
 env/
 .env
+.env.*
 postgres_data/
 media/
-# Ignore Python cache files
+# Python cache files
 __pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 discussion.md
 .coverage
 htmlcov/
