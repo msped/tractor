@@ -132,10 +132,10 @@ MEDIA_STORAGE=local
 
 ### Amazon S3
 
-`django-storages[s3]` must be installed in the backend image. Add it to `requirements.txt` so it is picked up when the image is built:
+`django-storages[s3]` must be installed in the backend image. Add it to `pyproject.toml` and run `uv lock` so it is picked up when the image is built:
 
 ```bash
-django-storages[s3]
+uv add "django-storages[s3]"
 ```
 
 Then set env vars in `.env`:
@@ -158,10 +158,10 @@ The `media_volume` remains mounted but is unused when S3 is active.
 
 ### Azure Blob Storage
 
-`django-storages[azure]` must be installed in the backend image. Add it to `requirements.txt` so it is picked up when the image is built:
+`django-storages[azure]` must be installed in the backend image. Add it to `pyproject.toml` and run `uv lock` so it is picked up when the image is built:
 
 ```bash
-django-storages[azure]
+uv add "django-storages[azure]"
 ```
 
 Then set env vars in `.env`:
