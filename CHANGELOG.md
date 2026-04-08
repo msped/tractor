@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Migrated Python dependency management from `pip`/`requirements.txt` to `uv`/`pyproject.toml`
+- Upgraded Python from 3.10 to 3.13
+- CI pipeline updated to use `uv` for dependency installation and Python 3.13
+- Dockerfile updated to use `python:3.13-slim` base image and `uv` for installs
+- Removed unused `ocrmac` dependency (macOS-only, not used in codebase)
+- Updated `smart-open` from 7.3.0 (yanked) to 7.5.1
 - NLP stack updated: `en_core_web_lg` replaced by GLiNER + Presidio; SpanCat retained as the primary trained model
 - GLiNER model paths store HuggingFace model IDs; HuggingFace handles local caching. SpanCat models continue to be stored in `nlp_models/`
 - GLiNER model loading now falls back to a local path if available before fetching from HuggingFace
