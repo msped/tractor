@@ -5,7 +5,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id"
 import apiClient from "./api/apiClient";
 
 const BACKEND_ACCESS_TOKEN_LIFETIME = 45 * 60;            // 45 minutes
-const BACKEND_REFRESH_TOKEN_LIFETIME = 6 * 24 * 60 * 60;  // 6 days
+const BACKEND_REFRESH_TOKEN_LIFETIME = 23 * 60 * 60;       // 23 hours
 
 const getCurrentEpochTime = () => {
     return Math.floor(new Date().getTime() / 1000);
