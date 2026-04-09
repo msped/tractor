@@ -53,7 +53,13 @@ except admin.sites.NotRegistered:
 class AuditLogEntryAdmin(SuperuserDeleteMixin, admin.ModelAdmin):
     """Read-only audit log. Deletion restricted to superusers only."""
 
-    list_display = ("timestamp", "content_type", "object_repr", "action", "actor")
+    list_display = (
+        "timestamp",
+        "content_type",
+        "object_repr",
+        "action",
+        "actor",
+    )
     list_filter = ("action", "content_type")
     readonly_fields = (
         "timestamp",
