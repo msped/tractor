@@ -55,8 +55,26 @@ services:
       - postgres_data:/var/lib/postgresql/data
     env_file: .env
 
+  ollama:
+    image: ollama/ollama
+    container_name: tractor-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Uncomment for NVIDIA GPU passthrough in production
+    # (requires NVIDIA drivers + nvidia-docker2 on the host):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
 volumes:
   postgres_data:
   static_volume:
   media_volume:
   nlp_models_volume:
+  ollama_data:
