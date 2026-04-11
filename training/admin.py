@@ -1,6 +1,9 @@
 from django.contrib import admin
+from django.db import models as db_models
+from django.forms import Textarea
 
 from .models import (
+    LLMPromptSettings,
     Model,
     TrainingDocument,
     TrainingRun,
@@ -39,3 +42,18 @@ class TrainingRunAdmin(admin.ModelAdmin):
 
 admin.site.register(Model)
 admin.site.register(TrainingDocument)
+
+
+@admin.register(LLMPromptSettings)
+class LLMPromptSettingsAdmin(admin.ModelAdmin):
+    formfield_overrides = {
+        db_models.TextField: {
+            "widget": Textarea(attrs={"rows": 20, "cols": 80})
+        },
+    }
+
+    def has_add_permission(self, request):
+        return not LLMPromptSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

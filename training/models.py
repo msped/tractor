@@ -133,3 +133,33 @@ auditlog.register(Model)
 auditlog.register(TrainingEntity)
 auditlog.register(TrainingRunTrainingDoc)
 auditlog.register(TrainingRunCaseDoc)
+
+
+DEFAULT_SYSTEM_PROMPT = """You are a data protection specialist reviewing documents for Subject
+Access Requests (SARs) under UK GDPR and the Data Protection Act 2018.
+
+Your task: identify text that must be redacted to protect third parties, while allowing
+the data subject's own information to be disclosed.
+
+Rules:
+- Redact names, addresses, and identifying details of people who are NOT the data subject
+- Redact operational information that would identify third-party officers or staff
+- Do NOT redact information that is solely about the data subject
+- Return only text that appears verbatim in the document"""
+
+
+class LLMPromptSettings(models.Model):
+    system_prompt = models.TextField(default=DEFAULT_SYSTEM_PROMPT)
+
+    class Meta:
+        verbose_name = "LLM Prompt Settings"
+        verbose_name_plural = "LLM Prompt Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

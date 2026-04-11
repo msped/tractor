@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from training.extractors.gemma_extractor import extract_with_gemma
+from training.models import LLMPromptSettings
 from training.tests.base import NetworkBlockerMixin
 
 
@@ -88,3 +89,24 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(
             any("Gemma extractor failed" in line for line in cm.output)
         )
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_custom_prompt_is_sent_to_ollama(self, mock_post):
+        mock_post.return_value.json.return_value = {
+            "message": {"content": {"redactions": []}}
+        }
+        LLMPromptSettings.objects.create(
+            pk=1, system_prompt="custom instructions"
+        )
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+        ):
+            extract_with_gemma("Some text.", "Jane Doe")
+
+        call_body = mock_post.call_args[1]["json"]
+        system_message = next(
+            m for m in call_body["messages"] if m["role"] == "system"
+        )
+        self.assertEqual(system_message["content"], "custom instructions")

@@ -4,6 +4,8 @@ import logging
 import requests
 from django.conf import settings
 
+from training.models import LLMPromptSettings
+
 logger = logging.getLogger(__name__)
 
 REDACTION_SCHEMA = {
@@ -27,18 +29,6 @@ REDACTION_SCHEMA = {
     },
     "required": ["redactions"],
 }
-
-SYSTEM_PROMPT = """You are a data protection specialist reviewing documents for Subject
-Access Requests (SARs) under UK GDPR and the Data Protection Act 2018.
-
-Your task: identify text that must be redacted to protect third parties, while allowing
-the data subject's own information to be disclosed.
-
-Rules:
-- Redact names, addresses, and identifying details of people who are NOT the data subject
-- Redact operational information that would identify third-party officers or staff
-- Do NOT redact information that is solely about the data subject
-- Return only text that appears verbatim in the document"""
 
 
 def extract_with_gemma(
@@ -67,7 +57,10 @@ def extract_with_gemma(
                 "stream": False,
                 "format": REDACTION_SCHEMA,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "system",
+                        "content": LLMPromptSettings.get().system_prompt,
+                    },
                     {"role": "user", "content": user_message},
                 ],
             },
