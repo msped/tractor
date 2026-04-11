@@ -199,7 +199,7 @@ export const RedactionSidebar = ({
                                     <Chip label={`merged (${ids.length})`} size="small" variant="outlined" />
                                 )}
                             </Box>
-                            <Typography variant="caption" color="text.secondary">Source: {item.is_suggestion ? 'AI' : 'User'}</Typography>
+                            <Typography variant="caption" color="text.secondary">Source: {item.source === 'LLM' ? 'AI (Contextual)' : item.is_suggestion ? 'AI' : 'User'}</Typography>
                         </Box>
                         {item.justification && (
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Reason for rejection: {item.justification}</Typography>

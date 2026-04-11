@@ -13,7 +13,7 @@ describe('<RedactionSidebar />', () => {
         pending: {
             total: 1,
             items: [
-                { id: 'p1', ids: ['p1'], isMerged: false, isGroup: false, text: 'pending text', redaction_type: 'PII', is_suggestion: true },
+                { id: 'p1', ids: ['p1'], isMerged: false, isGroup: false, text: 'pending text', redaction_type: 'PII', is_suggestion: true, source: 'NER' },
             ],
         },
         accepted: {
@@ -98,11 +98,34 @@ describe('<RedactionSidebar />', () => {
                 cy.contains('"pending text"').should('be.visible');
                 cy.contains('Third-Party PII').should('be.visible');
                 cy.contains('Source: AI').should('be.visible');
+                cy.contains('Source: AI (Contextual)').should('not.exist');
             });
 
             cy.contains('rejected (1)').click();
             cy.contains('li', 'rejected text').within(() => {
                 cy.contains('Reason for rejection: Not relevant').should('be.visible');
+            });
+        });
+
+        it('renders "Source: AI" badge for NER suggestions', () => {
+            cy.contains('li', 'pending text').within(() => {
+                cy.contains('Source: AI').should('be.visible');
+            });
+        });
+
+        it('renders "Source: AI (Contextual)" badge for LLM suggestions', () => {
+            const llmRedactions = {
+                ...mockRedactions,
+                pending: {
+                    total: 1,
+                    items: [
+                        { id: 'p2', ids: ['p2'], isMerged: false, isGroup: false, text: 'llm text', redaction_type: 'PII', is_suggestion: true, source: 'LLM' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={llmRedactions} />, mountOpts);
+            cy.contains('li', 'llm text').within(() => {
+                cy.contains('Source: AI (Contextual)').should('be.visible');
             });
         });
 
