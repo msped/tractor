@@ -378,13 +378,16 @@ def _extract_text_from_pdf(path):
         return ""
 
 
-def extract_entities_from_text(path):
-    """Run the full NLP pipeline (GLiNER → SpanCat → Presidio) on a document file.
+def extract_entities_from_text(
+    path, data_subject_name=None, data_subject_dob=None
+):
+    """Run the full NLP pipeline (GLiNER → SpanCat → Presidio → Gemma) on a document file.
 
     Returns:
         Tuple of (extracted_text, entity_suggestions, tables, spacy_model_entry).
     """
     # Lazy imports to avoid loading transformers/pandas at module import time
+    from .extractors.gemma_extractor import extract_with_gemma
     from .extractors.gliner_extractor import extract_with_gliner
     from .extractors.presidio_extractor import (
         extract_operational_with_presidio,
@@ -415,9 +418,13 @@ def extract_entities_from_text(path):
             extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
         )
 
-        # SpanCat > GLiNER > Presidio
+        # SpanCat > GLiNER > Presidio > Gemma
         combined = _deduplicate_entities(spancat_results, gliner_results)
         combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
+        gemma_results = extract_with_gemma(
+            ner_text, data_subject_name, data_subject_dob
+        )
+        combined = _deduplicate_entities(combined, gemma_results)
         combined = _expand_prefix_symbols(combined, ner_text)
 
         return ner_text, combined, tables, structure
@@ -438,9 +445,13 @@ def extract_entities_from_text(path):
         extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
     )
 
-    # SpanCat > GLiNER > Presidio
+    # SpanCat > GLiNER > Presidio > Gemma
     combined = _deduplicate_entities(spancat_results, gliner_results)
     combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
+    gemma_results = extract_with_gemma(
+        ner_text, data_subject_name, data_subject_dob
+    )
+    combined = _deduplicate_entities(combined, gemma_results)
     combined = _expand_prefix_symbols(combined, ner_text)
 
     # For non-DOCX files, no tables and no structure (fallback to plain text rendering)
