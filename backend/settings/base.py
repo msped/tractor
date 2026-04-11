@@ -195,7 +195,7 @@ DELETE_ORIGINAL_FILES = False
 DELETE_ORIGINAL_FILES_AFTER_DAYS = 30
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:4b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED")
 
 Q_CLUSTER = {
