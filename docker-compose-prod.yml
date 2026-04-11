@@ -58,8 +58,6 @@ services:
   ollama:
     image: ollama/ollama
     container_name: tractor-ollama
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     # Uncomment for NVIDIA GPU passthrough in production
