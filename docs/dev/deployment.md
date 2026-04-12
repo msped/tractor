@@ -35,7 +35,7 @@ cp frontend/.env.example frontend/.env
 | `SECRET_KEY`             | Django secret key                             | Long random string         |
 | `JWT_SIGNING_KEY`        | JWT token signing key                         | Long random string         |
 | `DJANGO_SETTINGS_MODULE` | Settings module path                          | `backend.settings.production` |
-| `DEBUG`                  | Enable debug mode (optional — defaults to `False` in production) | `False`       |
+| `DEBUG`                  | Enable debug mode (optional — defaults to `False` in production) | `False` |
 | `ALLOWED_HOSTS`          | Comma-separated allowed hostnames — must include `backend` when running in Docker, as the frontend container calls the backend directly | `localhost,backend,yourdomain.com` |
 | `CORS_ALLOWED_ORIGINS`   | Comma-separated list of allowed CORS origins. In production, set this to the frontend URL only. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
 | `DATABASE_URL`           | Database URL for connection (optional)        |                            |
@@ -45,6 +45,11 @@ cp frontend/.env.example frontend/.env
 | `POSTGRES_HOST`          | Database host (use `db` in Docker) (optional) | `db`                       |
 | `POSTGRES_PORT`          | Database port (optional)                      | `5432`                     |
 | `MEDIA_STORAGE`          | Storage backend (`local`, `s3`, `azure`)      | `local`                    |
+| `OLLAMA_ENABLED`         | Enable Gemma contextual AI stage (`True`/`False`) | `True`               |
+| `OLLAMA_HOST`            | Ollama API URL — use `http://ollama:11434` in Docker | `http://ollama:11434` |
+| `OLLAMA_MODEL`           | Ollama model name                             | `gemma3:1b`                |
+| `OLLAMA_CHUNK_SIZE`      | Characters per chunk sent to Ollama (optional) | `4000`                   |
+| `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
 
 ### Frontend (`frontend/.env`)
 
@@ -72,7 +77,24 @@ The production stack (`docker-compose-prod.yml`) runs the following services:
 | `worker`   | Django-Q task queue for async jobs (export, training)                               |
 | `frontend` | Next.js app served on port 3000                                                     |
 | `nginx`    | Reverse proxy on port 80, serves static files directly; proxies `/media/` to Django |
+| `ollama`   | Locally-hosted LLM inference server (contextual AI) — see below                    |
 | `db`       | PostgreSQL 15 database (optional — see below)                                       |
+
+### Ollama (Contextual AI)
+
+The `ollama` service runs the locally-hosted LLM used for contextual document analysis. It is included in the production Compose file but is **optional** — set `OLLAMA_ENABLED=False` in `.env` to disable the Gemma stage entirely, and the other three NLP models will continue to operate normally.
+
+On first startup, pull the model inside the container:
+
+```bash
+docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma3:1b
+```
+
+This application is not tide to Gemma, you can run any model through Ollama depending on your system.
+
+The model is persisted in the `ollama_volume` Docker volume, so it only needs to be downloaded once.
+
+The `backend` and `worker` containers reach Ollama at `http://ollama:11434` (the Docker service hostname). Set `OLLAMA_HOST=http://ollama:11434` in `.env`.
 
 ### Task Queue (worker)
 
@@ -201,7 +223,11 @@ The backend container requires internet access on first startup to reach Hugging
 
 ### SpanCat
 
-The SpanCat model is trained from user-accepted redactions via the training pipeline. It is also stored in `nlp_models_volume` and is optional — document processing works without it, falling back to GLiNER and Presidio only.
+The SpanCat model is trained from user-accepted redactions via the training pipeline. It is also stored in `nlp_models_volume` and is optional — document processing works without it, falling back to GLiNER, Presidio, and Gemma.
+
+### Gemma (Ollama)
+
+The Gemma model is pulled and stored inside the `ollama_volume` volume (see the [Ollama section](#ollama-contextual-ai) above). No backend container configuration is needed beyond the env vars.
 
 ---
 

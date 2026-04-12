@@ -9,6 +9,7 @@ This guide covers setting up a development environment for Tractor.
 - Node.js 18 or later
 - PostgreSQL 15 **or** MySQL 8.0+ (see [Database Configuration](#database-configuration))
 - Docker (optional, for database)
+- [Ollama](https://ollama.com/) (optional, for contextual AI redaction)
 
 ## Backend Setup
 
@@ -96,6 +97,47 @@ npm run cy:test     # With coverage (80% threshold)
 !!! note
     The pages directory is required by Cypress to stop the following error: ```Error:   x   Using `export * from '...'` in a page is disallowed. Please use `export { default } from '...'` instead.```
 
+## Ollama (Contextual AI)
+
+Tractor can use a locally-hosted LLM via [Ollama](https://ollama.com/) to perform contextual analysis of documents. This is optional — the other three NLP models work without it.
+
+### Install and start Ollama
+
+Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model:
+
+```bash
+ollama pull gemma3:1b
+```
+
+Ollama must be running before starting the Django server. On macOS it starts automatically as a background service after installation. To verify it is running:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+### Enable in Django
+
+Set the following in your `.env`:
+
+```bash
+OLLAMA_ENABLED=True
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=gemma3:1b
+```
+
+If `OLLAMA_ENABLED` is not set or is `False`, the Gemma extraction stage is skipped entirely and document processing continues with the other three models.
+
+### Customise chunking (optional)
+
+Large documents are split into overlapping chunks before being sent to Ollama. The defaults work for most cases:
+
+```bash
+OLLAMA_CHUNK_SIZE=4000    # characters per chunk (default: 4000)
+OLLAMA_CHUNK_OVERLAP=200  # overlap between chunks (default: 200)
+```
+
+---
+
 ## WeasyPrint (macOS)
 
 If PDF export fails with library errors:
@@ -168,26 +210,31 @@ The project uses split settings under `backend/settings/`:
 
 ### Backend (.env)
 
-| Variable                 | Purpose                                                        |
-|--------------------------|----------------------------------------------------------------|
-| `SECRET_KEY`             | Django secret key for cryptographic signing                    |
-| `JWT_SIGNING_KEY`        | Key for signing JWT tokens                                     |
-| `DATABASE_URL`           | Full connection URL — takes priority over individual vars      |
-| `POSTGRES_DB`            | PostgreSQL database name (used when `DATABASE_URL` is not set) |
-| `POSTGRES_USER`          | PostgreSQL username (used when `DATABASE_URL` is not set)      |
-| `POSTGRES_PASSWORD`      | PostgreSQL password (used when `DATABASE_URL` is not set)      |
-| `POSTGRES_HOST`          | PostgreSQL host (default: `localhost`)                         |
-| `POSTGRES_PORT`          | PostgreSQL port (default: `5432`)                              |
+| Variable                 | Purpose                                                                 |
+|--------------------------|-------------------------------------------------------------------------|
+| `SECRET_KEY`             | Django secret key for cryptographic signing                             |
+| `JWT_SIGNING_KEY`        | Key for signing JWT tokens                                              |
+| `DATABASE_URL`           | Full connection URL — takes priority over individual vars               |
+| `POSTGRES_DB`            | PostgreSQL database name (used when `DATABASE_URL` is not set)          |
+| `POSTGRES_USER`          | PostgreSQL username (used when `DATABASE_URL` is not set)               |
+| `POSTGRES_PASSWORD`      | PostgreSQL password (used when `DATABASE_URL` is not set)               |
+| `POSTGRES_HOST`          | PostgreSQL host (default: `localhost`)                                  |
+| `POSTGRES_PORT`          | PostgreSQL port (default: `5432`)                                       |
+| `OLLAMA_ENABLED`         | Enable the Gemma contextual AI stage (`True`/`False`, default: `False`) |
+| `OLLAMA_HOST`            | Ollama API base URL (default: `http://localhost:11434`)                 |
+| `OLLAMA_MODEL`           | Ollama model name to use (e.g. `gemma3:1b`)                             |
+| `OLLAMA_CHUNK_SIZE`      | Characters per document chunk sent to Ollama (default: `4000`)          |
+| `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (default: `200`)                   |
 
 ### Frontend (frontend/.env)
 
-| Variable                         | Purpose                                                    |
-|----------------------------------|------------------------------------------------------------|
+| Variable                         | Purpose                                                     |
+|----------------------------------|-------------------------------------------------------------|
 | `NEXT_PUBLIC_API_HOST`           | Backend API URL — for local dev use `http://localhost:8000` |
-| `AUTH_SECRET`                    | NextAuth secret for session encryption                     |
-| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Microsoft Entra ID client ID (optional)                    |
-| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Microsoft Entra ID client secret (optional)                |
-| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft Entra ID issuer URL (optional)                   |
+| `AUTH_SECRET`                    | NextAuth secret for session encryption                      |
+| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Microsoft Entra ID client ID (optional)                     |
+| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Microsoft Entra ID client secret (optional)                 |
+| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft Entra ID issuer URL (optional)                    |
 
 !!! note
     The Microsoft Entra ID variables are only required if SSO is being configured.

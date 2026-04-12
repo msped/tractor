@@ -4,14 +4,14 @@ This document describes the technical architecture of Tractor.
 
 ## Tech Stack
 
-| Component      | Technology                                                    |
-|----------------|---------------------------------------------------------------|
-| Frontend       | Next.js 15 (React 19), Material-UI v7                         |
-| Backend        | Django 5.2, Django REST Framework                             |
-| Database       | PostgreSQL 15                                                 |  
-| Task Queue     | django-q2                                                     |
-| NLP            | SpanCat (spaCy 3.8), GLiNER (HuggingFace), Microsoft Presidio |
-| Authentication | NextAuth v5, JWT                                              |
+| Component      | Technology                                                                    |
+|----------------|-------------------------------------------------------------------------------|
+| Frontend       | Next.js 15 (React 19), Material-UI v7                                         |
+| Backend        | Django 5.2, Django REST Framework                                             |
+| Database       | PostgreSQL 15                                                                 |  
+| Task Queue     | django-q2                                                                     |
+| NLP            | SpanCat (spaCy 3.8), GLiNER (HuggingFace), Microsoft Presidio, Gemma (Ollama) |
+| Authentication | NextAuth v5, JWT                                                              |
 
 ## Project Structure
 
@@ -33,11 +33,12 @@ tractor/
 
 1. **Document Upload**: User uploads document → stored in media/originals
 2. **Text Extraction**: python-docx (DOCX) or pdfplumber (PDF) extracts text and structure
-3. **Entity Recognition (Three-model pipeline)**:
+3. **Entity Recognition (Four-model pipeline)**:
     - **SpanCat** identifies OPERATIONAL and THIRD_PARTY spans from the trained custom model (optional — skipped gracefully if no model trained yet)
     - **GLiNER** identifies **THIRD_PARTY** spans (names, orgs, locations, DOB, addresses) using a zero-shot model from HuggingFace
     - **Presidio** identifies structured **THIRD_PARTY** PII (phone, email, NHS, postcode, NI) and structured **OPERATIONAL** refs (crime references, collar numbers) via pattern recognisers
-    - Results are deduplicated with priority: **SpanCat > GLiNER > Presidio**
+    - **Gemma** (via Ollama) performs contextual analysis of the document text to identify disclosable information based on the system prompt (optional — skipped if `OLLAMA_ENABLED` is `False`)
+    - Results are deduplicated with priority: **SpanCat > GLiNER > Presidio > Gemma**
 4. **Data Subject Filtering**: Entities matching the case's data subject name or DOB are excluded from suggestions
 5. **User Review**: User accepts/rejects redactions in the UI. Adjacent same-type spans are automatically merged into compound display items for easier review. Merged items can be split and reviewed individually.
 6. **Export**: WeasyPrint generates PDF exports with redactions applied
@@ -109,6 +110,8 @@ All endpoints are prefixed with `/api/`.
 | GET    | `/schedules`              | List training schedules   |
 | POST   | `/schedules`              | Create training schedule  |
 | GET    | `/training-runs`          | List training run history |
+| GET    | `/llm-prompt-settings`    | Get LLM system prompt     |
+| PATCH  | `/llm-prompt-settings`    | Update LLM system prompt  |
 
 ## Authentication Flow
 
@@ -134,17 +137,16 @@ Tractor supports two authentication methods, both enforced at the DRF layer.
 
 Both classes are listed in `DEFAULT_AUTHENTICATION_CLASSES` in `backend/settings/base.py`. DRF tries them in order:
 
-| Priority | Class | Triggers on |
-|----------|-------|-------------|
-| 1 | `APIKeyAuthentication` | `Authorization: Api-Key …` |
-| 2 | `JWTAuthentication` | `Authorization: Bearer …` |
+| Priority | Class                  | Triggers on                |
+|----------|------------------------|----------------------------|
+| 1        | `APIKeyAuthentication` | `Authorization: Api-Key …` |
+| 2        | `JWTAuthentication`    | `Authorization: Bearer …`  |
 
 A class that returns `None` passes control to the next in line. A class that raises `AuthenticationFailed` short-circuits all subsequent classes and returns a 401 response.
 
-
 ## Entity Recognition
 
-Tractor uses a three-model hybrid pipeline. All three models run on every document and their results are merged and deduplicated.
+Tractor uses a four-model pipeline. All models run on every document and their results are merged and deduplicated.
 
 ### SpanCat (Trained Model)
 
@@ -184,13 +186,26 @@ GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in t
 
 Both analyzers are instantiated lazily and cached as module-level singletons.
 
+### Gemma (Contextual AI — LLM)
+
+[Gemma](https://ollama.com/library/gemma3) is a locally-hosted LLM served via [Ollama](https://ollama.com/). Unlike the other three models, Gemma does not use pattern-matching or trained NER — it reads the document text and reasons about what information would be disclosable given the context.
+
+Gemma takes the lowest priority in deduplication. Spans it produces are labelled with `source=LLM` and displayed in the review sidebar with an **AI (Contextual)** badge.
+
+This stage is **optional**. Set `OLLAMA_ENABLED=False` to disable it. Document processing continues with the other three models if Ollama is unavailable.
+
+Large documents are automatically split into overlapping chunks (`OLLAMA_CHUNK_SIZE` / `OLLAMA_CHUNK_OVERLAP`) before being sent to Ollama, with character offsets corrected before results are merged.
+
+The system prompt sent to Gemma is configurable from the Settings page (**Contextual AI Prompt** card) and stored in the `LLMPromptSettings` singleton model. Changing the prompt takes effect on the next document processed.
+
 ### Deduplication
 
-After all three models run, overlapping spans are deduplicated with this priority order:
+After all four models run, overlapping spans are deduplicated with this priority order:
 
 1. SpanCat results are kept in full
 2. GLiNER results are added where they don't overlap SpanCat spans
 3. Presidio results are added where they don't overlap either of the above
+4. Gemma results are added where they don't overlap any of the above
 
 ### Merged Display Items
 
