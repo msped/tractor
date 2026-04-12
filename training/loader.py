@@ -14,6 +14,23 @@ _GLINER_LOCAL_PATH = os.path.join(
 )
 
 
+def _get_device():
+    """Return the best available compute device.
+
+    Priority: CUDA (NVIDIA) > MPS (Apple Silicon) > CPU.
+
+    This import is intentionally deferred (called only from within the
+    already-lazy load functions) to avoid pulling in torch at module
+    import time, which would break freezegun in the test suite."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def _load_gliner_model(path):
     """Lazy GLiNER import — deferred until first model load so that
     importing this module does not pull in transformers/pandas at startup
@@ -21,18 +38,28 @@ def _load_gliner_model(path):
 
     Loads from the local nlp_models/ directory (downloaded once via
     `python manage.py download_model`). Falls back to fetching from
-    HuggingFace if the local copy is not present."""
+    HuggingFace if the local copy is not present.
+
+    The model is moved to the best available device (CUDA, MPS, or CPU)."""
     from gliner import GLiNER
 
     if os.path.isdir(path):
-        return GLiNER.from_pretrained(path, local_files_only=True)
-    return GLiNER.from_pretrained(path)
+        model = GLiNER.from_pretrained(path, local_files_only=True)
+    else:
+        model = GLiNER.from_pretrained(path)
+    return model.to(_get_device())
 
 
 def _load_spancat_model(path):
-    """Lazy spaCy import — same reason as GLiNER: avoids freezegun crash."""
+    """Lazy spaCy import — same reason as GLiNER: avoids freezegun crash.
+
+    Calls spacy.prefer_gpu() before loading so the model runs on the GPU
+    when CUDA is available. spaCy does not support MPS, so Apple Silicon
+    machines fall back to CPU for SpanCat (GLiNER still benefits from MPS)."""
     import spacy
 
+    if _get_device() == "cuda":
+        spacy.prefer_gpu()
     return spacy.load(path)
 
 
