@@ -60,15 +60,8 @@ services:
     container_name: tractor-ollama
     volumes:
       - ollama_data:/root/.ollama
-    # Uncomment for NVIDIA GPU passthrough in production
-    # (requires NVIDIA drivers + nvidia-docker2 on the host):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    # For NVIDIA GPU passthrough, use the docker-compose.gpu.yml override:
+    # docker compose -f docker-compose-prod.yml -f docker-compose.gpu.yml up -d
 
 volumes:
   postgres_data:

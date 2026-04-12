@@ -18,15 +18,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    # Uncomment for NVIDIA GPU passthrough in production
-    # (requires NVIDIA drivers + nvidia-docker2 on the host):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    # For NVIDIA GPU passthrough, use the docker-compose.gpu.yml override.
+    # On Apple Silicon, Metal GPU is used automatically.
 
 volumes:
   postgres_data:
