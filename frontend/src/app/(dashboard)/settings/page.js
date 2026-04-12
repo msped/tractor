@@ -9,6 +9,7 @@ import { useSession } from 'next-auth/react';
 import { ApiKeysCard } from '@/components/ApiKeysCard';
 import { DocumentExportSettingsCard } from '@/components/DocumentExportSettingsCard';
 import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
+import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
 import { ModelManagementCard } from '@/components/ModelManagementCard';
 
 export default function SettingsPage() {
@@ -27,6 +28,11 @@ export default function SettingsPage() {
                 {isAdmin && (
                     <Grid size={{xs: 12, md: 6}}>
                         <ApiKeysCard />
+                    </Grid>
+                )}
+                {isAdmin && (
+                    <Grid size={{xs: 12, md: 6}}>
+                        <LLMPromptSettingsCard />
                     </Grid>
                 )}
                 <Grid size={{xs: 12}}>
