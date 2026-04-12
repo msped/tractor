@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    LLMPromptSettingsView,
     ModelDetailView,
     ModelListCreateView,
     ModelSetActiveView,
@@ -12,6 +13,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "llm-prompt-settings",
+        LLMPromptSettingsView.as_view(),
+        name="llm-prompt-settings",
+    ),
     path("models", ModelListCreateView.as_view(), name="model-list-create"),
     path("models/<uuid:pk>", ModelDetailView.as_view(), name="model-detail"),
     path(

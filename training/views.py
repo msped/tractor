@@ -10,13 +10,33 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .loader import SpanCatModelManager
-from .models import Model, TrainingDocument, TrainingRun
+from .models import LLMPromptSettings, Model, TrainingDocument, TrainingRun
 from .serializers import (
+    LLMPromptSettingsSerializer,
     ModelSerializer,
     ScheduleSerializer,
     TrainingDocumentSerializer,
     TrainingRunSerializer,
 )
+
+
+class LLMPromptSettingsView(APIView):
+    """GET/PATCH the singleton LLM system prompt (admin only)."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        return Response(
+            LLMPromptSettingsSerializer(LLMPromptSettings.get()).data
+        )
+
+    def patch(self, request):
+        serializer = LLMPromptSettingsSerializer(
+            LLMPromptSettings.get(), data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class ModelListCreateView(ListCreateAPIView):
