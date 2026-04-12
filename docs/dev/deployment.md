@@ -96,6 +96,18 @@ The model is persisted in the `ollama_volume` Docker volume, so it only needs to
 
 The `backend` and `worker` containers reach Ollama at `http://ollama:11434` (the Docker service hostname). Set `OLLAMA_HOST=http://ollama:11434` in `.env`.
 
+#### NVIDIA GPU passthrough
+
+To enable GPU acceleration for Ollama on a host with NVIDIA hardware, apply the `docker-compose.gpu.yml` override. This requires the NVIDIA drivers and [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host:
+
+```bash
+docker compose -f docker-compose-prod.yml -f docker-compose.gpu.yml up --build -d
+```
+
+#### Apple Silicon
+
+Ollama auto-detects and uses the Metal GPU on Apple Silicon hosts — no extra configuration is needed.
+
 ### Task Queue (worker)
 
 The `worker` service runs `python manage.py qcluster`, which is required for all asynchronous tasks — document export (PDF generation) and model training. Without it, these operations will queue but never execute. It shares the same Docker image as the backend and reads the same `.env` file.
