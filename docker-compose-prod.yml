@@ -60,8 +60,9 @@ services:
     container_name: tractor-ollama
     volumes:
       - ollama_data:/root/.ollama
-    # Uncomment for NVIDIA GPU passthrough in production
-    # (requires NVIDIA drivers + nvidia-docker2 on the host):
+    # Uncomment the section below to enable NVIDIA GPU passthrough.
+    # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
+    # On Apple Silicon, Metal GPU is used automatically — no config needed.
     # deploy:
     #   resources:
     #     reservations:

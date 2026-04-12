@@ -42,7 +42,7 @@ def _chunk_text(
     step = chunk_size - overlap
     start = 0
     while start < len(text):
-        chunks.append((text[start : start + chunk_size], start))
+        chunks.append((text[start: start + chunk_size], start))
         start += step
     return chunks
 
@@ -73,6 +73,8 @@ def _call_ollama(
         response.raise_for_status()
         content = response.json()["message"]["content"]
         if isinstance(content, str):
+            if not content.strip():
+                return []
             content = json.loads(content)
         redactions_raw = content["redactions"]
     except Exception as exc:

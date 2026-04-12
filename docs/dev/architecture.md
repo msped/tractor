@@ -198,6 +198,20 @@ Large documents are automatically split into overlapping chunks (`OLLAMA_CHUNK_S
 
 The system prompt sent to Gemma is configurable from the Settings page (**Contextual AI Prompt** card) and stored in the `LLMPromptSettings` singleton model. Changing the prompt takes effect on the next document processed.
 
+### GPU Acceleration
+
+The backend NLP models (GLiNER and SpanCat) automatically use the best available compute device via `_get_device()` in `training/loader.py`:
+
+| Device | Condition                        | Models benefiting      |
+|--------|----------------------------------|------------------------|
+| CUDA   | NVIDIA GPU available             | GLiNER, SpanCat        |
+| MPS    | Apple Silicon (no CUDA)          | GLiNER only            |
+| CPU    | Fallback                         | GLiNER, SpanCat        |
+
+spaCy does not support MPS natively, so SpanCat always uses CPU on Apple Silicon. GLiNER (PyTorch) supports both CUDA and MPS.
+
+For Ollama (Gemma), GPU acceleration is handled at the container/host level — see the [deployment guide](deployment.md#ollama-contextual-ai).
+
 ### Deduplication
 
 After all four models run, overlapping spans are deduplicated with this priority order:
