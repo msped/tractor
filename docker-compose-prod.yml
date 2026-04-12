@@ -60,8 +60,16 @@ services:
     container_name: tractor-ollama
     volumes:
       - ollama_data:/root/.ollama
-    # For NVIDIA GPU passthrough, use the docker-compose.gpu.yml override:
-    # docker compose -f docker-compose-prod.yml -f docker-compose.gpu.yml up -d
+    # Uncomment the section below to enable NVIDIA GPU passthrough.
+    # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
+    # On Apple Silicon, Metal GPU is used automatically — no config needed.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
 volumes:
   postgres_data:

@@ -98,10 +98,23 @@ The `backend` and `worker` containers reach Ollama at `http://ollama:11434` (the
 
 #### NVIDIA GPU passthrough
 
-To enable GPU acceleration for Ollama on a host with NVIDIA hardware, apply the `docker-compose.gpu.yml` override. This requires the NVIDIA drivers and [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host:
+To enable GPU acceleration for Ollama on a host with NVIDIA hardware, uncomment the `deploy` block in the `ollama` service in `docker-compose-prod.yml`. This requires the NVIDIA drivers and [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host:
+
+```yaml
+# docker-compose-prod.yml — ollama service
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+```
+
+Then bring the stack up as normal:
 
 ```bash
-docker compose -f docker-compose-prod.yml -f docker-compose.gpu.yml up --build -d
+docker compose -f docker-compose-prod.yml up --build -d
 ```
 
 #### Apple Silicon
