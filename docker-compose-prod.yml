@@ -22,6 +22,15 @@ services:
       - media_volume:/app/mediafiles
       - nlp_models_volume:/app/nlp_models
     env_file: .env
+    # Uncomment the section below to enable NVIDIA GPU passthrough for SpanCat training.
+    # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
   frontend:
     build:
