@@ -81,16 +81,20 @@ def _call_ollama(
         logger.warning("Gemma extractor failed: %s", exc)
         return []
 
+    logger.debug("Gemma raw redactions: %s", redactions_raw)
+
     results = []
     for item in redactions_raw:
         phrase = item.get("text", "").strip()
         if not phrase:
             continue
         start = 0
+        found = False
         while True:
             idx = chunk_text.find(phrase, start)
             if idx == -1:
                 break
+            found = True
             results.append(
                 {
                     "text": phrase,
@@ -101,6 +105,10 @@ def _call_ollama(
                 }
             )
             start = idx + len(phrase)
+        if not found:
+            logger.warning(
+                "Gemma returned phrase not found in chunk: %r", phrase
+            )
 
     return results
 
