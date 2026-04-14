@@ -1,4 +1,4 @@
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
@@ -159,7 +159,7 @@ class ChunkTextTests(TestCase):
         text = "a" * 500
         chunks = _chunk_text(text, chunk_size=200, overlap=50)
         step = 200 - 50
-        for i, (chunk, offset) in enumerate(chunks):
+        for i, (_chunk, offset) in enumerate(chunks):
             self.assertEqual(offset, i * step)
 
     def test_overlap_region_present_in_consecutive_chunks(self):
@@ -172,11 +172,11 @@ class ChunkTextTests(TestCase):
 
 
 class GemmaChunkingTests(NetworkBlockerMixin, TestCase):
-    OLLAMA_SETTINGS = dict(
-        OLLAMA_ENABLED="true",
-        OLLAMA_HOST="http://ollama:11434",
-        OLLAMA_MODEL="gemma4:e4b",
-    )
+    OLLAMA_SETTINGS = {
+        "OLLAMA_ENABLED": "true",
+        "OLLAMA_HOST": "http://ollama:11434",
+        "OLLAMA_MODEL": "gemma4:e4b",
+    }
 
     def _ollama_response(self, redactions):
         mock = type("R", (), {})()
