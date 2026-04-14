@@ -114,7 +114,9 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
             with self.assertLogs(
                 "training.extractors.gemma_extractor", level="WARNING"
             ) as cm:
-                result = extract_with_gemma("Completely different text.", "Jane Doe")
+                result = extract_with_gemma(
+                    "Completely different text.", "Jane Doe"
+                )
 
         self.assertEqual(result, [])
         self.assertTrue(

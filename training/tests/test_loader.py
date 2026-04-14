@@ -34,7 +34,6 @@ class GetDeviceTests(TestCase):
         self.assertEqual(_get_device(), "cuda")
 
 
-
 class GLiNERModelManagerTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         GLiNERModelManager._instance = None
