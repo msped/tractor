@@ -42,7 +42,7 @@ def _chunk_text(
     step = chunk_size - overlap
     start = 0
     while start < len(text):
-        chunks.append((text[start : start + chunk_size], start))
+        chunks.append((text[start: start + chunk_size], start))
         start += step
     return chunks
 
@@ -73,11 +73,15 @@ def _call_ollama(
         response.raise_for_status()
         content = response.json()["message"]["content"]
         if isinstance(content, str):
+            if not content.strip():
+                return []
             content = json.loads(content)
         redactions_raw = content["redactions"]
     except Exception as exc:
         logger.warning("Gemma extractor failed: %s", exc)
         return []
+
+    logger.debug("Gemma raw redactions: %s", redactions_raw)
 
     results = []
     for item in redactions_raw:
@@ -85,10 +89,12 @@ def _call_ollama(
         if not phrase:
             continue
         start = 0
+        found = False
         while True:
             idx = chunk_text.find(phrase, start)
             if idx == -1:
                 break
+            found = True
             results.append(
                 {
                     "text": phrase,
@@ -99,6 +105,10 @@ def _call_ollama(
                 }
             )
             start = idx + len(phrase)
+        if not found:
+            logger.warning(
+                "Gemma returned phrase not found in chunk: %r", phrase
+            )
 
     return results
 

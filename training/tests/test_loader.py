@@ -6,9 +6,33 @@ from ..loader import (
     DEFAULT_GLINER_MODEL,
     GLiNERModelManager,
     SpanCatModelManager,
+    _get_device,
 )
 from ..models import Model
 from .base import NetworkBlockerMixin
+
+
+class GetDeviceTests(TestCase):
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.backends.mps.is_available", return_value=False)
+    def test_returns_cuda_when_available(self, mock_mps, mock_cuda):
+        self.assertEqual(_get_device(), "cuda")
+
+    @patch("torch.cuda.is_available", return_value=False)
+    @patch("torch.backends.mps.is_available", return_value=True)
+    def test_returns_mps_when_cuda_unavailable(self, mock_mps, mock_cuda):
+        self.assertEqual(_get_device(), "mps")
+
+    @patch("torch.cuda.is_available", return_value=False)
+    @patch("torch.backends.mps.is_available", return_value=False)
+    def test_returns_cpu_as_fallback(self, mock_mps, mock_cuda):
+        self.assertEqual(_get_device(), "cpu")
+
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.backends.mps.is_available", return_value=True)
+    def test_cuda_takes_priority_over_mps(self, mock_mps, mock_cuda):
+        self.assertEqual(_get_device(), "cuda")
+
 
 
 class GLiNERModelManagerTests(NetworkBlockerMixin, TestCase):

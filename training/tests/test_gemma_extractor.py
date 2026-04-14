@@ -91,6 +91,37 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
         )
 
     @patch("training.extractors.gemma_extractor.requests.post")
+    def test_phrase_not_in_document_logs_warning(self, mock_post):
+        mock_post.return_value.json.return_value = {
+            "message": {
+                "content": {
+                    "redactions": [
+                        {
+                            "text": "phrase not in doc",
+                            "reason": "test",
+                            "redaction_type": "PII",
+                        }
+                    ]
+                }
+            }
+        }
+        mock_post.return_value.raise_for_status = lambda: None
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+        ):
+            with self.assertLogs(
+                "training.extractors.gemma_extractor", level="WARNING"
+            ) as cm:
+                result = extract_with_gemma("Completely different text.", "Jane Doe")
+
+        self.assertEqual(result, [])
+        self.assertTrue(
+            any("not found in chunk" in line for line in cm.output)
+        )
+
+    @patch("training.extractors.gemma_extractor.requests.post")
     def test_custom_prompt_is_sent_to_ollama(self, mock_post):
         mock_post.return_value.json.return_value = {
             "message": {"content": {"redactions": []}}
