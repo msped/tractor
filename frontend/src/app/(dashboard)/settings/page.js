@@ -10,7 +10,6 @@ import { ApiKeysCard } from '@/components/ApiKeysCard';
 import { DocumentExportSettingsCard } from '@/components/DocumentExportSettingsCard';
 import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
-import { ModelManagementCard } from '@/components/ModelManagementCard';
 
 export default function SettingsPage() {
     const { data: session } = useSession();
@@ -35,9 +34,6 @@ export default function SettingsPage() {
                         <LLMPromptSettingsCard />
                     </Grid>
                 )}
-                <Grid size={{xs: 12}}>
-                    <ModelManagementCard />
-                </Grid>
             </Grid>
         </Container>
     );

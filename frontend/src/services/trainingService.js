@@ -165,7 +165,7 @@ export const uploadTrainingDoc = async (file, accessToken) => {
 export const getTrainingStatus = async (accessToken) => {
     if (!accessToken) throw new Error("Not authenticated");
     try {
-        const response = await apiClient.get(`/training/status`, {
+        const response = await apiClient.get(`/model-management/status`, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         return response.data; // { is_running: boolean }
@@ -207,7 +207,7 @@ export const runManualTraining = async (accessToken) => {
     if (!accessToken) throw new Error("Not authenticated");
 
     try {
-        const response = await apiClient.post(`/training/run-now`, {}, {
+        const response = await apiClient.post(`/model-management/run-now`, {}, {
             headers: { 'Authorization': `Bearer ${accessToken}` },
         });
         return response.data;

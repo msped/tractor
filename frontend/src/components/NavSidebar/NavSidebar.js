@@ -47,7 +47,7 @@ export function NavSidebar() {
     // Base nav items
     const allNavItems = [
         { label: 'Cases', href: '/cases', icon: <FolderIcon /> },
-        { label: 'Training', href: '/training', icon: <PsychologyIcon /> },
+        { label: 'Model Management', href: '/model-management', icon: <PsychologyIcon /> },
     ];
 
     // Filter nav items based on visibility conditions

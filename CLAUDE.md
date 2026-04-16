@@ -81,7 +81,7 @@ tractor/
 - `/api/auth/` - Authentication (login, logout, token refresh, Microsoft callback)
 - `/api/cases/` - Case CRUD, export triggering
 - `/api/cases/{id}/documents/` - Document upload and management
-- `/api/training/` - Model management, training runs
+- `/api/model-management/` - Model management, training runs
 
 ### Data Flow
 

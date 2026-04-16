@@ -6,7 +6,7 @@ const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenti
 describe('<TrainingUpload />', () => {
   beforeEach(() => {
     cy.intercept('POST', '/api/training-docs', { statusCode: 201 }).as('uploadTrainingDoc');
-    cy.intercept('POST', '/api/training/run-now', { statusCode: 200, body: { documents: 5 }}).as('runManualTraining');
+    cy.intercept('POST', '/api/model-management/run-now', { statusCode: 200, body: { documents: 5 }}).as('runManualTraining');
   });
 
   it('renders correctly and shows initial state', () => {
@@ -114,7 +114,7 @@ describe('<TrainingUpload />', () => {
     });
 
     it('shows an error toast if running training fails', () => {
-      cy.intercept('POST', '/api/training/run-now', { statusCode: 400, body: { detail: 'Training service offline' }})
+      cy.intercept('POST', '/api/model-management/run-now', { statusCode: 400, body: { detail: 'Training service offline' }})
         .as('runManualTraining');
       cy.fullMount(<TrainingUpload unprocessedDocsCount={5} />, mountOpts);
 

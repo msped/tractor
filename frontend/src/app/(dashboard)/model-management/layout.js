@@ -13,7 +13,7 @@ export default function Layout({ children }) {
         router.back();
     }
 
-    const showBackButton = pathname !== '/training';
+    const showBackButton = pathname !== '/model-management';
     
     return (
         <Container maxWidth="lg" sx={{ m: 4 }}>
