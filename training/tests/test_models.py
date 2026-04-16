@@ -9,6 +9,8 @@ from cases.models import Case
 from cases.models import Document as CaseDocument
 
 from ..models import (
+    DEFAULT_SYSTEM_PROMPT,
+    LLMPromptSettings,
     Model,
     TrainingDocument,
     TrainingEntity,
@@ -175,3 +177,26 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
         run.delete()
         self.training_doc.refresh_from_db()
         self.assertFalse(self.training_doc.processed)
+
+
+class LLMPromptSettingsTests(NetworkBlockerMixin, TestCase):
+    def test_get_creates_record_with_default_prompt_when_none_exists(self):
+        self.assertEqual(LLMPromptSettings.objects.count(), 0)
+        obj = LLMPromptSettings.get()
+        self.assertEqual(LLMPromptSettings.objects.count(), 1)
+        self.assertEqual(obj.system_prompt, DEFAULT_SYSTEM_PROMPT)
+
+    def test_get_returns_existing_record(self):
+        LLMPromptSettings.objects.create(pk=1, system_prompt="custom prompt")
+        obj = LLMPromptSettings.get()
+        self.assertEqual(LLMPromptSettings.objects.count(), 1)
+        self.assertEqual(obj.system_prompt, "custom prompt")
+
+    def test_save_enforces_singleton(self):
+        LLMPromptSettings.objects.create(pk=1, system_prompt="first")
+        second = LLMPromptSettings(system_prompt="second")
+        second.save()
+        self.assertEqual(LLMPromptSettings.objects.count(), 1)
+        self.assertEqual(
+            LLMPromptSettings.objects.get(pk=1).system_prompt, "second"
+        )

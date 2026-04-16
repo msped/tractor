@@ -175,6 +175,34 @@ export const getTrainingStatus = async (accessToken) => {
     }
 };
 
+export const getLLMPromptSettings = async (accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
+
+    try {
+        const response = await apiClient.get(`/llm-prompt-settings`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch LLM prompt settings:", error.response?.data || error.message);
+        throw new Error("Failed to fetch LLM prompt settings.");
+    }
+};
+
+export const updateLLMPromptSettings = async (data, accessToken) => {
+    if (!accessToken) throw new Error("Not authenticated");
+
+    try {
+        const response = await apiClient.patch(`/llm-prompt-settings`, data, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to update LLM prompt settings:", error.response?.data || error.message);
+        throw new Error("Failed to update LLM prompt settings.");
+    }
+};
+
 export const runManualTraining = async (accessToken) => {
     if (!accessToken) throw new Error("Not authenticated");
 

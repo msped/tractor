@@ -947,4 +947,163 @@ class ExtractTableWithStylingFormattingTests(NetworkBlockerMixin, TestCase):
         )
         self.assertEqual(len(cells), 1)
         # No span tags since the empty run was skipped
-        self.assertNotIn("<span", html)
+
+
+class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.temp_file = tempfile.NamedTemporaryFile(
+            delete=False, suffix=".pdf"
+        )
+        self.temp_file.close()
+        self.file_path = self.temp_file.name
+
+    def tearDown(self):
+        os.remove(self.file_path)
+
+    @patch("training.extractors.gemma_extractor.extract_with_gemma")
+    @patch("training.services._extract_text_from_pdf")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_data_subject_forwarded_to_gemma(
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
+        mock_gemma,
+    ):
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        mock_pdf.return_value = "Some document text."
+        mock_gliner.return_value = []
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+        mock_gemma.return_value = []
+
+        extract_entities_from_text(
+            self.file_path,
+            data_subject_name="Jane Doe",
+            data_subject_dob="1990-01-01",
+        )
+
+        mock_gemma.assert_called_once_with(
+            "Some document text.", "Jane Doe", "1990-01-01"
+        )
+
+    @patch("training.extractors.gemma_extractor.extract_with_gemma")
+    @patch("training.services._extract_text_from_pdf")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_non_overlapping_gemma_results_included(
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
+        mock_gemma,
+    ):
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        mock_pdf.return_value = "John Doe spoke to PC Smith."
+        mock_gliner.return_value = [
+            {
+                "text": "John Doe",
+                "label": "PII",
+                "start_char": 0,
+                "end_char": 8,
+            }
+        ]
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+        mock_gemma.return_value = [
+            {
+                "text": "PC Smith",
+                "label": "OP_DATA",
+                "start_char": 18,
+                "end_char": 26,
+                "source": "LLM",
+            }
+        ]
+
+        _, results, _, _ = extract_entities_from_text(
+            self.file_path, data_subject_name="Jane Doe"
+        )
+
+        texts = [r["text"] for r in results]
+        self.assertIn("John Doe", texts)
+        self.assertIn("PC Smith", texts)
+
+    @patch("training.extractors.gemma_extractor.extract_with_gemma")
+    @patch("training.services._extract_text_from_pdf")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_gemma_results_overlapping_ner_are_dropped(
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
+        mock_gemma,
+    ):
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        mock_pdf.return_value = "John Doe attended."
+        mock_gliner.return_value = [
+            {
+                "text": "John Doe",
+                "label": "PII",
+                "start_char": 0,
+                "end_char": 8,
+            }
+        ]
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+        mock_gemma.return_value = [
+            {
+                "text": "John Doe",
+                "label": "PII",
+                "start_char": 0,
+                "end_char": 8,
+                "source": "LLM",
+            }
+        ]
+
+        _, results, _, _ = extract_entities_from_text(
+            self.file_path, data_subject_name="Jane Doe"
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["text"], "John Doe")

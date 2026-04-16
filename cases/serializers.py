@@ -152,6 +152,7 @@ class RedactionSerializer(serializers.ModelSerializer):
             "justification",
             "is_suggestion",
             "is_accepted",
+            "source",
             "created_at",
             "context",
         ]

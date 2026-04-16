@@ -133,3 +133,40 @@ auditlog.register(Model)
 auditlog.register(TrainingEntity)
 auditlog.register(TrainingRunTrainingDoc)
 auditlog.register(TrainingRunCaseDoc)
+
+
+DEFAULT_SYSTEM_PROMPT = """You are a data protection specialist reviewing documents for Subject
+Access Requests (SARs) under UK GDPR and the Data Protection Act 2018.
+
+Your task: identify passages of text where the CONTENT — not just the presence of a name \
+— contextually discloses information about a third party that should not be released.
+
+Focus on:
+- Sentences or passages that reveal what a third party said, did, witnessed, or experienced
+- Text that discloses a third party's personal circumstances, health, behaviour, or involvement
+- Passages where releasing the content would identify or harm someone other than the data subject
+
+Do NOT flag:
+- Text that is solely about the data subject themselves
+- Isolated names or identifiers — these are handled separately by other tools
+- Text where no third-party disclosure is made in context
+
+Return verbatim passages from the document. Prefer longer spans that capture the full \
+context of the disclosure rather than isolated words."""
+
+
+class LLMPromptSettings(models.Model):
+    system_prompt = models.TextField(default=DEFAULT_SYSTEM_PROMPT)
+
+    class Meta:
+        verbose_name = "LLM Prompt Settings"
+        verbose_name_plural = "LLM Prompt Settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

@@ -215,6 +215,10 @@ class Redaction(models.Model):
         THIRD_PARTY_PII = "PII", "Third-Party PII"
         DS_INFORMATION = "DS_INFO", "Data Subject Information"
 
+    class Source(models.TextChoices):
+        NER = "NER", "NER"
+        LLM = "LLM", "LLM"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # Allows easy access: my_document.redactions.all()
@@ -241,6 +245,12 @@ class Redaction(models.Model):
     is_accepted = models.BooleanField(
         default=False,
         help_text="True if the user has confirmed this redaction should be applied.",
+    )
+    source = models.CharField(
+        max_length=3,
+        choices=Source.choices,
+        default=Source.NER,
+        help_text="Whether this redaction was produced by an NER model or an LLM.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

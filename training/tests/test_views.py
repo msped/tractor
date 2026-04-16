@@ -357,3 +357,47 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
         response = self.client.get(reverse("training-status"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_running"])
+
+
+class LLMPromptSettingsViewTests(BaseTrainingAPITestCase):
+    def test_get_returns_prompt_and_default(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(reverse("llm-prompt-settings"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("system_prompt", response.data)
+        self.assertIn("default_system_prompt", response.data)
+
+    def test_patch_updates_system_prompt(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.patch(
+            reverse("llm-prompt-settings"),
+            {"system_prompt": "custom prompt"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["system_prompt"], "custom prompt")
+
+    def test_non_admin_gets_403(self):
+        self.client.force_authenticate(user=self.regular_user)
+        self.assertEqual(
+            self.client.get(reverse("llm-prompt-settings")).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.patch(
+                reverse("llm-prompt-settings"),
+                {"system_prompt": "x"},
+                format="json",
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_default_system_prompt_is_read_only(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.patch(
+            reverse("llm-prompt-settings"),
+            {"default_system_prompt": "hacked"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotEqual(response.data["default_system_prompt"], "hacked")

@@ -238,6 +238,27 @@ class RedactionModelTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(redaction.is_suggestion)
         self.assertFalse(redaction.is_accepted)
 
+    def test_source_defaults_to_ner(self):
+        redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        self.assertEqual(redaction.source, Redaction.Source.NER)
+
+    def test_source_can_be_set_to_llm(self):
+        redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            source=Redaction.Source.LLM,
+        )
+        self.assertEqual(redaction.source, Redaction.Source.LLM)
+
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class RedactionContextModelTests(NetworkBlockerMixin, TestCase):

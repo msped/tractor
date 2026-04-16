@@ -185,6 +185,11 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertFalse(data["is_accepted"])
         self.assertIn("created_at", data)
 
+    def test_redaction_serializer_includes_source(self):
+        serializer = RedactionSerializer(instance=self.redaction)
+        self.assertIn("source", serializer.data)
+        self.assertEqual(serializer.data["source"], Redaction.Source.NER)
+
     def test_redaction_serializer_create(self):
         """Test deserialization and creation of a Redaction instance."""
         data = {

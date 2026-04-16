@@ -104,8 +104,13 @@ def process_document_and_create_redactions(document_id):
         using model '{model_display}'..."
     )
 
+    case = document.case
     extracted_text, ai_suggestions, tables, structure = (
-        extract_entities_from_text(document.original_file.path)
+        extract_entities_from_text(
+            document.original_file.path,
+            data_subject_name=case.data_subject_name,
+            data_subject_dob=case.data_subject_dob,
+        )
     )
 
     if not extracted_text:
@@ -123,8 +128,6 @@ def process_document_and_create_redactions(document_id):
             "extracted_structure",
         ]
     )
-
-    case = document.case
 
     with transaction.atomic():
         for suggestion in ai_suggestions:
@@ -144,6 +147,7 @@ def process_document_and_create_redactions(document_id):
                 redaction_type=redaction_type,
                 is_suggestion=True,
                 is_accepted=False,
+                source=suggestion.get("source", Redaction.Source.NER),
             )
 
     document.status = Document.Status.READY_FOR_REVIEW

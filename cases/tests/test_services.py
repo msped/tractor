@@ -152,7 +152,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         )
 
         mock_extract_entities.assert_called_once_with(
-            self.document.original_file.path
+            self.document.original_file.path,
+            data_subject_name="John Doe",
+            data_subject_dob=date(1990, 1, 1),
         )
 
     @patch("cases.services.extract_entities_from_text")

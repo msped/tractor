@@ -9,6 +9,7 @@ __pycache__
 *.pyd
 .Python
 env/
+.venv/
 *.egg-info/
 
 # Django

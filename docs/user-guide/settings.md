@@ -49,6 +49,30 @@ Click **Save** to apply changes. The new settings take effect on the next export
 
 ---
 
+## Contextual AI Prompt
+
+The contextual AI (Gemma) model uses a system prompt to understand what kind of information it should identify as potentially disclosable. This prompt can be customised to reflect your organisation's specific disclosure requirements.
+
+Navigate to **Settings** and find the **Contextual AI Prompt** card, then click **Configure**.
+
+The dialog shows a text area containing the current system prompt. Edit it to change the instructions given to the AI on every document it analyses.
+
+### Reset to Default
+
+Click **Reset to default** below the text area to restore the original built-in prompt without saving. This only changes the text in the editor — click **Save** to apply it.
+
+### Saving
+
+Click **Save** to apply the new prompt. The change takes effect on the next document processed — documents already in the queue or previously processed are not affected.
+
+!!! note
+    This setting is only visible and editable by administrators.
+
+!!! note
+    The Contextual AI Prompt card only appears if Ollama is enabled in your deployment (`OLLAMA_ENABLED=True`). If the card is not visible, the contextual AI stage is disabled.
+
+---
+
 ## Exemption Templates
 
 Exemption templates are pre-configured rejection reasons that reviewers can select when rejecting a redaction suggestion. Rather than typing a reason from scratch each time, reviewers can pick from a searchable list of standard exemptions (e.g. "S.40 - Personal Information", "S.42 - Legal Privilege").

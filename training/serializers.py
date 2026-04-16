@@ -4,12 +4,26 @@ from rest_framework import serializers
 from cases.models import Document
 
 from .models import (
+    DEFAULT_SYSTEM_PROMPT,
+    LLMPromptSettings,
     Model,
     TrainingDocument,
     TrainingRun,
     TrainingRunCaseDoc,
     TrainingRunTrainingDoc,
 )
+
+
+class LLMPromptSettingsSerializer(serializers.ModelSerializer):
+    default_system_prompt = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LLMPromptSettings
+        fields = ["system_prompt", "default_system_prompt"]
+        read_only_fields = ["default_system_prompt"]
+
+    def get_default_system_prompt(self, obj):
+        return DEFAULT_SYSTEM_PROMPT
 
 
 class ModelSerializer(serializers.ModelSerializer):

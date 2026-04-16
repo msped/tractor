@@ -4,16 +4,17 @@ This guide covers the document redaction workflow in Tractor.
 
 ## Understanding Redaction Suggestions
 
-When a document is uploaded, Tractor automatically identifies potentially sensitive information using three models working together:
+When a document is uploaded, Tractor automatically identifies potentially sensitive information using four models working together:
 
 - A **trained model** (SpanCat) built from your organisation's accepted redactions. Once trained, this identifies both **Operational Data** and **Third-Party PII** tailored to your organisation's documents. Until training data has been collected and a model trained, this step is skipped.
 - **GLiNER** — a zero-shot model that recognises common **Third-Party PII** such as names, organisations, addresses, and dates of birth. This works immediately without any training.
 - **Presidio** — a pattern-based engine that detects structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, National Insurance numbers) and structured **Operational Data** (crime reference numbers, collar numbers).
+- **Contextual AI (Gemma)** — a locally-hosted large language model that reads the document and reasons about what information would be disclosable given the broader context. This catches disclosures that pattern-matching alone may miss. Suggestions from this model are labelled **AI (Contextual)** in the sidebar.
 
 Suggestions appear in the Redaction Sidebar for you to review.
 
 !!! info
-    The trained model takes priority over the other two. As more redactions are accepted and the model is retrained, its suggestions will improve over time and better reflect your organisation's specific patterns.
+    The trained model takes priority over the others. As more redactions are accepted and the model is retrained, its suggestions will improve over time and better reflect your organisation's specific patterns.
 
 ### Data Subject Filtering
 
@@ -25,7 +26,15 @@ If you need to mark the data subject's information for redaction, you can still 
 
 Once a document has been processed, you can review it by clicking on the document in the case page.
 
-The **Redaction Sidebar** displays all suggested redactions grouped by status (Pending, Accepted, Rejected). For each suggestion, you can:
+The **Redaction Sidebar** displays all suggested redactions grouped by status (Pending, Accepted, Rejected). Each suggestion shows a badge indicating its source:
+
+| Badge               | Meaning                                                    |
+|---------------------|------------------------------------------------------------|
+| **AI**              | Suggested by one of the pattern-matching or NER models     |
+| **AI (Contextual)** | Suggested by the contextual AI (Gemma) model               |
+| **User**            | Created manually by a reviewer                             |
+
+For each suggestion, you can:
 
 - **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type if needed.
 - **Reject** - Click the reject button to dismiss the suggestion. You will be asked to provide a reason for rejection (this is for audit purposes).
