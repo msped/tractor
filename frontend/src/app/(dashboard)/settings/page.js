@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { useSession } from 'next-auth/react';
 import { ApiKeysCard } from '@/components/ApiKeysCard';
+import { CustomRecognizersCard } from '@/components/CustomRecognizersCard';
 import { DocumentExportSettingsCard } from '@/components/DocumentExportSettingsCard';
 import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
@@ -23,6 +24,9 @@ export default function SettingsPage() {
                 </Grid>
                 <Grid size={{xs: 12, md: 6}}>
                     <DocumentExportSettingsCard />
+                </Grid>
+                <Grid size={{xs: 12}}>
+                    <CustomRecognizersCard />
                 </Grid>
                 {isAdmin && (
                     <Grid size={{xs: 12, md: 6}}>
