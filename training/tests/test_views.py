@@ -401,3 +401,168 @@ class LLMPromptSettingsViewTests(BaseTrainingAPITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotEqual(response.data["default_system_prompt"], "hacked")
+
+
+class CustomRecognizerViewTests(BaseTrainingAPITestCase):
+    def setUp(self):
+        super().setUp()
+        import training.extractors.presidio_extractor as mod
+
+        mod._analyzer = None
+        mod._operational_analyzer = None
+
+    def tearDown(self):
+        super().tearDown()
+        import training.extractors.presidio_extractor as mod
+
+        mod._analyzer = None
+        mod._operational_analyzer = None
+
+    def _create_payload(self, **overrides):
+        data = {
+            "name": "Test Recognizer",
+            "description": "A test recognizer",
+            "entity_type": "THIRD_PARTY",
+            "patterns": [
+                {"name": "test_pat", "regex": r"\d{4}", "score": 0.8}
+            ],
+            "deny_list": [],
+        }
+        data.update(overrides)
+        return data
+
+    def test_unauthenticated_access_denied(self):
+        response = self.client.get(reverse("custom-recognizer-list"))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_list_returns_all_recognizers(self):
+        from training.models import CustomPattern, CustomRecognizer
+
+        rec = CustomRecognizer.objects.create(
+            name="Rec A", entity_type="THIRD_PARTY"
+        )
+        CustomPattern.objects.create(recognizer=rec, regex=r"\d+", score=0.9)
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.get(reverse("custom-recognizer-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    def test_create_recognizer(self):
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(
+            reverse("custom-recognizer-list"),
+            self._create_payload(),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], "Test Recognizer")
+        self.assertEqual(len(response.data["patterns"]), 1)
+
+    def test_create_with_invalid_regex_returns_400(self):
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(
+            reverse("custom-recognizer-list"),
+            self._create_payload(
+                patterns=[{"name": "bad", "regex": "[invalid", "score": 0.9}]
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_retrieve_recognizer(self):
+        from training.models import CustomPattern, CustomRecognizer
+
+        rec = CustomRecognizer.objects.create(
+            name="Retrieve Me", entity_type="OPERATIONAL"
+        )
+        CustomPattern.objects.create(recognizer=rec, regex=r"\w+", score=0.7)
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.get(
+            reverse("custom-recognizer-detail", kwargs={"pk": rec.pk})
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Retrieve Me")
+
+    def test_update_recognizer(self):
+        from training.models import CustomPattern, CustomRecognizer
+
+        rec = CustomRecognizer.objects.create(
+            name="Update Me", entity_type="THIRD_PARTY"
+        )
+        CustomPattern.objects.create(recognizer=rec, regex=r"\d+", score=0.8)
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.patch(
+            reverse("custom-recognizer-detail", kwargs={"pk": rec.pk}),
+            {"is_active": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rec.refresh_from_db()
+        self.assertFalse(rec.is_active)
+
+    def test_delete_recognizer(self):
+        from training.models import CustomPattern, CustomRecognizer
+
+        rec = CustomRecognizer.objects.create(
+            name="Delete Me", entity_type="THIRD_PARTY"
+        )
+        CustomPattern.objects.create(recognizer=rec, regex=r"\d+", score=0.8)
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.delete(
+            reverse("custom-recognizer-detail", kwargs={"pk": rec.pk})
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(CustomRecognizer.objects.filter(pk=rec.pk).exists())
+
+
+class ValidateRegexViewTests(BaseTrainingAPITestCase):
+    def test_valid_pattern_with_matches(self):
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(
+            reverse("validate-regex"),
+            {"pattern": r"\d{4}", "sample_text": "Call 1234 or 5678"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["valid"])
+        self.assertEqual(len(response.data["matches"]), 2)
+        self.assertEqual(response.data["matches"][0]["text"], "1234")
+
+    def test_valid_pattern_no_matches(self):
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(
+            reverse("validate-regex"),
+            {"pattern": r"\d{4}", "sample_text": "no digits here"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["valid"])
+        self.assertEqual(response.data["matches"], [])
+
+    def test_invalid_pattern_returns_400(self):
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(
+            reverse("validate-regex"),
+            {"pattern": "[invalid", "sample_text": "test"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["valid"])
+        self.assertIn("error", response.data)
+
+    def test_missing_pattern_returns_400(self):
+        self.client.force_authenticate(user=self.regular_user)
+        response = self.client.post(
+            reverse("validate-regex"),
+            {"sample_text": "test"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unauthenticated_access_denied(self):
+        response = self.client.post(
+            reverse("validate-regex"),
+            {"pattern": r"\d+", "sample_text": "123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

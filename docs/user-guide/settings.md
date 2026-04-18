@@ -73,6 +73,57 @@ Click **Save** to apply the new prompt. The change takes effect on the next docu
 
 ---
 
+## Custom Recognizers
+
+Custom recognizers let you define organisation-specific patterns that are applied automatically during document processing, alongside the built-in extractors. Any text matching an active recognizer is surfaced as a redaction suggestion in the review panel.
+
+Navigate to **Settings** and find the **Custom Recognizers** card, then click **Manage**.
+
+### Types of recognizer
+
+| Type | When to use |
+|------|-------------|
+| **Regex patterns** | Reference formats that follow a predictable structure (e.g. a bespoke crime-numbering scheme or a local identifier format). Each pattern has a name, a regular expression, and a confidence score. |
+| **Deny list** | Specific literal strings that must always be flagged (e.g. known officer names or project code-words that do not follow a pattern). |
+
+A single recognizer can only be one type. Choose **Regex patterns** or **Deny list** from the recognizer type dropdown when creating it.
+
+### Entity type
+
+Each recognizer is assigned to one of two categories:
+
+| Entity type | Effect |
+|-------------|--------|
+| **Third-Party PII** | Matches are treated as third-party personal information, equivalent to an email address or NHS number detected by the built-in extractor. |
+| **Operational Data** | Matches are treated as operational references, equivalent to crime reference numbers or collar numbers. |
+
+### Adding a recognizer
+
+1. Click **Add recognizer**.
+2. Enter a **name** (required) and an optional **description**.
+3. Select the **entity type** and **recognizer type**.
+4. Add one or more pattern rows (for regex recognizers) or term rows (for deny-list recognizers).
+5. For regex recognizers, use the **Regex tester** widget at the bottom of the form to validate your pattern against sample text before saving.
+6. Click **Save**.
+
+### Regex tester
+
+The regex tester sends your pattern and sample text to the server and highlights any matches in real time (with a short debounce delay). If the pattern is invalid, an error message appears inline. Patterns are evaluated server-side — the tester does not apply the regex locally.
+
+### Editing and disabling
+
+- **Edit** — Click the pencil icon next to a recognizer to update its name, description, patterns, or terms.
+- **Enable / disable** — Toggle the switch in the **Active** column to suspend a recognizer without deleting it. Disabled recognizers are ignored during extraction; re-enabling takes effect on the next document processed.
+- **Delete** — Click the delete icon and confirm the prompt. Deletion is permanent.
+
+### How matches appear
+
+Custom recognizer matches appear in the review panel alongside built-in detections and participate in the standard deduplication priority order (SpanCat > GLiNER > Presidio / custom > Gemma). They are labelled by entity type in the same way as built-in results.
+
+Changes to custom recognizers take effect on the next document processed — documents already reviewed are not retroactively updated.
+
+---
+
 ## Exemption Templates
 
 Exemption templates are pre-configured rejection reasons that reviewers can select when rejecting a redaction suggestion. Rather than typing a reason from scratch each time, reviewers can pick from a searchable list of standard exemptions (e.g. "S.40 - Personal Information", "S.42 - Legal Privilege").

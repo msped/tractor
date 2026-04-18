@@ -1,3 +1,5 @@
+import re
+
 from django_q.models import Schedule
 from rest_framework import serializers
 
@@ -5,6 +7,9 @@ from cases.models import Document
 
 from .models import (
     DEFAULT_SYSTEM_PROMPT,
+    CustomDenyListItem,
+    CustomPattern,
+    CustomRecognizer,
     LLMPromptSettings,
     Model,
     TrainingDocument,
@@ -12,6 +17,87 @@ from .models import (
     TrainingRunCaseDoc,
     TrainingRunTrainingDoc,
 )
+
+
+class CustomPatternSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomPattern
+        fields = ["id", "name", "regex", "score"]
+        read_only_fields = ["id"]
+
+    def validate_regex(self, value):
+        try:
+            re.compile(value)
+        except re.error as exc:
+            raise serializers.ValidationError(f"Invalid regex: {exc}") from exc
+        return value
+
+
+class CustomDenyListItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomDenyListItem
+        fields = ["id", "value"]
+        read_only_fields = ["id"]
+
+
+class CustomRecognizerSerializer(serializers.ModelSerializer):
+    patterns = CustomPatternSerializer(many=True, required=False, default=list)
+    deny_list = CustomDenyListItemSerializer(
+        many=True, required=False, default=list
+    )
+
+    class Meta:
+        model = CustomRecognizer
+        fields = [
+            "id",
+            "name",
+            "description",
+            "entity_type",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "patterns",
+            "deny_list",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, data):
+        # Only enforce the constraint when at least one of the list fields is
+        # being explicitly set (i.e. not a partial update on unrelated fields).
+        if "patterns" in data or "deny_list" in data:
+            patterns = data.get("patterns", [])
+            deny_list = data.get("deny_list", [])
+            if not patterns and not deny_list:
+                raise serializers.ValidationError(
+                    "A recognizer must have at least one pattern or deny-list item."
+                )
+        return data
+
+    def create(self, validated_data):
+        patterns_data = validated_data.pop("patterns", [])
+        deny_list_data = validated_data.pop("deny_list", [])
+        recognizer = CustomRecognizer.objects.create(**validated_data)
+        for p in patterns_data:
+            CustomPattern.objects.create(recognizer=recognizer, **p)
+        for d in deny_list_data:
+            CustomDenyListItem.objects.create(recognizer=recognizer, **d)
+        return recognizer
+
+    def update(self, instance, validated_data):
+        patterns_data = validated_data.pop("patterns", None)
+        deny_list_data = validated_data.pop("deny_list", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if patterns_data is not None:
+            instance.patterns.all().delete()
+            for p in patterns_data:
+                CustomPattern.objects.create(recognizer=instance, **p)
+        if deny_list_data is not None:
+            instance.deny_list.all().delete()
+            for d in deny_list_data:
+                CustomDenyListItem.objects.create(recognizer=instance, **d)
+        return instance
 
 
 class LLMPromptSettingsSerializer(serializers.ModelSerializer):
