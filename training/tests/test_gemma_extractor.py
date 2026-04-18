@@ -2,7 +2,11 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
-from training.extractors.gemma_extractor import _chunk_text, extract_with_gemma
+from training.extractors.gemma_extractor import (
+    _chunk_text,
+    _find_phrase_in_chunk,
+    extract_with_gemma,
+)
 from training.models import LLMPromptSettings
 from training.tests.base import NetworkBlockerMixin
 
@@ -280,3 +284,111 @@ class GemmaChunkingTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(mock_post.call_count, 1)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["start_char"], text.index("PC Smith"))
+
+
+class FindPhraseInChunkTests(TestCase):
+    def test_exact_match_returns_correct_offsets(self):
+        chunk = "The officer PC Smith attended."
+        result = _find_phrase_in_chunk("PC Smith", chunk)
+        self.assertEqual(result, [(12, 20)])
+
+    def test_multiple_exact_matches_returned(self):
+        chunk = "PC Smith spoke to PC Smith again."
+        result = _find_phrase_in_chunk("PC Smith", chunk)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0], (0, 8))
+        self.assertEqual(result[1], (18, 26))
+
+    def test_case_difference_falls_back_to_normalised(self):
+        chunk = "The officer PC Smith attended."
+        # Gemma returned lowercase version
+        result = _find_phrase_in_chunk("pc smith", chunk)
+        self.assertEqual(len(result), 1)
+        orig_start, orig_end = result[0]
+        self.assertEqual(chunk[orig_start:orig_end], "PC Smith")
+
+    def test_extra_whitespace_falls_back_to_normalised(self):
+        chunk = "The name is John   Doe here."
+        # Gemma collapsed the whitespace
+        result = _find_phrase_in_chunk("John Doe", chunk)
+        self.assertEqual(len(result), 1)
+        orig_start, orig_end = result[0]
+        self.assertEqual(chunk[orig_start:orig_end], "John   Doe")
+
+    def test_genuinely_absent_phrase_returns_empty(self):
+        chunk = "Nothing relevant here."
+        result = _find_phrase_in_chunk("PC Smith", chunk)
+        self.assertEqual(result, [])
+
+    def test_exact_match_skips_normalised_path(self):
+        # Phrase exists exactly — result must use exact positions (no normalised offset shift)
+        chunk = "abc DEF ghi"
+        result = _find_phrase_in_chunk("DEF", chunk)
+        self.assertEqual(result, [(4, 7)])
+
+
+class FindPhraseNormalisedIntegrationTests(NetworkBlockerMixin, TestCase):
+    OLLAMA_SETTINGS = {
+        "OLLAMA_ENABLED": "true",
+        "OLLAMA_HOST": "http://ollama:11434",
+        "OLLAMA_MODEL": "gemma4:e4b",
+    }
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_case_difference_entity_included_with_original_text(
+        self, mock_post
+    ):
+        mock_post.return_value.json.return_value = {
+            "message": {
+                "content": {
+                    "redactions": [
+                        {
+                            "text": "pc smith",  # lowercase — differs from document
+                            "reason": "Third-party officer",
+                            "redaction_type": "OP_DATA",
+                        }
+                    ]
+                }
+            }
+        }
+        mock_post.return_value.raise_for_status = lambda: None
+        text = "The officer PC Smith attended the scene."
+        with override_settings(**self.OLLAMA_SETTINGS):
+            result = extract_with_gemma(text, "Jane Doe")
+
+        self.assertEqual(len(result), 1)
+        # Offsets must point to the original document text
+        span = result[0]
+        self.assertEqual(
+            text[span["start_char"] : span["end_char"]], "PC Smith"
+        )
+        self.assertEqual(span["label"], "OP_DATA")
+        self.assertEqual(span["source"], "LLM")
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_whitespace_difference_entity_included_with_original_text(
+        self, mock_post
+    ):
+        mock_post.return_value.json.return_value = {
+            "message": {
+                "content": {
+                    "redactions": [
+                        {
+                            "text": "John Doe",  # single space — document has three
+                            "reason": "Data subject",
+                            "redaction_type": "PII",
+                        }
+                    ]
+                }
+            }
+        }
+        mock_post.return_value.raise_for_status = lambda: None
+        text = "Relating to John   Doe and his case."
+        with override_settings(**self.OLLAMA_SETTINGS):
+            result = extract_with_gemma(text, "Jane Doe")
+
+        self.assertEqual(len(result), 1)
+        span = result[0]
+        self.assertEqual(
+            text[span["start_char"] : span["end_char"]], "John   Doe"
+        )

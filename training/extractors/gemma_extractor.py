@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 import requests
 from django.conf import settings
@@ -29,6 +30,71 @@ REDACTION_SCHEMA = {
     },
     "required": ["redactions"],
 }
+
+
+def _build_norm_map(text: str) -> tuple[str, list[int]]:
+    """
+    Return (normalised_text, norm_to_orig) where normalised_text is lowercase
+    with all whitespace runs collapsed to a single space, and norm_to_orig[i]
+    is the original index of the i-th normalised character.
+    """
+    norm_chars = []
+    norm_to_orig = []
+    prev_was_space = False
+    for i, c in enumerate(text):
+        if c.isspace():
+            if not prev_was_space:
+                norm_chars.append(" ")
+                norm_to_orig.append(i)
+                prev_was_space = True
+        else:
+            norm_chars.append(c.lower())
+            norm_to_orig.append(i)
+            prev_was_space = False
+    return "".join(norm_chars), norm_to_orig
+
+
+def _find_phrase_in_chunk(
+    phrase: str, chunk_text: str
+) -> list[tuple[int, int]]:
+    """
+    Return a list of (start, end) offset tuples for all occurrences of phrase
+    in chunk_text (chunk-local coordinates).
+
+    Stage 1: exact str.find() — fast path, no overhead when Gemma output is clean.
+    Stage 2: normalised fallback — lowercase + collapsed whitespace on both sides.
+    When a normalised match is found, the returned offsets refer to the original
+    chunk_text positions so the highlighted text always reflects the real document.
+    """
+    # Stage 1: exact match
+    results = []
+    start = 0
+    while True:
+        idx = chunk_text.find(phrase, start)
+        if idx == -1:
+            break
+        results.append((idx, idx + len(phrase)))
+        start = idx + len(phrase)
+    if results:
+        return results
+
+    # Stage 2: normalised match
+    norm_chunk, norm_to_orig = _build_norm_map(chunk_text)
+    norm_phrase = re.sub(r"\s+", " ", phrase).lower()
+    if not norm_phrase:
+        return []
+
+    start = 0
+    while True:
+        idx = norm_chunk.find(norm_phrase, start)
+        if idx == -1:
+            break
+        orig_start = norm_to_orig[idx]
+        orig_end = norm_to_orig[idx + len(norm_phrase) - 1] + 1
+        results.append((orig_start, orig_end))
+        start = idx + len(norm_phrase)
+
+    return results
 
 
 def _chunk_text(
@@ -88,26 +154,21 @@ def _call_ollama(
         phrase = item.get("text", "").strip()
         if not phrase:
             continue
-        start = 0
-        found = False
-        while True:
-            idx = chunk_text.find(phrase, start)
-            if idx == -1:
-                break
-            found = True
+        matches = _find_phrase_in_chunk(phrase, chunk_text)
+        if not matches:
+            logger.warning(
+                "Gemma returned phrase not found in chunk: %r", phrase
+            )
+            continue
+        for start, end in matches:
             results.append(
                 {
-                    "text": phrase,
-                    "start_char": chunk_offset + idx,
-                    "end_char": chunk_offset + idx + len(phrase),
+                    "text": chunk_text[start:end],
+                    "start_char": chunk_offset + start,
+                    "end_char": chunk_offset + end,
                     "label": item.get("redaction_type", "PII"),
                     "source": "LLM",
                 }
-            )
-            start = idx + len(phrase)
-        if not found:
-            logger.warning(
-                "Gemma returned phrase not found in chunk: %r", phrase
             )
 
     return results
