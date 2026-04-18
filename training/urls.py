@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    CustomRecognizerDetailView,
+    CustomRecognizerListCreateView,
     LLMPromptSettingsView,
     ModelDetailView,
     ModelListCreateView,
@@ -10,9 +12,25 @@ from .views import (
     TrainingRunViewSet,
     TrainingScheduleViewSet,
     TrainingStatusView,
+    ValidateRegexView,
 )
 
 urlpatterns = [
+    path(
+        "model-management/custom-recognizers",
+        CustomRecognizerListCreateView.as_view(),
+        name="custom-recognizer-list",
+    ),
+    path(
+        "model-management/custom-recognizers/<uuid:pk>",
+        CustomRecognizerDetailView.as_view(),
+        name="custom-recognizer-detail",
+    ),
+    path(
+        "model-management/regex/validate",
+        ValidateRegexView.as_view(),
+        name="validate-regex",
+    ),
     path(
         "llm-prompt-settings",
         LLMPromptSettingsView.as_view(),

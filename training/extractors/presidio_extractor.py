@@ -23,6 +23,32 @@ _OPERATIONAL_ENTITIES = [
 ]
 
 
+def _load_custom_recognizers(entity_type, engine, Pattern, PatternRecognizer):
+    """Register active custom recognizers of *entity_type* into *engine*. Returns extra entity names."""
+    from training.models import CustomRecognizer
+
+    extra_entities = []
+    for rec in CustomRecognizer.objects.filter(
+        is_active=True, entity_type=entity_type
+    ).prefetch_related("patterns", "deny_list"):
+        patterns = [
+            Pattern(name=p.name or f"p{i}", regex=p.regex, score=p.score)
+            for i, p in enumerate(rec.patterns.all())
+        ]
+        deny_list = [item.value for item in rec.deny_list.all()]
+        if not patterns and not deny_list:
+            continue
+        entity_name = f"CUSTOM_{rec.id.hex}"
+        recognizer = PatternRecognizer(
+            supported_entity=entity_name,
+            patterns=patterns or None,
+            deny_list=deny_list or None,
+        )
+        engine.registry.add_recognizer(recognizer)
+        extra_entities.append(entity_name)
+    return extra_entities
+
+
 def _build_analyzer():
     """Build a Presidio AnalyzerEngine configured with UK PII pattern recognisers."""
     from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
@@ -62,7 +88,16 @@ def _build_analyzer():
     engine = AnalyzerEngine(nlp_engine=nlp_engine)
     engine.registry.add_recognizer(postcode_recognizer)
     engine.registry.add_recognizer(ni_recognizer)
-    return engine
+
+    from training.models import CustomRecognizer
+
+    custom_entities = _load_custom_recognizers(
+        CustomRecognizer.EntityType.THIRD_PARTY,
+        engine,
+        Pattern,
+        PatternRecognizer,
+    )
+    return engine, custom_entities
 
 
 def _build_operational_analyzer():
@@ -102,15 +137,25 @@ def _build_operational_analyzer():
     engine = AnalyzerEngine(nlp_engine=nlp_engine)
     engine.registry.add_recognizer(crime_ref_recognizer)
     engine.registry.add_recognizer(collar_number_recognizer)
-    return engine
+
+    from training.models import CustomRecognizer
+
+    custom_entities = _load_custom_recognizers(
+        CustomRecognizer.EntityType.OPERATIONAL,
+        engine,
+        Pattern,
+        PatternRecognizer,
+    )
+    return engine, custom_entities
 
 
+# Singletons are (engine, custom_entity_names) tuples; None when not yet built.
 _analyzer = None
 _operational_analyzer = None
 
 
 def _get_analyzer():
-    """Return the singleton PII AnalyzerEngine, creating it on first call."""
+    """Return the singleton PII AnalyzerEngine tuple, creating it on first call."""
     global _analyzer
     if _analyzer is None:
         _analyzer = _build_analyzer()
@@ -118,7 +163,7 @@ def _get_analyzer():
 
 
 def _get_operational_analyzer():
-    """Return the singleton operational AnalyzerEngine, creating it on first call."""
+    """Return the singleton operational AnalyzerEngine tuple, creating it on first call."""
     global _operational_analyzer
     if _operational_analyzer is None:
         _operational_analyzer = _build_operational_analyzer()
@@ -132,10 +177,9 @@ def extract_with_presidio(text):
     Returns a list of dicts with keys: text, label, start_char, end_char.
     All entities are mapped to THIRD_PARTY.
     """
-    analyzer = _get_analyzer()
-    results = analyzer.analyze(
-        text=text, language="en", entities=_PRESIDIO_ENTITIES
-    )
+    engine, custom_entities = _get_analyzer()
+    entities = _PRESIDIO_ENTITIES + custom_entities
+    results = engine.analyze(text=text, language="en", entities=entities)
     output = []
     for r in results:
         output.append(
@@ -157,10 +201,9 @@ def extract_operational_with_presidio(text):
     (e.g. PC 1234). Returns a list of dicts with keys: text, label, start_char,
     end_char. All entities are mapped to OPERATIONAL.
     """
-    analyzer = _get_operational_analyzer()
-    results = analyzer.analyze(
-        text=text, language="en", entities=_OPERATIONAL_ENTITIES
-    )
+    engine, custom_entities = _get_operational_analyzer()
+    entities = _OPERATIONAL_ENTITIES + custom_entities
+    results = engine.analyze(text=text, language="en", entities=entities)
     output = []
     for r in results:
         output.append(

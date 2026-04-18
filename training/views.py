@@ -1,3 +1,5 @@
+import re
+
 from django_q.models import OrmQ, Schedule
 from django_q.tasks import async_task
 from rest_framework import serializers, status, viewsets
@@ -5,19 +7,73 @@ from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
 )
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .loader import SpanCatModelManager
-from .models import LLMPromptSettings, Model, TrainingDocument, TrainingRun
+from .models import (
+    CustomRecognizer,
+    LLMPromptSettings,
+    Model,
+    TrainingDocument,
+    TrainingRun,
+)
 from .serializers import (
+    CustomRecognizerSerializer,
     LLMPromptSettingsSerializer,
     ModelSerializer,
     ScheduleSerializer,
     TrainingDocumentSerializer,
     TrainingRunSerializer,
 )
+
+
+class CustomRecognizerListCreateView(ListCreateAPIView):
+    """List all custom recognizers or create a new one."""
+
+    permission_classes = [IsAuthenticated]
+    queryset = CustomRecognizer.objects.prefetch_related(
+        "patterns", "deny_list"
+    )
+    serializer_class = CustomRecognizerSerializer
+
+
+class CustomRecognizerDetailView(RetrieveUpdateDestroyAPIView):
+    """Retrieve, update, or delete a custom recognizer."""
+
+    permission_classes = [IsAuthenticated]
+    queryset = CustomRecognizer.objects.prefetch_related(
+        "patterns", "deny_list"
+    )
+    serializer_class = CustomRecognizerSerializer
+
+
+class ValidateRegexView(APIView):
+    """Validate a regex pattern against sample text without saving anything."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        pattern = request.data.get("pattern", "")
+        sample_text = request.data.get("sample_text", "")
+        if not pattern:
+            return Response(
+                {"error": "pattern is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            compiled = re.compile(pattern)
+        except re.error as exc:
+            return Response(
+                {"valid": False, "error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        matches = [
+            {"start": m.start(), "end": m.end(), "text": m.group()}
+            for m in compiled.finditer(sample_text)
+        ]
+        return Response({"valid": True, "matches": matches})
 
 
 class LLMPromptSettingsView(APIView):
