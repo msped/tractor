@@ -8,6 +8,7 @@ from ..extractors.presidio_extractor import (
     extract_operational_with_presidio,
     extract_with_presidio,
 )
+from ..models import CustomDenyListItem, CustomPattern, CustomRecognizer
 from .base import NetworkBlockerMixin
 
 
@@ -27,7 +28,7 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
         mock_result.start = 10
         mock_result.end = 28
         mock_analyzer.analyze.return_value = [mock_result]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "Contact: john@example.com today"
         results = extract_with_presidio(text)
@@ -46,7 +47,7 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
         mock_result.start = 11
         mock_result.end = 25
         mock_analyzer.analyze.return_value = [mock_result]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "Call me on 07700 900000"
         results = extract_with_presidio(text)
@@ -64,7 +65,7 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
         mock_result.start = 13
         mock_result.end = 23
         mock_analyzer.analyze.return_value = [mock_result]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "NHS Number: 485 777 3456"
         results = extract_with_presidio(text)
@@ -86,7 +87,7 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
         mock_result_2.end = 35
 
         mock_analyzer.analyze.return_value = [mock_result_1, mock_result_2]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "john@example.com and 07700 900000"
         results = extract_with_presidio(text)
@@ -98,7 +99,7 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
     def test_empty_result(self, mock_get_analyzer):
         mock_analyzer = MagicMock()
         mock_analyzer.analyze.return_value = []
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         results = extract_with_presidio("No PII here at all.")
         self.assertEqual(results, [])
@@ -112,8 +113,9 @@ class ExtractWithPresidioTests(NetworkBlockerMixin, TestCase):
         with patch(
             "training.extractors.presidio_extractor._build_analyzer"
         ) as mock_build:
-            mock_build.return_value = MagicMock()
-            mock_build.return_value.analyze.return_value = []
+            mock_engine = MagicMock()
+            mock_engine.analyze.return_value = []
+            mock_build.return_value = (mock_engine, [])
 
             extract_with_presidio("test")
             extract_with_presidio("test again")
@@ -136,7 +138,7 @@ class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
         mock_result.start = 13
         mock_result.end = 24
         mock_analyzer.analyze.return_value = [mock_result]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "Crime Ref No: 42/12345/24"
         results = extract_operational_with_presidio(text)
@@ -155,7 +157,7 @@ class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
         mock_result.start = 0
         mock_result.end = 7
         mock_analyzer.analyze.return_value = [mock_result]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "PC 1234 attended the scene."
         results = extract_operational_with_presidio(text)
@@ -179,7 +181,7 @@ class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
         r2.end = 27
 
         mock_analyzer.analyze.return_value = [r1, r2]
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         text = "42/12345/24 attended by PC 1234"
         results = extract_operational_with_presidio(text)
@@ -191,7 +193,7 @@ class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
     def test_empty_result(self, mock_get_analyzer):
         mock_analyzer = MagicMock()
         mock_analyzer.analyze.return_value = []
-        mock_get_analyzer.return_value = mock_analyzer
+        mock_get_analyzer.return_value = (mock_analyzer, [])
 
         results = extract_operational_with_presidio("No refs here.")
         self.assertEqual(results, [])
@@ -205,8 +207,9 @@ class ExtractOperationalWithPresidioTests(NetworkBlockerMixin, TestCase):
         with patch(
             "training.extractors.presidio_extractor._build_operational_analyzer"
         ) as mock_build:
-            mock_build.return_value = MagicMock()
-            mock_build.return_value.analyze.return_value = []
+            mock_engine = MagicMock()
+            mock_engine.analyze.return_value = []
+            mock_build.return_value = (mock_engine, [])
 
             extract_operational_with_presidio("test")
             extract_operational_with_presidio("test again")
@@ -231,13 +234,14 @@ class BuildAnalyzerTests(NetworkBlockerMixin, TestCase):
         mock_engine_instance = MagicMock()
         mock_engine.return_value = mock_engine_instance
 
-        result = _build_analyzer()
+        engine, custom_entities = _build_analyzer()
 
         mock_engine.assert_called_once()
         self.assertEqual(
             mock_engine_instance.registry.add_recognizer.call_count, 2
         )
-        self.assertEqual(result, mock_engine_instance)
+        self.assertEqual(engine, mock_engine_instance)
+        self.assertEqual(custom_entities, [])
 
     @patch("presidio_analyzer.nlp_engine.NlpEngineProvider")
     @patch("presidio_analyzer.AnalyzerEngine")
@@ -249,10 +253,125 @@ class BuildAnalyzerTests(NetworkBlockerMixin, TestCase):
         mock_engine_instance = MagicMock()
         mock_engine.return_value = mock_engine_instance
 
-        result = _build_operational_analyzer()
+        engine, custom_entities = _build_operational_analyzer()
 
         mock_engine.assert_called_once()
         self.assertEqual(
             mock_engine_instance.registry.add_recognizer.call_count, 2
         )
-        self.assertEqual(result, mock_engine_instance)
+        self.assertEqual(engine, mock_engine_instance)
+        self.assertEqual(custom_entities, [])
+
+
+class CustomRecognizerIntegrationTests(NetworkBlockerMixin, TestCase):
+    """Integration tests: custom recognizers stored in DB are applied during extraction."""
+
+    def setUp(self):
+        import training.extractors.presidio_extractor as mod
+
+        mod._analyzer = None
+        mod._operational_analyzer = None
+
+    def tearDown(self):
+        import training.extractors.presidio_extractor as mod
+
+        mod._analyzer = None
+        mod._operational_analyzer = None
+
+    def test_active_custom_third_party_pattern_produces_match(self):
+        rec = CustomRecognizer.objects.create(
+            name="TP Test",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+            is_active=True,
+        )
+        CustomPattern.objects.create(
+            recognizer=rec, regex=r"BADGE-\d{4}", score=0.9
+        )
+
+        results = extract_with_presidio("Officer BADGE-1234 attended.")
+
+        texts = [r["text"] for r in results]
+        self.assertIn("BADGE-1234", texts)
+        self.assertTrue(all(r["label"] == "THIRD_PARTY" for r in results))
+
+    def test_disabled_custom_third_party_pattern_produces_no_match(self):
+        rec = CustomRecognizer.objects.create(
+            name="TP Disabled",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+            is_active=False,
+        )
+        CustomPattern.objects.create(
+            recognizer=rec, regex=r"BADGE-\d{4}", score=0.9
+        )
+
+        results = extract_with_presidio("Officer BADGE-1234 attended.")
+
+        texts = [r["text"] for r in results]
+        self.assertNotIn("BADGE-1234", texts)
+
+    def test_active_custom_operational_pattern_produces_match(self):
+        rec = CustomRecognizer.objects.create(
+            name="OP Test",
+            entity_type=CustomRecognizer.EntityType.OPERATIONAL,
+            is_active=True,
+        )
+        CustomPattern.objects.create(
+            recognizer=rec, regex=r"OP-REF-\d{6}", score=0.9
+        )
+
+        results = extract_operational_with_presidio(
+            "See OP-REF-123456 for details."
+        )
+
+        texts = [r["text"] for r in results]
+        self.assertIn("OP-REF-123456", texts)
+        self.assertTrue(all(r["label"] == "OPERATIONAL" for r in results))
+
+    def test_active_custom_deny_list_produces_match(self):
+        rec = CustomRecognizer.objects.create(
+            name="DenyList Test",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+            is_active=True,
+        )
+        CustomDenyListItem.objects.create(recognizer=rec, value="SuperSecret")
+
+        results = extract_with_presidio(
+            "The project SuperSecret must be redacted."
+        )
+
+        texts = [r["text"] for r in results]
+        self.assertIn("SuperSecret", texts)
+
+    def test_signal_invalidates_cache_on_save(self):
+        import training.extractors.presidio_extractor as mod
+
+        # Prime the cache
+        _ = extract_with_presidio("some text")
+        self.assertIsNotNone(mod._analyzer)
+
+        # Saving a CustomRecognizer should null the cache
+        rec = CustomRecognizer.objects.create(
+            name="Cache Test",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+            is_active=True,
+        )
+        CustomPattern.objects.create(recognizer=rec, regex=r"X", score=0.5)
+
+        self.assertIsNone(mod._analyzer)
+
+    def test_signal_invalidates_cache_on_delete(self):
+        import training.extractors.presidio_extractor as mod
+
+        rec = CustomRecognizer.objects.create(
+            name="Delete Cache Test",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+            is_active=True,
+        )
+        CustomPattern.objects.create(recognizer=rec, regex=r"X", score=0.5)
+
+        # Prime the cache after save
+        _ = extract_with_presidio("some text")
+        self.assertIsNotNone(mod._analyzer)
+
+        rec.delete()
+        self.assertIsNone(mod._analyzer)

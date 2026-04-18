@@ -8,6 +8,9 @@ from cases.models import Case
 from cases.models import Document as CaseDocument
 
 from ..models import (
+    CustomDenyListItem,
+    CustomPattern,
+    CustomRecognizer,
     Model,
     TrainingDocument,
     TrainingRun,
@@ -15,6 +18,7 @@ from ..models import (
     TrainingRunTrainingDoc,
 )
 from ..serializers import (
+    CustomRecognizerSerializer,
     ModelSerializer,
     TrainingDocumentSerializer,
     TrainingRunSerializer,
@@ -144,3 +148,105 @@ class TrainingRunSerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(data["model_name"], "run_model")
         self.assertIn("source", data)
         self.assertIn("created_at", data)
+
+
+class CustomRecognizerSerializerTests(NetworkBlockerMixin, TestCase):
+    def _make_recognizer(self, **kwargs):
+        defaults = {
+            "name": "Crime Ref Pattern",
+            "entity_type": CustomRecognizer.EntityType.OPERATIONAL,
+            "patterns": [
+                {
+                    "name": "crime_ref",
+                    "regex": r"\d{2}/\d{4}/\d{2}",
+                    "score": 0.9,
+                }
+            ],
+            "deny_list": [],
+        }
+        defaults.update(kwargs)
+        return defaults
+
+    def test_create_with_patterns(self):
+        data = self._make_recognizer()
+        serializer = CustomRecognizerSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        instance = serializer.save()
+
+        self.assertIsInstance(instance, CustomRecognizer)
+        self.assertEqual(instance.name, "Crime Ref Pattern")
+        self.assertEqual(
+            instance.entity_type, CustomRecognizer.EntityType.OPERATIONAL
+        )
+        self.assertTrue(instance.is_active)
+        self.assertEqual(instance.patterns.count(), 1)
+        self.assertEqual(instance.deny_list.count(), 0)
+
+    def test_create_with_deny_list(self):
+        data = self._make_recognizer(
+            name="Known Names",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+            patterns=[],
+            deny_list=[{"value": "John Smith"}, {"value": "Jane Doe"}],
+        )
+        serializer = CustomRecognizerSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        instance = serializer.save()
+
+        self.assertEqual(instance.deny_list.count(), 2)
+        self.assertEqual(instance.patterns.count(), 0)
+
+    def test_invalid_regex_rejected(self):
+        data = self._make_recognizer(
+            patterns=[{"name": "bad", "regex": r"[invalid", "score": 0.5}]
+        )
+        serializer = CustomRecognizerSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("patterns", serializer.errors)
+
+    def test_empty_patterns_and_deny_list_invalid(self):
+        data = self._make_recognizer(patterns=[], deny_list=[])
+        serializer = CustomRecognizerSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("non_field_errors", serializer.errors)
+
+    def test_update_replaces_patterns(self):
+        recognizer = CustomRecognizer.objects.create(
+            name="Old Recognizer",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+        )
+        CustomPattern.objects.create(
+            recognizer=recognizer, regex=r"\d+", score=0.8
+        )
+
+        data = {
+            "name": "Old Recognizer",
+            "entity_type": CustomRecognizer.EntityType.THIRD_PARTY,
+            "patterns": [{"name": "new_pat", "regex": r"\w+", "score": 0.9}],
+            "deny_list": [],
+        }
+        serializer = CustomRecognizerSerializer(
+            instance=recognizer, data=data, partial=True
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        instance = serializer.save()
+
+        self.assertEqual(instance.patterns.count(), 1)
+        self.assertEqual(instance.patterns.first().regex, r"\w+")
+
+    def test_serialized_output_includes_nested_data(self):
+        recognizer = CustomRecognizer.objects.create(
+            name="Test Recognizer",
+            entity_type=CustomRecognizer.EntityType.THIRD_PARTY,
+        )
+        CustomPattern.objects.create(
+            recognizer=recognizer, name="p1", regex=r"\d+", score=0.85
+        )
+        CustomDenyListItem.objects.create(recognizer=recognizer, value="foo")
+
+        data = CustomRecognizerSerializer(instance=recognizer).data
+
+        self.assertEqual(len(data["patterns"]), 1)
+        self.assertEqual(data["patterns"][0]["regex"], r"\d+")
+        self.assertEqual(len(data["deny_list"]), 1)
+        self.assertEqual(data["deny_list"][0]["value"], "foo")
