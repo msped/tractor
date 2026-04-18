@@ -1,10 +1,14 @@
+import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from docx import Document
 from docx.oxml.ns import qn
 from pypdf import PdfReader
 
 from .loader import GLiNERModelManager, SpanCatModelManager
+
+logger = logging.getLogger(__name__)
 
 _PREFIX_CHARS = {"#"}
 
@@ -378,15 +382,17 @@ def _extract_text_from_pdf(path):
         return ""
 
 
-def extract_entities_from_text(
-    path, data_subject_name=None, data_subject_dob=None
+def _run_extractors(
+    gliner_model, spancat_nlp, ner_text, data_subject_name, data_subject_dob
 ):
-    """Run the full NLP pipeline (GLiNER → SpanCat → Presidio → Gemma) on a document file.
+    """Run all four NLP extractors concurrently and return their results.
 
-    Returns:
-        Tuple of (extracted_text, entity_suggestions, tables, spacy_model_entry).
+    GLiNER, SpanCat, and Presidio exceptions propagate (document enters FAILED).
+    Gemma failures are non-fatal: extract_with_gemma catches its own exceptions
+    internally; an unexpected raise is also caught here so Ollama unavailability
+    never blocks the other results.
     """
-    # Lazy imports to avoid loading transformers/pandas at module import time
+    # Lazy imports — keep GLiNER/pandas away from module load time
     from .extractors.gemma_extractor import extract_with_gemma
     from .extractors.gliner_extractor import extract_with_gliner
     from .extractors.presidio_extractor import (
@@ -395,6 +401,42 @@ def extract_entities_from_text(
     )
     from .extractors.spancat_extractor import extract_with_spancat
 
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        fut_gliner = executor.submit(extract_with_gliner, gliner_model, ner_text)
+        fut_presidio_tp = executor.submit(extract_with_presidio, ner_text)
+        fut_presidio_op = executor.submit(
+            extract_operational_with_presidio, ner_text
+        )
+        fut_spancat = (
+            executor.submit(extract_with_spancat, spancat_nlp, ner_text)
+            if spancat_nlp
+            else None
+        )
+        fut_gemma = executor.submit(
+            extract_with_gemma, ner_text, data_subject_name, data_subject_dob
+        )
+
+        gliner_results = fut_gliner.result()
+        presidio_tp = fut_presidio_tp.result()
+        presidio_op = fut_presidio_op.result()
+        spancat_results = fut_spancat.result() if fut_spancat else []
+        try:
+            gemma_results = fut_gemma.result()
+        except Exception as exc:
+            logger.warning("Gemma extractor raised unexpectedly: %s", exc)
+            gemma_results = []
+
+    return gliner_results, presidio_tp, presidio_op, spancat_results, gemma_results
+
+
+def extract_entities_from_text(
+    path, data_subject_name=None, data_subject_dob=None
+):
+    """Run the full NLP pipeline (GLiNER → SpanCat → Presidio → Gemma) on a document file.
+
+    Returns:
+        Tuple of (extracted_text, entity_suggestions, tables, spacy_model_entry).
+    """
     gliner_model = GLiNERModelManager.get_instance().get_model()
     if not gliner_model:
         raise ValueError("No GLiNER model available.")
@@ -410,49 +452,26 @@ def extract_entities_from_text(
 
         if not ner_text or not ner_text.strip():
             return "", [], tables, structure
+    else:
+        # Fallback to pypdf for non-DOCX files (PDF, etc.)
+        ner_text = _extract_text_from_pdf(path)
+        ner_text = re.sub(r"\n{3,}", "\n\n", ner_text)
+        structure = None
+        tables = []
 
-        gliner_results = extract_with_gliner(gliner_model, ner_text)
-        presidio_tp = extract_with_presidio(ner_text)
-        presidio_op = extract_operational_with_presidio(ner_text)
-        spancat_results = (
-            extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
+        if not ner_text.strip():
+            return "", [], [], None
+
+    gliner_results, presidio_tp, presidio_op, spancat_results, gemma_results = (
+        _run_extractors(
+            gliner_model, spancat_nlp, ner_text, data_subject_name, data_subject_dob
         )
-
-        # SpanCat > GLiNER > Presidio > Gemma
-        combined = _deduplicate_entities(spancat_results, gliner_results)
-        combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
-        gemma_results = extract_with_gemma(
-            ner_text, data_subject_name, data_subject_dob
-        )
-        combined = _deduplicate_entities(combined, gemma_results)
-        combined = _expand_prefix_symbols(combined, ner_text)
-
-        return ner_text, combined, tables, structure
-
-    # Fallback to pypdf for non-DOCX files (PDF, etc.)
-    ner_text = _extract_text_from_pdf(path)
-
-    # Normalize whitespace
-    ner_text = re.sub(r"\n{3,}", "\n\n", ner_text)
-
-    if not ner_text.strip():
-        return "", [], [], None
-
-    gliner_results = extract_with_gliner(gliner_model, ner_text)
-    presidio_tp = extract_with_presidio(ner_text)
-    presidio_op = extract_operational_with_presidio(ner_text)
-    spancat_results = (
-        extract_with_spancat(spancat_nlp, ner_text) if spancat_nlp else []
     )
 
     # SpanCat > GLiNER > Presidio > Gemma
     combined = _deduplicate_entities(spancat_results, gliner_results)
     combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
-    gemma_results = extract_with_gemma(
-        ner_text, data_subject_name, data_subject_dob
-    )
     combined = _deduplicate_entities(combined, gemma_results)
     combined = _expand_prefix_symbols(combined, ner_text)
 
-    # For non-DOCX files, no tables and no structure (fallback to plain text rendering)
-    return ner_text, combined, [], None
+    return ner_text, combined, tables, structure
