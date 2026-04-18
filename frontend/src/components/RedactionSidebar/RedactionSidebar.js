@@ -48,6 +48,7 @@ export const RedactionSidebar = ({
     onBulkAccept = () => {},
     onBulkReject = () => {},
     onRejectAsDisclosable = () => {},
+    onMarkAllInCase = () => {},
     onSplitMerge = () => {},
     onRemoveFromMerge = () => {},
     onSuggestionMouseEnter,
@@ -456,13 +457,13 @@ export const RedactionSidebar = ({
                                                                 </Box>
                                                             </CardContent>
                                                             {sectionKey === 'pending' && (
-                                                                <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+                                                                <CardActions sx={{ justifyContent: 'flex-end', pt: 0, flexWrap: 'wrap', gap: 0.5 }}>
                                                                     <ButtonGroup variant="contained" color="error" size="small">
                                                                         <Button onClick={() => onBulkReject(allIds)}>Reject All</Button>
                                                                         <Button
                                                                             aria-label="reject all with reason"
                                                                             aria-haspopup="menu"
-                                                                            onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids: allIds }); }}
+                                                                            onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids: allIds, text: displayItem.text, redactionType: displayItem.redaction_type, isGroup: true }); }}
                                                                         >
                                                                             <ArrowDropDownIcon />
                                                                         </Button>
@@ -474,7 +475,7 @@ export const RedactionSidebar = ({
                                                                             aria-expanded={menuAnchorEl ? 'true' : undefined}
                                                                             aria-label="change redaction type and accept all"
                                                                             aria-haspopup="menu"
-                                                                            onClick={(e) => handleMenuClick(e, { ids: allIds, isMerged: true, redaction_type: displayItem.redaction_type })}
+                                                                            onClick={(e) => handleMenuClick(e, { ids: allIds, isMerged: true, redaction_type: displayItem.redaction_type, text: displayItem.text, isGroup: true })}
                                                                         >
                                                                             <ArrowDropDownIcon />
                                                                         </Button>
@@ -506,6 +507,22 @@ export const RedactionSidebar = ({
                         open={Boolean(menuAnchorEl)}
                         onClose={handleMenuClose}
                     >
+                        {currentItemForMenu?.isGroup && (
+                            <MenuItem disabled sx={{ fontSize: '0.72rem', opacity: '1 !important', color: 'text.secondary', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                Across all documents in case
+                            </MenuItem>
+                        )}
+                        {currentItemForMenu?.isGroup && (
+                            <MenuItem
+                                onClick={() => {
+                                    onMarkAllInCase({ text: currentItemForMenu.text, redactionType: currentItemForMenu.redaction_type, action: 'accept' });
+                                    handleMenuClose();
+                                }}
+                            >
+                                Accept all in case
+                            </MenuItem>
+                        )}
+                        {currentItemForMenu?.isGroup && <Divider />}
                         {Object.keys(REDACTION_TYPE_LABELS)
                             .filter(typeKey => typeKey !== currentItemForMenu?.redaction_type)
                             .map(typeKey => (
@@ -550,6 +567,24 @@ export const RedactionSidebar = ({
                         }
                         {exemptionTemplates.filter(t => t.name.toLowerCase().includes(exemptionSearch.toLowerCase())).length === 0 && (
                             <MenuItem disabled>No exemptions found</MenuItem>
+                        )}
+                        {currentItemForRejectMenu?.isGroup && <Divider />}
+                        {currentItemForRejectMenu?.isGroup && (
+                            <MenuItem disabled sx={{ fontSize: '0.72rem', opacity: '1 !important', color: 'text.secondary', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                Across all documents in case
+                            </MenuItem>
+                        )}
+                        {currentItemForRejectMenu?.isGroup && (
+                            <MenuItem
+                                onClick={() => {
+                                    onMarkAllInCase({ text: currentItemForRejectMenu.text, redactionType: currentItemForRejectMenu.redactionType, action: 'reject' });
+                                    setRejectMenuAnchorEl(null);
+                                    setCurrentItemForRejectMenu(null);
+                                    setExemptionSearch('');
+                                }}
+                            >
+                                Reject all in case
+                            </MenuItem>
                         )}
                     </Menu>
                 </Box>

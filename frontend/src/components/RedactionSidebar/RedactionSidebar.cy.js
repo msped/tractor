@@ -389,6 +389,36 @@ describe('<RedactionSidebar />', () => {
             cy.contains('"John Doe"').should('be.visible');
         });
 
+        it('calls onMarkAllInCase with accept action from Accept All dropdown', () => {
+            const onMarkAllInCase = cy.stub().as('onMarkAllInCase');
+            cy.fullMount(
+                <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />,
+                mountOpts
+            );
+            cy.get('button[aria-label="change redaction type and accept all"]').click();
+            cy.contains('[role="menuitem"]', 'Accept all in case').click();
+            cy.get('@onMarkAllInCase').should('have.been.calledOnceWith', {
+                text: 'John Doe',
+                redactionType: 'PII',
+                action: 'accept',
+            });
+        });
+
+        it('calls onMarkAllInCase with reject action from Reject All dropdown', () => {
+            const onMarkAllInCase = cy.stub().as('onMarkAllInCase');
+            cy.fullMount(
+                <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />,
+                mountOpts
+            );
+            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject all in case').click();
+            cy.get('@onMarkAllInCase').should('have.been.calledOnceWith', {
+                text: 'John Doe',
+                redactionType: 'PII',
+                action: 'reject',
+            });
+        });
+
         it('collapses group when collapse icon is clicked', () => {
             cy.get('button[aria-label="expand group"]').click();
             cy.get('button[aria-label="collapse group"]').should('be.visible').click();

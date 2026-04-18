@@ -66,6 +66,24 @@ export const deleteRedaction = async (redactionId, accessToken) => {
     }
 };
 
+export const bulkMarkByText = async (caseId, text, redactionType, markStatus, rejectionReason, accessToken) => {
+    try {
+        const body = { text, redaction_type: redactionType, status: markStatus };
+        if (rejectionReason) body.rejection_reason = rejectionReason;
+        const response = await apiClient.post(
+            `cases/${caseId}/redactions/bulk-by-text/`,
+            body,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        return response.data;
+    } catch (error) {
+        if (error.response && error.response.data) {
+            throw new Error(`Failed to bulk mark redactions: ${error.response.data.detail || 'Unknown error'}`);
+        }
+        throw new Error('Failed to bulk mark redactions. Please try again.');
+    }
+};
+
 export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification, accessToken) => {
     try {
         const response = await apiClient.patch(
