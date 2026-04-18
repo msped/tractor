@@ -70,6 +70,8 @@ urlpatterns = [
         name="training-run-detail",
     ),
     path(
-        "model-management/status", TrainingStatusView.as_view(), name="training-status"
+        "model-management/status",
+        TrainingStatusView.as_view(),
+        name="training-status",
     ),
 ]
