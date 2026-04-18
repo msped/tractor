@@ -135,6 +135,54 @@ auditlog.register(TrainingRunTrainingDoc)
 auditlog.register(TrainingRunCaseDoc)
 
 
+class CustomRecognizer(models.Model):
+    """A user-defined Presidio recognizer consisting of regex patterns and/or deny-list terms."""
+
+    class EntityType(models.TextChoices):
+        THIRD_PARTY = "THIRD_PARTY", "Third-Party PII"
+        OPERATIONAL = "OPERATIONAL", "Operational Data"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255, unique=True)
+    description = models.TextField(blank=True, default="")
+    entity_type = models.CharField(max_length=20, choices=EntityType.choices)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({'Active' if self.is_active else 'Inactive'})"
+
+
+class CustomPattern(models.Model):
+    """A regex pattern belonging to a CustomRecognizer."""
+
+    recognizer = models.ForeignKey(
+        CustomRecognizer, related_name="patterns", on_delete=models.CASCADE
+    )
+    name = models.CharField(max_length=255, blank=True, default="")
+    regex = models.TextField()
+    score = models.FloatField(default=0.85)
+
+    def __str__(self):
+        return f"Pattern for {self.recognizer.name}"
+
+
+class CustomDenyListItem(models.Model):
+    """A literal deny-list term belonging to a CustomRecognizer."""
+
+    recognizer = models.ForeignKey(
+        CustomRecognizer, related_name="deny_list", on_delete=models.CASCADE
+    )
+    value = models.CharField(max_length=500)
+
+    def __str__(self):
+        return f"'{self.value}' for {self.recognizer.name}"
+
+
 DEFAULT_SYSTEM_PROMPT = """You are a data protection specialist reviewing documents for Subject
 Access Requests (SARs) under UK GDPR and the Data Protection Act 2018.
 
