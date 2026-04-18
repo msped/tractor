@@ -18,6 +18,7 @@ from ..models import (
     RedactionContext,
 )
 from ..serializers import (
+    BulkByTextSerializer,
     CaseDetailSerializer,
     CaseSerializer,
     DocumentReviewSerializer,
@@ -368,3 +369,62 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         context_data = serializer_with_context.data["context"]
         self.assertIsNotNone(context_data)
         self.assertEqual(context_data["text"], "This is important context.")
+
+
+class BulkByTextSerializerTests(TestCase):
+    def _valid_data(self, **overrides):
+        data = {
+            "text": "John Smith",
+            "redaction_type": "PII",
+            "status": "ACCEPTED",
+        }
+        data.update(overrides)
+        return data
+
+    def test_valid_accept_payload(self):
+        serializer = BulkByTextSerializer(data=self._valid_data())
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_valid_reject_payload_with_reason(self):
+        serializer = BulkByTextSerializer(
+            data=self._valid_data(
+                status="REJECTED", rejection_reason="Not relevant"
+            )
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_valid_reject_payload_without_reason(self):
+        serializer = BulkByTextSerializer(
+            data=self._valid_data(status="REJECTED")
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["rejection_reason"], "")
+
+    def test_missing_text_is_invalid(self):
+        data = self._valid_data()
+        del data["text"]
+        serializer = BulkByTextSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("text", serializer.errors)
+
+    def test_invalid_status_is_rejected(self):
+        serializer = BulkByTextSerializer(
+            data=self._valid_data(status="PENDING")
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("status", serializer.errors)
+
+    def test_invalid_redaction_type_is_rejected(self):
+        serializer = BulkByTextSerializer(
+            data=self._valid_data(redaction_type="UNKNOWN")
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("redaction_type", serializer.errors)
+
+    def test_all_valid_redaction_types(self):
+        for rtype in ["PII", "OP_DATA", "DS_INFO"]:
+            with self.subTest(redaction_type=rtype):
+                serializer = BulkByTextSerializer(
+                    data=self._valid_data(redaction_type=rtype)
+                )
+                self.assertTrue(serializer.is_valid(), serializer.errors)

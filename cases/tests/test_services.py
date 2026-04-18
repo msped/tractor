@@ -25,6 +25,7 @@ from ..models import (
     RedactionContext,
 )
 from ..services import (
+    _apply_existing_case_decisions,
     _build_export_css,
     _generate_pdf_from_document,
     _matches_data_subject,
@@ -1200,3 +1201,136 @@ class DeleteOriginalFilesTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(result, "Deleted original files for 0 document(s).")
         self.document.refresh_from_db()
         self.assertTrue(bool(self.document.original_file))
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
+    """Tests for _apply_existing_case_decisions — prior decision propagation."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="decisionuser", password="pw"
+        )
+        self.case = Case.objects.create(
+            case_reference="DC01",
+            data_subject_name="Test Subject",
+            created_by=self.user,
+        )
+        file1 = SimpleUploadedFile("old.pdf", b"x", "application/pdf")
+        file2 = SimpleUploadedFile("new.pdf", b"y", "application/pdf")
+        self.old_doc = Document.objects.create(
+            case=self.case, original_file=file1
+        )
+        self.new_doc = Document.objects.create(
+            case=self.case, original_file=file2
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _pending(self, doc, text, rtype):
+        return Redaction.objects.create(
+            document=doc,
+            start_char=0,
+            end_char=len(text),
+            text=text,
+            redaction_type=rtype,
+            is_suggestion=True,
+            is_accepted=False,
+        )
+
+    def test_propagates_unanimous_accept_to_new_document(self):
+        # Existing document has "John Doe" accepted
+        r_old = self._pending(
+            self.old_doc, "John Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        r_old.is_accepted = True
+        r_old.save()
+
+        r_new = self._pending(
+            self.new_doc, "John Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+
+    def test_propagates_unanimous_reject_to_new_document(self):
+        r_old = self._pending(
+            self.old_doc, "PC Smith", Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        r_old.is_accepted = False
+        r_old.justification = "Not relevant"
+        r_old.save()
+
+        r_new = self._pending(
+            self.new_doc, "PC Smith", Redaction.RedactionType.OPERATIONAL_DATA
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertFalse(r_new.is_accepted)
+        self.assertEqual(r_new.justification, "Not relevant")
+
+    def test_mixed_decisions_leave_new_redaction_pending(self):
+        r1 = self._pending(
+            self.old_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        r1.is_accepted = True
+        r1.save()
+
+        file3 = SimpleUploadedFile("mid.pdf", b"z", "application/pdf")
+        mid_doc = Document.objects.create(case=self.case, original_file=file3)
+        r2 = self._pending(
+            mid_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        r2.justification = "Rejected for different reason"
+        r2.save()
+
+        r_new = self._pending(
+            self.new_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertFalse(r_new.is_accepted)
+        self.assertFalse(r_new.justification)
+
+    def test_no_existing_decisions_leaves_pending(self):
+        r_new = self._pending(
+            self.new_doc, "Unknown", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertFalse(r_new.is_accepted)
+        self.assertIsNone(r_new.justification)
+
+    def test_decisions_from_other_cases_do_not_propagate(self):
+        other_case = Case.objects.create(
+            case_reference="DC02",
+            data_subject_name="Other",
+            created_by=self.user,
+        )
+        other_file = SimpleUploadedFile("other.pdf", b"w", "application/pdf")
+        other_doc = Document.objects.create(
+            case=other_case, original_file=other_file
+        )
+        r_other = self._pending(
+            other_doc, "John Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        r_other.is_accepted = True
+        r_other.save()
+
+        r_new = self._pending(
+            self.new_doc, "John Doe", Redaction.RedactionType.THIRD_PARTY_PII
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertFalse(r_new.is_accepted)

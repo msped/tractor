@@ -159,6 +159,22 @@ class RedactionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
+class BulkByTextSerializer(serializers.Serializer):
+    STATUS_ACCEPTED = "ACCEPTED"
+    STATUS_REJECTED = "REJECTED"
+
+    text = serializers.CharField()
+    redaction_type = serializers.ChoiceField(
+        choices=Redaction.RedactionType.choices
+    )
+    status = serializers.ChoiceField(
+        choices=[(STATUS_ACCEPTED, "Accepted"), (STATUS_REJECTED, "Rejected")]
+    )
+    rejection_reason = serializers.CharField(
+        required=False, allow_blank=True, default=""
+    )
+
+
 class ExemptionTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExemptionTemplate

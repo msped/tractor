@@ -150,12 +150,75 @@ def process_document_and_create_redactions(document_id):
                 source=suggestion.get("source", Redaction.Source.NER),
             )
 
+        _apply_existing_case_decisions(document)
+
     document.status = Document.Status.READY_FOR_REVIEW
     document.save(update_fields=["status"])
     print(
         f"Successfully processed {document.filename}. \
             Status: READY_FOR_REVIEW"
     )
+
+
+def _apply_existing_case_decisions(document):
+    """
+    After creating redactions for a newly processed document, propagate any
+    unanimous prior decisions from other documents in the same case.
+
+    For each (text, redaction_type) pair in the new document's pending
+    redactions: if every existing decided redaction in the case (other
+    documents) with the same text and type was resolved the same way (all
+    accepted, or all rejected), apply that decision to the new pending
+    redactions.  Mixed decisions are left as pending.
+    """
+    from django.db.models import Count, Q
+
+    case = document.case
+
+    # Pending = is_accepted=False with no justification (mirrors frontend filter)
+    new_pending = document.redactions.filter(is_accepted=False).filter(
+        Q(justification__isnull=True) | Q(justification="")
+    )
+
+    pairs = list(new_pending.values_list("text", "redaction_type").distinct())
+
+    for text, redaction_type in pairs:
+        existing_decided = (
+            Redaction.objects.filter(
+                document__case=case,
+                text=text,
+                redaction_type=redaction_type,
+            )
+            .exclude(document=document)
+            .exclude(
+                Q(is_accepted=False)
+                & (Q(justification__isnull=True) | Q(justification=""))
+            )
+        )
+
+        if not existing_decided.exists():
+            continue
+
+        total = existing_decided.count()
+        accepted_count = existing_decided.filter(is_accepted=True).count()
+        rejected_count = existing_decided.filter(is_accepted=False).count()
+
+        target_qs = new_pending.filter(
+            text=text, redaction_type=redaction_type
+        )
+
+        if accepted_count == total:
+            target_qs.update(is_accepted=True)
+        elif rejected_count == total:
+            # Use the most common rejection justification
+            top = (
+                existing_decided.values("justification")
+                .annotate(n=Count("justification"))
+                .order_by("-n")
+                .first()
+            )
+            justification = top["justification"] if top else ""
+            target_qs.update(justification=justification)
 
 
 def find_and_flag_matching_text_in_case(redaction_id):

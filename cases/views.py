@@ -1,3 +1,5 @@
+from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django_q.models import OrmQ
 from django_q.tasks import async_task
@@ -20,6 +22,7 @@ from .models import (
     RedactionContext,
 )
 from .serializers import (
+    BulkByTextSerializer,
     CaseDetailSerializer,
     CaseSerializer,
     DocumentExportSettingsSerializer,
@@ -340,3 +343,38 @@ class RedactionContextView(APIView):
         context = get_object_or_404(RedactionContext, pk=redaction_id)
         context.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class BulkByTextRedactionView(APIView):
+    """
+    Mark all PENDING redactions matching a given text and redaction_type
+    across every document in a case as ACCEPTED or REJECTED in a single
+    atomic operation. Returns the count of updated redactions.
+
+    A redaction is considered PENDING when is_accepted=False and justification
+    is null or empty, mirroring the frontend's pending-section filter.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id):
+        serializer = BulkByTextSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        pending_qs = Redaction.objects.filter(
+            document__case_id=case_id,
+            text=data["text"],
+            redaction_type=data["redaction_type"],
+            is_accepted=False,
+        ).filter(Q(justification__isnull=True) | Q(justification=""))
+
+        with transaction.atomic():
+            if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:
+                count = pending_qs.update(is_accepted=True)
+            else:
+                count = pending_qs.update(
+                    justification=data.get("rejection_reason", "")
+                )
+
+        return Response({"updated": count}, status=status.HTTP_200_OK)

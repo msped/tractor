@@ -877,3 +877,192 @@ class ExportSettingsViewTests(NetworkBlockerMixin, APITestCase):
     def test_unauthenticated_receives_401(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="bytext_user", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.case = Case.objects.create(
+            case_reference="BT01",
+            data_subject_name="By Text Test",
+            created_by=self.user,
+        )
+        file1 = SimpleUploadedFile("doc1.pdf", b"content1", "application/pdf")
+        file2 = SimpleUploadedFile("doc2.pdf", b"content2", "application/pdf")
+        self.doc1 = Document.objects.create(
+            case=self.case, original_file=file1
+        )
+        self.doc2 = Document.objects.create(
+            case=self.case, original_file=file2
+        )
+
+        # Two pending redactions matching the target text, one in each document
+        self.r1 = Redaction.objects.create(
+            document=self.doc1,
+            start_char=0,
+            end_char=8,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        self.r2 = Redaction.objects.create(
+            document=self.doc2,
+            start_char=5,
+            end_char=13,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        # Already accepted — must not be touched
+        self.r_accepted = Redaction.objects.create(
+            document=self.doc1,
+            start_char=10,
+            end_char=18,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        # Already rejected — must not be touched
+        self.r_rejected = Redaction.objects.create(
+            document=self.doc1,
+            start_char=20,
+            end_char=28,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            justification="Previously reviewed",
+        )
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _url(self):
+        return reverse(
+            "bulk-by-text-redaction-update", kwargs={"case_id": self.case.id}
+        )
+
+    def test_accept_updates_all_pending_and_returns_count(self):
+        response = self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "PII",
+                "status": "ACCEPTED",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["updated"], 2)
+        self.r1.refresh_from_db()
+        self.r2.refresh_from_db()
+        self.assertTrue(self.r1.is_accepted)
+        self.assertTrue(self.r2.is_accepted)
+
+    def test_reject_updates_all_pending_with_reason(self):
+        response = self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "PII",
+                "status": "REJECTED",
+                "rejection_reason": "Not relevant",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["updated"], 2)
+        self.r1.refresh_from_db()
+        self.r2.refresh_from_db()
+        self.assertFalse(self.r1.is_accepted)
+        self.assertEqual(self.r1.justification, "Not relevant")
+        self.assertFalse(self.r2.is_accepted)
+        self.assertEqual(self.r2.justification, "Not relevant")
+
+    def test_already_accepted_redactions_not_modified(self):
+        self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "PII",
+                "status": "ACCEPTED",
+            },
+            format="json",
+        )
+        self.r_accepted.refresh_from_db()
+        # is_accepted stays True, no double-counting
+        self.assertTrue(self.r_accepted.is_accepted)
+
+    def test_already_rejected_redactions_not_modified(self):
+        original_justification = self.r_rejected.justification
+        self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "PII",
+                "status": "ACCEPTED",
+            },
+            format="json",
+        )
+        self.r_rejected.refresh_from_db()
+        self.assertFalse(self.r_rejected.is_accepted)
+        self.assertEqual(self.r_rejected.justification, original_justification)
+
+    def test_redactions_in_other_case_not_affected(self):
+        other_case = Case.objects.create(
+            case_reference="BT02",
+            data_subject_name="Other Subject",
+            created_by=self.user,
+        )
+        other_file = SimpleUploadedFile("other.pdf", b"x", "application/pdf")
+        other_doc = Document.objects.create(
+            case=other_case, original_file=other_file
+        )
+        other_r = Redaction.objects.create(
+            document=other_doc,
+            start_char=0,
+            end_char=8,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+        self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "PII",
+                "status": "ACCEPTED",
+            },
+            format="json",
+        )
+        other_r.refresh_from_db()
+        self.assertFalse(other_r.is_accepted)
+
+    def test_invalid_payload_returns_400(self):
+        response = self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "INVALID",
+                "status": "ACCEPTED",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_unauthenticated_returns_401(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(
+            self._url(),
+            {
+                "text": "John Doe",
+                "redaction_type": "PII",
+                "status": "ACCEPTED",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
