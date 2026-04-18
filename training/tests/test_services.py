@@ -329,7 +329,9 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
             MagicMock()
         )
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
         mock_pdf.return_value = "Some text here."
         mock_gliner.side_effect = RuntimeError("GLiNER inference failed")
         mock_presidio.return_value = []
@@ -361,7 +363,9 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
             MagicMock()
         )
-        mock_spancat_mgr.get_instance.return_value.get_model.return_value = None
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
         mock_pdf.return_value = "John Doe attended the scene."
         mock_gliner.return_value = [
             {

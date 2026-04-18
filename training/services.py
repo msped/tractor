@@ -402,7 +402,9 @@ def _run_extractors(
     from .extractors.spancat_extractor import extract_with_spancat
 
     with ThreadPoolExecutor(max_workers=5) as executor:
-        fut_gliner = executor.submit(extract_with_gliner, gliner_model, ner_text)
+        fut_gliner = executor.submit(
+            extract_with_gliner, gliner_model, ner_text
+        )
         fut_presidio_tp = executor.submit(extract_with_presidio, ner_text)
         fut_presidio_op = executor.submit(
             extract_operational_with_presidio, ner_text
@@ -426,7 +428,13 @@ def _run_extractors(
             logger.warning("Gemma extractor raised unexpectedly: %s", exc)
             gemma_results = []
 
-    return gliner_results, presidio_tp, presidio_op, spancat_results, gemma_results
+    return (
+        gliner_results,
+        presidio_tp,
+        presidio_op,
+        spancat_results,
+        gemma_results,
+    )
 
 
 def extract_entities_from_text(
@@ -462,10 +470,18 @@ def extract_entities_from_text(
         if not ner_text.strip():
             return "", [], [], None
 
-    gliner_results, presidio_tp, presidio_op, spancat_results, gemma_results = (
-        _run_extractors(
-            gliner_model, spancat_nlp, ner_text, data_subject_name, data_subject_dob
-        )
+    (
+        gliner_results,
+        presidio_tp,
+        presidio_op,
+        spancat_results,
+        gemma_results,
+    ) = _run_extractors(
+        gliner_model,
+        spancat_nlp,
+        ner_text,
+        data_subject_name,
+        data_subject_dob,
     )
 
     # SpanCat > GLiNER > Presidio > Gemma
