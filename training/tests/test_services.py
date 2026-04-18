@@ -308,6 +308,84 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["text"], "John Doe")
 
+    @patch("training.services._extract_text_from_pdf")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_non_gemma_extractor_exception_propagates(
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
+    ):
+        """GLiNER raising should propagate out of extract_entities_from_text."""
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        mock_pdf.return_value = "Some text here."
+        mock_gliner.side_effect = RuntimeError("GLiNER inference failed")
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+
+        with self.assertRaises(RuntimeError, msg="GLiNER inference failed"):
+            extract_entities_from_text(self.file_path)
+
+    @patch("training.extractors.gemma_extractor.extract_with_gemma")
+    @patch("training.services._extract_text_from_pdf")
+    @patch(
+        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+    )
+    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.services.SpanCatModelManager")
+    @patch("training.services.GLiNERModelManager")
+    def test_gemma_exception_does_not_block_other_results(
+        self,
+        mock_gliner_mgr,
+        mock_spancat_mgr,
+        mock_gliner,
+        mock_presidio,
+        mock_presidio_op,
+        mock_pdf,
+        mock_gemma,
+    ):
+        """Gemma raising unexpectedly should not prevent GLiNER/Presidio results."""
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        mock_pdf.return_value = "John Doe attended the scene."
+        mock_gliner.return_value = [
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 8,
+            }
+        ]
+        mock_presidio.return_value = []
+        mock_presidio_op.return_value = []
+        mock_gemma.side_effect = RuntimeError("Ollama crashed")
+
+        with self.assertLogs("training.services", level="WARNING") as cm:
+            _, results, _, _ = extract_entities_from_text(self.file_path)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["text"], "John Doe")
+        self.assertTrue(any("Gemma" in line for line in cm.output))
+
 
 def _make_tbl_xml(
     border_values=None, include_tbl_pr=True, include_tbl_borders=True
