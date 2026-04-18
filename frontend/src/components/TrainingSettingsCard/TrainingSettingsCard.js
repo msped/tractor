@@ -18,7 +18,7 @@ export const TrainingSettingsCard = () =>{
                 <Typography color="text.secondary" sx={{ mb: 3 }}>
                     Manage manual and scheduled training runs to improve model performance over time.
                 </Typography>
-                <Button component={Link} href="/settings/training" variant="text">Go to Training</Button>
+                <Button component={Link} href="/model-management" variant="text">Go to Model Management</Button>
             </CardContent>
         </Card>
     );

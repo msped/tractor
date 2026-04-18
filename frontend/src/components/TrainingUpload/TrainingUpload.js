@@ -58,7 +58,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
         try {
             const response = await runManualTraining(session?.access_token);
             toast.success(`Training started on ${response.documents} documents.`, { id: toastId });
-            router.push('/training');
+            router.push('/model-management');
         } catch (error) {
             toast.error(error.message, { id: toastId });
         }

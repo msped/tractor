@@ -6,7 +6,7 @@ const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenti
 describe('<TrainingStatusBanner />', () => {
     context('when training is not running', () => {
         it('renders nothing', () => {
-            cy.intercept('GET', '/api/training/status', { body: { is_running: false } });
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: false } });
             cy.fullMount(<TrainingStatusBanner />, mountOpts);
             cy.get('[role="alert"]').should('not.exist');
         });
@@ -14,7 +14,7 @@ describe('<TrainingStatusBanner />', () => {
 
     context('when training is running', () => {
         it('shows an info alert with a progress bar', () => {
-            cy.intercept('GET', '/api/training/status', { body: { is_running: true } });
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: true } });
             cy.fullMount(<TrainingStatusBanner />, mountOpts);
             cy.get('[role="alert"]').should('be.visible');
             cy.contains('Training is in progress').should('be.visible');
@@ -24,9 +24,9 @@ describe('<TrainingStatusBanner />', () => {
 
     context('when training transitions from running to complete', () => {
         it('calls router.refresh() and hides the banner', () => {
-            cy.intercept('GET', '/api/training/status', { body: { is_running: false } }).as('secondStatus');
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: false } }).as('secondStatus');
             cy.intercept(
-                { method: 'GET', url: '/api/training/status', times: 1 },
+                { method: 'GET', url: '/api/model-management/status', times: 1 },
                 { body: { is_running: true } }
             ).as('firstStatus');
             cy.fullMount(<TrainingStatusBanner pollInterval={100} />, mountOpts);
@@ -40,7 +40,7 @@ describe('<TrainingStatusBanner />', () => {
 
     context('when not authenticated', () => {
         it('does not show the banner when there is no access token', () => {
-            cy.intercept('GET', '/api/training/status', { body: { is_running: true } }).as('statusRequest');
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: true } }).as('statusRequest');
             cy.fullMount(<TrainingStatusBanner />, { mockSession: null });
             cy.get('[role="alert"]').should('not.exist');
         });

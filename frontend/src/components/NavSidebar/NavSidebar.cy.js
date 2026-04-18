@@ -56,7 +56,7 @@ describe('<NavSidebar />', () => {
 
         it('renders all navigation items', () => {
             cy.contains('Cases').should('be.visible');
-            cy.contains('Training').should('be.visible');
+            cy.contains('Model Management').should('be.visible');
         });
 
         it('renders the Settings link', () => {
@@ -81,9 +81,9 @@ describe('<NavSidebar />', () => {
                 .should('have.class', 'Mui-selected');
         });
 
-        it('highlights Training nav item when on /training path', () => {
-            mountNavSidebar('/training');
-            cy.contains('Training')
+        it('highlights Model Management nav item when on /model-management path', () => {
+            mountNavSidebar('/model-management');
+            cy.contains('Model Management')
                 .closest('.MuiListItemButton-root')
                 .should('have.class', 'Mui-selected');
         });
@@ -98,7 +98,7 @@ describe('<NavSidebar />', () => {
         it('nav items have correct href attributes', () => {
             mountNavSidebar('/cases');
             cy.contains('Cases').closest('a').should('have.attr', 'href', '/cases');
-            cy.contains('Training').closest('a').should('have.attr', 'href', '/training');
+            cy.contains('Model Management').closest('a').should('have.attr', 'href', '/model-management');
         });
     });
 
@@ -124,7 +124,7 @@ describe('<NavSidebar />', () => {
 
             cy.get('nav').within(() => {
                 cy.contains('Cases').should('not.exist');
-                cy.contains('Training').should('not.exist');
+                cy.contains('Model Management').should('not.exist');
                 cy.contains('New Case').should('not.exist');
                 cy.contains('Settings').should('not.exist');
             });

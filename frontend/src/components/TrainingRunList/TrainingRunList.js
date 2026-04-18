@@ -36,11 +36,11 @@ export const TrainingRunList = ({ runs }) => {
     const router = useRouter();
 
     const handleRowClick = (runId) => {
-        router.push(`/training/runs/${runId}`);
+        router.push(`/model-management/runs/${runId}`);
     };
 
     return(
-        <Paper sx={{ p: 3, mt: 4 }}>
+        <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">Training Run History</Typography>
                 <Tooltip title={scoreExplanation}>

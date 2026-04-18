@@ -26,7 +26,7 @@ urlpatterns = [
         name="model-set-active",
     ),
     path(
-        "training/run-now",
+        "model-management/run-now",
         RunManualTrainingView.as_view(),
         name="training-run-now",
     ),
@@ -70,6 +70,8 @@ urlpatterns = [
         name="training-run-detail",
     ),
     path(
-        "training/status", TrainingStatusView.as_view(), name="training-status"
+        "model-management/status",
+        TrainingStatusView.as_view(),
+        name="training-status",
     ),
 ]

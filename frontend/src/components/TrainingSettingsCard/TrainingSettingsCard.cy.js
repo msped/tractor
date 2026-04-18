@@ -11,8 +11,8 @@ describe('<TrainingSettingsCard />', () => {
         cy.contains('h2', 'Model Training').should('be.visible');
 
         cy.contains('Manage manual and scheduled training runs to improve model performance over time.').should('be.visible');
-        cy.contains('a', 'Go to Training')
+        cy.contains('a', 'Go to Model Management')
             .should('be.visible')
-            .and('have.attr', 'href', '/settings/training');
+            .and('have.attr', 'href', '/model-management');
     });
 });
