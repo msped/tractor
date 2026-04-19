@@ -40,7 +40,7 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
     return (
         <Box
             sx={{
-                minHeight: "100vh",
+                minHeight: "100dvh",
                 bgcolor: "background.default",
                 display: "flex",
                 alignItems: "center",
@@ -60,6 +60,7 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
                     <TextField
                         label="Username"
                         name="username"
+                        autoComplete="username"
                         value={username}
                         onChange={e => setUsername(e.target.value)}
                         fullWidth
@@ -70,6 +71,7 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
                         label="Password"
                         name="password"
                         type="password"
+                        autoComplete="current-password"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         fullWidth
