@@ -155,6 +155,7 @@ export function NavSidebar() {
                                     component={Link}
                                     href={item.href}
                                     selected={isActive}
+                                    aria-current={isActive ? 'page' : undefined}
                                     sx={{
                                         borderRadius: 1,
                                         justifyContent: collapsed ? 'center' : 'flex-start',
@@ -200,6 +201,7 @@ export function NavSidebar() {
                         component={Link}
                         href="/settings"
                         selected={pathname === '/settings'}
+                        aria-current={pathname === '/settings' ? 'page' : undefined}
                         sx={{
                             borderRadius: 1,
                             mb: 1.5,
