@@ -13,6 +13,7 @@ function DashboardContent({ children }) {
             <SessionWatcher />
             <NavSidebar />
             <Box
+                id="main-content"
                 component="main"
                 sx={{
                     flexGrow: 1,
