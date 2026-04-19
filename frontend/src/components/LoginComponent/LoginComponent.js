@@ -90,7 +90,7 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
                         fullWidth
                         sx={{ mt: 2 }}
                     >
-                        Login
+                        Sign in
                     </Button>
                     {otherProviders.length > 0 && (
                         <>
