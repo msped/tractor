@@ -63,7 +63,7 @@ export function NavSidebar() {
                 flexShrink: 0,
                 borderRight: '1px solid',
                 borderColor: 'divider',
-                height: '100vh',
+                height: '100dvh',
                 position: 'fixed',
                 top: 0,
                 left: 0,
