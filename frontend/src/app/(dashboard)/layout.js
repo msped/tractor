@@ -18,7 +18,7 @@ function DashboardContent({ children }) {
                 sx={{
                     flexGrow: 1,
                     ml: `${width}px`,
-                    bgcolor: 'grey.50',
+                    bgcolor: 'background.default',
                     minHeight: '100dvh',
                     width: `calc(100% - ${width}px)`,
                     maxWidth: `calc(100% - ${width}px)`,

@@ -22,8 +22,11 @@ import AddIcon from '@mui/icons-material/Add';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
 import { useSession, signOut } from 'next-auth/react';
 import { useSidebar, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED } from '@/contexts/SidebarContext';
+import { useColorMode } from '@/contexts/ColorModeContext';
 
 export { SIDEBAR_WIDTH_EXPANDED as SIDEBAR_WIDTH };
 
@@ -31,6 +34,7 @@ export function NavSidebar() {
     const pathname = usePathname();
     const { collapsed, toggle, width } = useSidebar();
     const { data: session } = useSession();
+    const { mode, toggleColorMode } = useColorMode();
 
     const handleLogout = () => signOut({ callbackUrl: '/' });
 
@@ -169,20 +173,24 @@ export function NavSidebar() {
                                     }}
                                 >
                                     <ListItemIcon
-                                        sx={{
+                                        sx={(theme) => ({
                                             minWidth: collapsed ? 0 : 36,
-                                            color: isActive ? 'primary.main' : 'text.secondary',
-                                        }}
+                                            color: isActive
+                                                ? theme.palette.mode === 'dark' ? 'text.primary' : 'primary.main'
+                                                : 'text.secondary',
+                                        })}
                                     >
                                         {item.icon}
                                     </ListItemIcon>
                                     {!collapsed && (
                                         <ListItemText
                                             primary={item.label}
-                                            sx={{
+                                            sx={(theme) => ({
                                                 fontWeight: isActive ? 600 : 400,
-                                                color: isActive ? 'primary.main' : 'text.primary',
-                                            }}
+                                                color: isActive
+                                                    ? theme.palette.mode === 'dark' ? 'text.primary' : 'primary.main'
+                                                    : 'text.primary',
+                                            })}
                                         />
                                     )}
                                 </ListItemButton>
@@ -196,6 +204,25 @@ export function NavSidebar() {
 
             {/* Settings & User */}
             <Box sx={{ p: collapsed ? 1 : 1.5 }}>
+                <Tooltip title={collapsed ? (mode === 'dark' ? 'Light mode' : 'Dark mode') : ''} placement="right">
+                    <ListItemButton
+                        onClick={toggleColorMode}
+                        sx={{
+                            borderRadius: 1,
+                            mb: 1,
+                            justifyContent: collapsed ? 'center' : 'flex-start',
+                            px: collapsed ? 1.5 : 2,
+                        }}
+                    >
+                        <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36, color: 'text.secondary' }}>
+                            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+                        </ListItemIcon>
+                        {!collapsed && (
+                            <ListItemText primary={mode === 'dark' ? 'Light mode' : 'Dark mode'} />
+                        )}
+                    </ListItemButton>
+                </Tooltip>
+
                 <Tooltip title={collapsed ? 'Settings' : ''} placement="right">
                     <ListItemButton
                         component={Link}
