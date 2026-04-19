@@ -392,7 +392,7 @@ describe('<RedactionContextManager />', () => {
     context('Loading State', () => {
         it('shows loading spinner while saving', () => {
             cy.intercept('POST', `**/cases/document/redaction/${redactionId}/context`, {
-                delay: 500,
+                delay: 200,
                 statusCode: 200,
                 body: { redaction: redactionId, text: 'New text' },
             }).as('updateContextDelayed');
@@ -412,11 +412,12 @@ describe('<RedactionContextManager />', () => {
             cy.contains('button', 'Save').click();
 
             cy.get('[role="progressbar"]').should('be.visible');
+            cy.wait('@updateContextDelayed');
         });
 
         it('shows loading spinner while deleting', () => {
             cy.intercept('DELETE', `**/cases/document/redaction/${redactionId}/context`, {
-                delay: 500,
+                delay: 200,
                 statusCode: 204,
             }).as('deleteContextDelayed');
 
@@ -434,6 +435,7 @@ describe('<RedactionContextManager />', () => {
             cy.get('[data-testid="DeleteIcon"]').parent('button').click();
 
             cy.get('[role="progressbar"]').should('be.visible');
+            cy.wait('@deleteContextDelayed');
         });
     });
 });
