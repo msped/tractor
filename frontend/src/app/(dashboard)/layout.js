@@ -19,7 +19,7 @@ function DashboardContent({ children }) {
                     flexGrow: 1,
                     ml: `${width}px`,
                     bgcolor: 'grey.50',
-                    minHeight: '100vh',
+                    minHeight: '100dvh',
                     width: `calc(100% - ${width}px)`,
                     maxWidth: `calc(100% - ${width}px)`,
                     overflowX: 'hidden',
