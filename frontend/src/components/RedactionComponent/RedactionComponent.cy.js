@@ -232,7 +232,6 @@ describe('<RedactionComponent />', () => {
         });
 
         it('calls updateRedaction API when accepting a suggestion', () => {
-            cy.contains('pending (1)').click();
             cy.contains('li', 'John Doe').contains('button', 'Accept').click();
 
             cy.wait('@updateRedaction').its('request.body').should('deep.include', { is_accepted: true });
@@ -244,7 +243,6 @@ describe('<RedactionComponent />', () => {
                 body: { ...mockRedactions[0], is_accepted: true },
             }).as('acceptRedaction');
 
-            cy.contains('pending (1)').click();
             cy.contains('li', 'John Doe').contains('button', 'Accept').click();
 
             cy.wait('@acceptRedaction');
@@ -259,7 +257,6 @@ describe('<RedactionComponent />', () => {
         });
 
         it('opens rejection dialog when clicking Reject', () => {
-            cy.contains('pending (1)').click();
             cy.contains('li', 'John Doe').contains('button', 'Reject').click();
 
             cy.get('[role="dialog"]').should('be.visible');

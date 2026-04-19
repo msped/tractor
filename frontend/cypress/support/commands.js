@@ -28,9 +28,15 @@ import { mount } from 'cypress/react'
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import { ThemeProvider } from '@mui/material/styles';
+import GlobalStyles from '@mui/material/GlobalStyles';
+import { SWRConfig } from 'swr';
 import { Toaster } from 'react-hot-toast';
 import theme from '@/theme';
 import { SessionProvider } from 'next-auth/react';
+
+const noAnimations = (
+    <GlobalStyles styles={{ '*, *::before, *::after': { transitionDuration: '1ms !important', animationDuration: '1ms !important' } }} />
+);
 
 Cypress.Commands.add('fullMount', (component, options = {}) => {
     const { mockSession } = options;
@@ -51,16 +57,19 @@ Cypress.Commands.add('fullMount', (component, options = {}) => {
     };
 
     return mount(
+        <SWRConfig value={{ dedupingInterval: 0, provider: () => new Map() }}>
         <SessionProvider session={mockSession}>
         <AppRouterCacheProvider>
             <ThemeProvider theme={theme}>
+                {noAnimations}
                 <AppRouterContext.Provider value={router}>
                     {component}
                     <Toaster />
                 </AppRouterContext.Provider>
             </ThemeProvider>
         </AppRouterCacheProvider>
-        </SessionProvider>,
+        </SessionProvider>
+        </SWRConfig>,
         options
     );
 });
@@ -69,6 +78,7 @@ Cypress.Commands.add('mount', (component, options) => {
     return mount(
     <AppRouterCacheProvider>
         <ThemeProvider theme={theme}>
+            {noAnimations}
             {component}
             <Toaster />
         </ThemeProvider>

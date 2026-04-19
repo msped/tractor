@@ -1,15 +1,7 @@
 import React from 'react';
-import { SWRConfig } from 'swr';
 import { ModelManagementCard } from './ModelManagementCard';
 
 const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
-
-// Wrapper to disable SWR cache for testing
-const TestWrapper = ({ children }) => (
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        {children}
-    </SWRConfig>
-);
 
 const mockModels = [
     {
@@ -76,18 +68,14 @@ describe('<ModelManagementCard />', () => {
     context('Loading State', () => {
         it('shows loading spinner while fetching models', () => {
             cy.intercept('GET', '**/models', {
-                delay: 500,
+                delay: 200,
                 body: mockModels,
             }).as('getModels');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.get('[role="progressbar"]').should('be.visible');
+            cy.wait('@getModels');
         });
     });
 
@@ -98,12 +86,7 @@ describe('<ModelManagementCard />', () => {
                 body: { detail: 'Server error' },
             }).as('getModelsFailed');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.wait('@getModelsFailed');
             cy.get('[role="alert"]').should('be.visible');
@@ -114,12 +97,7 @@ describe('<ModelManagementCard />', () => {
         it('shows message when no models are found', () => {
             cy.intercept('GET', '**/models', { body: [] }).as('getModelsEmpty');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.wait('@getModelsEmpty');
             cy.contains('No trained models found.').should('be.visible');
@@ -129,44 +107,22 @@ describe('<ModelManagementCard />', () => {
     context('With Models', () => {
         beforeEach(() => {
             cy.intercept('GET', '**/models', { body: mockModels }).as('getModels');
+            cy.fullMount(<ModelManagementCard />, mountOpts);
+            cy.wait('@getModels');
         });
 
         it('renders the card with title and description', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('h2', 'Active Redaction Model').should('be.visible');
             cy.contains('Select the trained SpanCat model to use for OPERATIONAL entity detection. GLiNER handles THIRD_PARTY entities automatically.').should('be.visible');
         });
 
         it('displays all models in the table', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('Redaction Model v1').should('be.visible');
             cy.contains('Redaction Model v2').should('be.visible');
             cy.contains('Redaction Model v3').should('be.visible');
         });
 
         it('displays table headers', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.get('thead th').should('have.length', 6);
             cy.get('thead').contains('Name').should('be.visible');
             cy.get('thead').contains('Created').should('be.visible');
@@ -176,42 +132,18 @@ describe('<ModelManagementCard />', () => {
         });
 
         it('shows "Active" chip for the active model', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v1').within(() => {
                 cy.contains('Active').should('be.visible');
             });
         });
 
         it('does not show "Active" chip for inactive models', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2').within(() => {
                 cy.contains('span', 'Active').should('not.exist');
             });
         });
 
         it('displays created date for each model', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.get('tbody tr').should('have.length', 3);
             cy.get('tbody tr').each(($row) => {
                 cy.wrap($row).find('td').eq(1).should('not.be.empty');
@@ -219,14 +151,6 @@ describe('<ModelManagementCard />', () => {
         });
 
         it('displays scores as percentages', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v1').within(() => {
                 cy.get('td').eq(2).should('have.text', '95.71%');
                 cy.get('td').eq(3).should('have.text', '77.16%');
@@ -235,14 +159,6 @@ describe('<ModelManagementCard />', () => {
         });
 
         it('displays "N/A" for null scores', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v3').within(() => {
                 cy.get('td').eq(2).should('have.text', 'N/A');
                 cy.get('td').eq(3).should('have.text', 'N/A');
@@ -251,28 +167,12 @@ describe('<ModelManagementCard />', () => {
         });
 
         it('disables "Set Active" button for the active model', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v1')
                 .contains('button', 'Set Active')
                 .should('be.disabled');
         });
 
         it('enables "Set Active" button for inactive models', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .should('not.be.disabled');
@@ -282,6 +182,8 @@ describe('<ModelManagementCard />', () => {
     context('Set Active Model', () => {
         beforeEach(() => {
             cy.intercept('GET', '**/models', { body: mockModels }).as('getModels');
+            cy.fullMount(<ModelManagementCard />, mountOpts);
+            cy.wait('@getModels');
         });
 
         it('calls setActiveModel API when clicking "Set Active"', () => {
@@ -290,14 +192,6 @@ describe('<ModelManagementCard />', () => {
                 body: {},
             }).as('setActive');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
@@ -307,19 +201,11 @@ describe('<ModelManagementCard />', () => {
 
         it('shows loading spinner on button while activating', () => {
             cy.intercept('POST', '**/models/model-2/set-active', {
-                delay: 500,
+                delay: 200,
                 statusCode: 200,
                 body: {},
             }).as('setActive');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
@@ -328,6 +214,8 @@ describe('<ModelManagementCard />', () => {
                 .find('button')
                 .find('[role="progressbar"]')
                 .should('be.visible');
+
+            cy.wait('@setActive');
         });
 
         it('shows success toast when model is activated', () => {
@@ -336,14 +224,6 @@ describe('<ModelManagementCard />', () => {
                 body: {},
             }).as('setActive');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
@@ -358,14 +238,6 @@ describe('<ModelManagementCard />', () => {
                 body: { detail: 'Failed to set active model.' },
             }).as('setActiveFailed');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
@@ -376,19 +248,11 @@ describe('<ModelManagementCard />', () => {
 
         it('disables all "Set Active" buttons while one is submitting', () => {
             cy.intercept('POST', '**/models/model-2/set-active', {
-                delay: 1000,
+                delay: 200,
                 statusCode: 200,
                 body: {},
             }).as('setActive');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
@@ -396,23 +260,17 @@ describe('<ModelManagementCard />', () => {
             cy.contains('tr', 'Redaction Model v3')
                 .contains('button', 'Set Active')
                 .should('be.disabled');
+
+            cy.wait('@setActive');
         });
 
         it('re-enables delete buttons while one activation is submitting', () => {
             cy.intercept('POST', '**/models/model-2/set-active', {
-                delay: 1000,
+                delay: 200,
                 statusCode: 200,
                 body: {},
             }).as('setActive');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .contains('button', 'Set Active')
                 .click();
@@ -420,6 +278,8 @@ describe('<ModelManagementCard />', () => {
             cy.contains('tr', 'Redaction Model v3')
                 .find('button[aria-label="delete model"]')
                 .should('be.disabled');
+
+            cy.wait('@setActive');
         });
 
         it('re-enables buttons after activation completes', () => {
@@ -428,22 +288,10 @@ describe('<ModelManagementCard />', () => {
                 is_active: m.id === 'model-2',
             }));
 
-
-            cy.intercept('GET', '**/models', { body: mockModels }).as('getModelsInitial');
-
             cy.intercept('POST', '**/models/model-2/set-active', {
                 statusCode: 200,
                 body: {},
             }).as('setActive');
-
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModelsInitial');
 
             cy.intercept('GET', '**/models', { body: updatedModels }).as('getModelsRefresh');
 
@@ -467,17 +315,11 @@ describe('<ModelManagementCard />', () => {
     context('Delete Model', () => {
         beforeEach(() => {
             cy.intercept('GET', '**/models', { body: mockModels }).as('getModels');
+            cy.fullMount(<ModelManagementCard />, mountOpts);
+            cy.wait('@getModels');
         });
 
         it('shows confirmation dialog when delete icon is clicked', () => {
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .find('button[aria-label="delete model"]')
                 .click();
@@ -491,14 +333,6 @@ describe('<ModelManagementCard />', () => {
         it('closes the dialog without calling the API when Cancel is clicked', () => {
             cy.intercept('DELETE', '**/models/**').as('deleteRequest');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .find('button[aria-label="delete model"]')
                 .click();
@@ -511,14 +345,6 @@ describe('<ModelManagementCard />', () => {
         it('calls delete API and shows success toast on confirm', () => {
             cy.intercept('DELETE', '**/models/model-2', { statusCode: 204 }).as('deleteRequest');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .find('button[aria-label="delete model"]')
                 .click();
@@ -535,14 +361,6 @@ describe('<ModelManagementCard />', () => {
                 body: { detail: 'Cannot delete a model that has been used to process documents.' },
             }).as('deleteRequest');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .find('button[aria-label="delete model"]')
                 .click();
@@ -556,14 +374,6 @@ describe('<ModelManagementCard />', () => {
         it('shows error toast when delete fails', () => {
             cy.intercept('DELETE', '**/models/model-2', { statusCode: 500 }).as('deleteRequest');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
-
-            cy.wait('@getModels');
             cy.contains('tr', 'Redaction Model v2')
                 .find('button[aria-label="delete model"]')
                 .click();
@@ -579,12 +389,7 @@ describe('<ModelManagementCard />', () => {
         it('shows only 5 models by default when more than 5 exist', () => {
             cy.intercept('GET', '**/models', { body: mockModels6 }).as('getModels6');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.wait('@getModels6');
             cy.get('tbody tr').should('have.length', 5);
@@ -593,12 +398,7 @@ describe('<ModelManagementCard />', () => {
         it('shows all models after clicking Show more', () => {
             cy.intercept('GET', '**/models', { body: mockModels6 }).as('getModels6');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.wait('@getModels6');
             cy.contains('button', 'Show more').click();
@@ -608,12 +408,7 @@ describe('<ModelManagementCard />', () => {
         it('hides extra models after clicking Show less', () => {
             cy.intercept('GET', '**/models', { body: mockModels6 }).as('getModels6');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.wait('@getModels6');
             cy.contains('button', 'Show more').click();
@@ -625,12 +420,7 @@ describe('<ModelManagementCard />', () => {
         it('does not show Show more button when 5 or fewer models exist', () => {
             cy.intercept('GET', '**/models', { body: mockModels }).as('getModels');
 
-            cy.fullMount(
-                <TestWrapper>
-                    <ModelManagementCard />
-                </TestWrapper>,
-                mountOpts
-            );
+            cy.fullMount(<ModelManagementCard />, mountOpts);
 
             cy.wait('@getModels');
             cy.contains('button', 'Show more').should('not.exist');

@@ -172,6 +172,7 @@ describe('<CustomRecognizersCard />', () => {
     // --- Regex tester (#100) ---
     describe('Regex tester', () => {
         beforeEach(() => {
+            cy.clock();
             cy.intercept('POST', '**/model-management/regex/validate', (req) => {
                 const { pattern, sample_text } = req.body;
                 try {
@@ -207,6 +208,7 @@ describe('<CustomRecognizersCard />', () => {
             cy.get('[aria-label="pattern regex 1"]').type('\\d+');
             cy.get('[aria-label="sample text for regex tester"]').type('abc 123 def 456');
 
+            cy.tick(400);
             cy.wait('@validateRegex');
             cy.get('mark').should('have.length.gte', 1);
         });
@@ -225,6 +227,7 @@ describe('<CustomRecognizersCard />', () => {
             cy.get('[aria-label="pattern regex 1"]').type('[invalid');
             cy.get('[aria-label="sample text for regex tester"]').type('test');
 
+            cy.tick(400);
             cy.wait('@validateInvalid');
             cy.contains('unterminated character class').should('be.visible');
         });
@@ -238,6 +241,7 @@ describe('<CustomRecognizersCard />', () => {
             cy.get('[aria-label="pattern regex 1"]').type('\\d+');
             cy.get('[aria-label="sample text for regex tester"]').type('no digits here');
 
+            cy.tick(400);
             cy.wait('@validateRegex');
             cy.contains('No matches').should('be.visible');
         });

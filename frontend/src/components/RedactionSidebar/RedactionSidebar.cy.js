@@ -93,7 +93,6 @@ describe('<RedactionSidebar />', () => {
         });
 
         it('renders redaction item details correctly', () => {
-            cy.contains('pending (1)').click();
             cy.contains('li', 'pending text').within(() => {
                 cy.contains('"pending text"').should('be.visible');
                 cy.contains('Third-Party PII').should('be.visible');
@@ -130,7 +129,6 @@ describe('<RedactionSidebar />', () => {
         });
 
         it('renders correct buttons for the "pending" section', () => {
-            cy.contains('pending (1)').click();
             cy.contains('li', 'pending text').within(() => {
                 cy.contains('button', 'Reject').should('be.visible');
                 cy.contains('button', 'Accept').should('be.visible');
