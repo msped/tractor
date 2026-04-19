@@ -28,3 +28,27 @@ a {
   text-decoration: none;
 }
 
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: #0A2540;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
