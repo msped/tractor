@@ -13,12 +13,13 @@ function DashboardContent({ children }) {
             <SessionWatcher />
             <NavSidebar />
             <Box
+                id="main-content"
                 component="main"
                 sx={{
                     flexGrow: 1,
                     ml: `${width}px`,
-                    bgcolor: 'grey.50',
-                    minHeight: '100vh',
+                    bgcolor: 'background.default',
+                    minHeight: '100dvh',
                     width: `calc(100% - ${width}px)`,
                     maxWidth: `calc(100% - ${width}px)`,
                     overflowX: 'hidden',

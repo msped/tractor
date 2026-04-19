@@ -28,6 +28,6 @@ This website is partially compliant with the Web Content Accessibility Guideline
 
 ## Preparation of this accessibility statement
 
-This statement was prepared on 25 August 2025. It was last reviewed on 25 August 2025.
+This statement was prepared on 25 August 2025. It was last reviewed on 19 April 2026.
 
-This website was last tested on 25 August 2025. The test was carried out by Matt Edwards (msped). We used a combination of automated tools and manual testing to audit the service against all WCAG 2.2 AA success criteria.
+This website was last tested on 19 April 2026. The test was carried out by Matt Edwards (msped). We used a combination of automated tools and manual testing to audit the service against all WCAG 2.2 AA success criteria.

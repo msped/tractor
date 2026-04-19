@@ -13,7 +13,7 @@ describe('<LoginComponent />', () => {
     cy.contains('h1', 'Tractor').should('be.visible');
     cy.get('input[name="username"]').should('be.visible');
     cy.get('input[name="password"]').should('be.visible');
-    cy.contains('button', 'Login').should('be.visible');
+    cy.contains('button', 'Sign in').should('be.visible');
     cy.contains('OR').should('not.exist');
   });
 
@@ -38,7 +38,7 @@ describe('<LoginComponent />', () => {
 
       cy.get('input[name="username"]').type(username);
       cy.get('input[name="password"]').type(password);
-      cy.contains('button', 'Login').click();
+      cy.contains('button', 'Sign in').click();
 
       cy.get('@signInStub').should('have.been.calledOnce');
       cy.get('@signInStub').should('have.been.calledWith',
@@ -61,7 +61,7 @@ describe('<LoginComponent />', () => {
 
       cy.get('input[name="username"]').type('wrong');
       cy.get('input[name="password"]').type('user');
-      cy.contains('button', 'Login').click();
+      cy.contains('button', 'Sign in').click();
 
       cy.contains('Login failed. Please check your credentials.').should('be.visible');
     });
