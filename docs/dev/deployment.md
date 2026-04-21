@@ -38,12 +38,12 @@ cp frontend/.env.example frontend/.env
 | `DEBUG`                  | Enable debug mode (optional — defaults to `False` in production) | `False` |
 | `ALLOWED_HOSTS`          | Comma-separated allowed hostnames — must include `backend` when running in Docker, as the frontend container calls the backend directly | `localhost,backend,yourdomain.com` |
 | `CORS_ALLOWED_ORIGINS`   | Comma-separated list of allowed CORS origins. In production, set this to the frontend URL only. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
-| `DATABASE_URL`           | Database URL for connection (optional)        |                            |
-| `POSTGRES_DB`            | Database name (optional)                      | `tractor`                  |
-| `POSTGRES_USER`          | Database user (optional)                      | `tractor`                  |
+| `DATABASE_URL`           | Database URL for connection (optional — takes priority over individual vars) | |
+| `POSTGRES_DB`            | Database name (optional, default: `tractor`)  | `tractor`                  |
+| `POSTGRES_USER`          | Database user (optional, default: `tractor`)  | `tractor`                  |
 | `POSTGRES_PASSWORD`      | Database password (optional)                  |                            |
-| `POSTGRES_HOST`          | Database host (use `db` in Docker) (optional) | `db`                       |
-| `POSTGRES_PORT`          | Database port (optional)                      | `5432`                     |
+| `POSTGRES_HOST`          | Database host (optional, default: `localhost`; use `db` in Docker) | `db` |
+| `POSTGRES_PORT`          | Database port (optional, default: `5432`)     | `5432`                     |
 | `MEDIA_STORAGE`          | Storage backend (`local`, `s3`, `azure`)      | `local`                    |
 | `OLLAMA_ENABLED`         | Enable Gemma contextual AI stage (`True`/`False`) | `True`               |
 | `OLLAMA_HOST`            | Ollama API URL — use `http://ollama:11434` in Docker | `http://ollama:11434` |
@@ -90,7 +90,7 @@ On first startup, pull the model inside the container:
 docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma3:1b
 ```
 
-This application is not tide to Gemma, you can run any model through Ollama depending on your system.
+This application is not tied to Gemma — you can use any model available through Ollama depending on your hardware. `gemma3:1b` is a good starting point for most systems; consider `gemma4:e4b` or similar if you have GPU resources available.
 
 The model is persisted in the `ollama_volume` Docker volume, so it only needs to be downloaded once.
 
@@ -123,7 +123,10 @@ Ollama auto-detects and uses the Metal GPU on Apple Silicon hosts — no extra c
 
 ### Task Queue (worker)
 
-The `worker` service runs `python manage.py qcluster`, which is required for all asynchronous tasks — document export (PDF generation) and model training. Without it, these operations will queue but never execute. It shares the same Docker image as the backend and reads the same `.env` file.
+!!! warning
+    The `worker` service is **required** for document export and model training. Without it, these operations will queue but never complete. Always ensure the worker is running in production.
+
+The `worker` service runs `python manage.py qcluster`, which is required for all asynchronous tasks — document export (PDF generation) and model training. It shares the same Docker image as the backend and reads the same `.env` file.
 
 ### Database
 
