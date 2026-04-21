@@ -1,5 +1,7 @@
+import io
 import re
 import threading
+import zipfile
 
 from django_q.models import OrmQ, Schedule
 from django_q.tasks import async_task
@@ -177,9 +179,11 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
         if not uploaded_file.name.endswith(".docx"):
-            raise serializers.ValidationError(
-                "Only .docx files are supported."
-            )
+            raise serializers.ValidationError("Only .docx files are supported.")
+        content = uploaded_file.read()
+        uploaded_file.seek(0)
+        if not zipfile.is_zipfile(io.BytesIO(content)):
+            raise serializers.ValidationError("Only .docx files are supported.")
         serializer.save(created_by=self.request.user)
 
 

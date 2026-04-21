@@ -1,5 +1,7 @@
+import io
 import shutil
 import tempfile
+import zipfile
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -38,11 +40,14 @@ class BaseTrainingAPITestCase(NetworkBlockerMixin, APITestCase):
             name="test_model_v1", path="/path/to/model_v1"
         )
         TrainingRun.objects.create(model=self.model, source="redactions")
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            zf.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types/>')
+        zip_buffer.seek(0)
         self.docx_file = SimpleUploadedFile(
             "test.docx",
-            b"file_content",
-            "application/vnd.openxmlformats-officedocument\
-                wordprocessingml.document",
+            zip_buffer.read(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
 
     def tearDown(self):
