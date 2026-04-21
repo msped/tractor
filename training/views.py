@@ -86,7 +86,10 @@ class ValidateRegexView(APIView):
         t.join(timeout=5)
         if t.is_alive():
             return Response(
-                {"valid": False, "error": "Regex timed out — pattern is too complex"},
+                {
+                    "valid": False,
+                    "error": "Regex timed out — pattern is too complex",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response({"valid": True, "matches": result.get("matches", [])})
@@ -179,11 +182,15 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
         if not uploaded_file.name.endswith(".docx"):
-            raise serializers.ValidationError("Only .docx files are supported.")
+            raise serializers.ValidationError(
+                "Only .docx files are supported."
+            )
         content = uploaded_file.read()
         uploaded_file.seek(0)
         if not zipfile.is_zipfile(io.BytesIO(content)):
-            raise serializers.ValidationError("Only .docx files are supported.")
+            raise serializers.ValidationError(
+                "Only .docx files are supported."
+            )
         serializer.save(created_by=self.request.user)
 
 

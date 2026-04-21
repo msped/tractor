@@ -686,7 +686,9 @@ def export_case_documents(case_id):
                 if doc.original_file
                 else str(doc.id)
             )
-            safe_doc_name = re.sub(r"[^\w\-. ]", "_", os.path.basename(doc_name))
+            safe_doc_name = re.sub(
+                r"[^\w\-. ]", "_", os.path.basename(doc_name)
+            )
 
             if doc.original_file:
                 safe_orig_name = re.sub(
