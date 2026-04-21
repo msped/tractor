@@ -726,6 +726,11 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
             username="exemptuser", password="password"
         )
         self.client.force_authenticate(user=self.user)
+        admin = User.objects.create_superuser(
+            username="exemptadmin", password="password"
+        )
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(user=admin)
 
         self.active = ExemptionTemplate.objects.create(
             name="S.40 - Personal Information", is_active=True
@@ -792,21 +797,29 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_delete_exemption_template(self):
-        """DELETE removes the template."""
+        """DELETE removes the template (admin only)."""
         url = reverse(
             "exemption-template-detail", kwargs={"pk": self.active.pk}
         )
-        response = self.client.delete(url)
+        response = self.admin_client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(
             ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
         )
 
+    def test_delete_exemption_template_forbidden_for_non_admin(self):
+        """DELETE is forbidden for non-admin users."""
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_delete_nonexistent_template_returns_404(self):
         """DELETE on a non-existent pk returns 404."""
         url = reverse("exemption-template-detail", kwargs={"pk": 99999})
-        response = self.client.delete(url)
+        response = self.admin_client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
