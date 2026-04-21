@@ -10,6 +10,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable must be set")
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
@@ -181,13 +183,17 @@ REST_AUTH = {
 
 APPEND_SLASH = False
 
+_JWT_SIGNING_KEY = os.environ.get("JWT_SIGNING_KEY")
+if not _JWT_SIGNING_KEY:
+    raise ValueError("JWT_SIGNING_KEY environment variable must be set")
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(hours=24),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
-    "SIGNING_KEY": os.environ.get("JWT_SIGNING_KEY"),
+    "SIGNING_KEY": _JWT_SIGNING_KEY,
     "ALGORITHM": "HS512",
 }
 
