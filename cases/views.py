@@ -72,7 +72,7 @@ class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
     GET/PATCH/DELETE a single exemption template.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
     serializer_class = ExemptionTemplateSerializer
     queryset = ExemptionTemplate.objects.all()
 
@@ -140,6 +140,7 @@ class CaseDetailView(RetrieveUpdateDestroyAPIView):
                 queryset=Document.objects.prefetch_related("redactions"),
             )
         )
+
     lookup_field = "id"
     lookup_url_kwarg = "case_id"
 
