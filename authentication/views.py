@@ -3,6 +3,7 @@ from allauth.socialaccount.providers.microsoft.views import (
 )
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.response import Response
@@ -19,8 +20,11 @@ class MicrosoftLogin(SocialLoginView):
     """Handle Microsoft Entra ID OAuth2 login via the Microsoft Graph adapter."""
 
     adapter_class = MicrosoftGraphOAuth2Adapter
-    callback_url = "http://localhost:3000/api/auth/callback/microsoft-entra-id"
     client_class = OAuth2Client
+
+    @property
+    def callback_url(self):
+        return f"{settings.FRONTEND_URL}/api/auth/callback/microsoft-entra-id"
 
 
 class APIKeyListCreateView(APIView):
