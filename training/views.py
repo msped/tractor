@@ -1,4 +1,5 @@
 import re
+import threading
 
 from django_q.models import OrmQ, Schedule
 from django_q.tasks import async_task
@@ -69,11 +70,24 @@ class ValidateRegexView(APIView):
                 {"valid": False, "error": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        matches = [
-            {"start": m.start(), "end": m.end(), "text": m.group()}
-            for m in compiled.finditer(sample_text)
-        ]
-        return Response({"valid": True, "matches": matches})
+
+        result = {}
+
+        def _run():
+            result["matches"] = [
+                {"start": m.start(), "end": m.end(), "text": m.group()}
+                for m in compiled.finditer(sample_text)
+            ]
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=5)
+        if t.is_alive():
+            return Response(
+                {"valid": False, "error": "Regex timed out — pattern is too complex"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"valid": True, "matches": result.get("matches", [])})
 
 
 class LLMPromptSettingsView(APIView):
