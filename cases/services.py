@@ -679,61 +679,75 @@ def export_case_documents(case_id):
     export_settings = DocumentExportSettings.get()
     documents = case.documents.all()
 
-    for doc in documents:
-        if doc.original_file:
-            shutil.copy(
-                doc.original_file.path,
-                os.path.join(
-                    unedited_dir, doc.original_file.name.split("/")[-1]
-                ),
+    try:
+        for doc in documents:
+            doc_name = doc.filename or (
+                os.path.splitext(os.path.basename(doc.original_file.name))[0]
+                if doc.original_file
+                else str(doc.id)
+            )
+            safe_doc_name = re.sub(r"[^\w\-. ]", "_", os.path.basename(doc_name))
+
+            if doc.original_file:
+                safe_orig_name = re.sub(
+                    r"[^\w\-. ]", "_", os.path.basename(doc.original_file.name)
+                )
+                shutil.copy(
+                    doc.original_file.path,
+                    os.path.join(unedited_dir, safe_orig_name),
+                )
+
+            redacted_pdf_content = _generate_pdf_from_document(
+                doc,
+                mode="redacted",
+                export_settings=export_settings,
+                case_reference=case.case_reference,
+            )
+            if redacted_pdf_content:
+                with open(
+                    os.path.join(redacted_dir, f"{safe_doc_name}.pdf"), "wb"
+                ) as f:
+                    f.write(redacted_pdf_content)
+
+            disclosure_pdf_content = _generate_pdf_from_document(
+                doc,
+                mode="disclosure",
+                export_settings=export_settings,
+                case_reference=case.case_reference,
+            )
+            if disclosure_pdf_content:
+                with open(
+                    os.path.join(disclosure_dir, f"{safe_doc_name}.pdf"), "wb"
+                ) as f:
+                    f.write(disclosure_pdf_content)
+
+        zip_file_path = f"{temp_export_dir}.zip"
+        with zipfile.ZipFile(zip_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk(temp_export_dir):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    # Arcname is the path inside the zip file
+                    arcname = os.path.relpath(full_path, temp_export_dir)
+                    zipf.write(full_path, arcname)
+
+        with open(zip_file_path, "rb") as f:
+            zip_content = f.read()
+            case.export_file.save(
+                f"disclosure_package_{case.case_reference}.zip",
+                ContentFile(zip_content),
+                save=False,
             )
 
-        redacted_pdf_content = _generate_pdf_from_document(
-            doc,
-            mode="redacted",
-            export_settings=export_settings,
-            case_reference=case.case_reference,
-        )
-        if redacted_pdf_content:
-            with open(
-                os.path.join(redacted_dir, f"{doc.filename}.pdf"), "wb"
-            ) as f:
-                f.write(redacted_pdf_content)
+        case.export_status = Case.ExportStatus.COMPLETED
+        case.save(update_fields=["export_file", "export_status"])
 
-        disclosure_pdf_content = _generate_pdf_from_document(
-            doc,
-            mode="disclosure",
-            export_settings=export_settings,
-            case_reference=case.case_reference,
-        )
-        if disclosure_pdf_content:
-            with open(
-                os.path.join(disclosure_dir, f"{doc.filename}.pdf"), "wb"
-            ) as f:
-                f.write(disclosure_pdf_content)
+        shutil.rmtree(temp_export_dir)
+        os.remove(zip_file_path)
 
-    zip_file_path = f"{temp_export_dir}.zip"
-    with zipfile.ZipFile(zip_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for root, _, files in os.walk(temp_export_dir):
-            for file in files:
-                full_path = os.path.join(root, file)
-                # Arcname is the path inside the zip file
-                arcname = os.path.relpath(full_path, temp_export_dir)
-                zipf.write(full_path, arcname)
-
-    with open(zip_file_path, "rb") as f:
-        zip_content = f.read()
-        case.export_file.save(
-            f"disclosure_package_{case.case_reference}.zip",
-            ContentFile(zip_content),
-            save=False,
-        )
-
-    case.export_status = Case.ExportStatus.COMPLETED
-    case.save(update_fields=["export_file", "export_status"])
-
-    shutil.rmtree(temp_export_dir)
-    os.remove(zip_file_path)
+    except Exception:
+        logging.exception("Export failed for case %s", case_id)
+        case.export_status = Case.ExportStatus.ERROR
+        case.save(update_fields=["export_status"])
 
 
 def delete_cases_past_retention_date():

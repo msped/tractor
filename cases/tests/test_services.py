@@ -512,13 +512,11 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
                 filenames,
             )
             # Check for redacted PDFs
-            self.assertIn(f"redacted/{self.document.filename}.pdf", filenames)
-            self.assertIn(f"redacted/{doc2.filename}.pdf", filenames)
+            self.assertIn("redacted/document.pdf", filenames)
+            self.assertIn("redacted/doc2.pdf", filenames)
             # Check for disclosure PDFs
-            self.assertIn(
-                f"disclosure/{self.document.filename}.pdf", filenames
-            )
-            self.assertIn(f"disclosure/{doc2.filename}.pdf", filenames)
+            self.assertIn("disclosure/document.pdf", filenames)
+            self.assertIn("disclosure/doc2.pdf", filenames)
 
         # Check that the PDF generator was called for each document and mode
         self.assertEqual(mock_generate_pdf.call_count, 4)  # 2 docs * 2 modes
