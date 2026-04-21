@@ -331,7 +331,7 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.tasks.Task")
     def test_train_model_aborts_with_insufficient_data(self, mock_task):
-        """train_model() aborts if fewer than 25 training examples exist."""
+        """train_model() aborts if fewer than 75 training examples exist."""
         mock_task.objects.filter.return_value.count.return_value = 0
 
         initial_model_count = Model.objects.count()

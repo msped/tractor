@@ -321,7 +321,7 @@ def train_model(source="redactions", user=None):
         collect_training_data_detailed(source)
     )
 
-    if len(train_data) < 25:
+    if len(train_data) < 75:
         print(
             f"Not enough training data ({len(train_data)} examples). Aborting."
         )
