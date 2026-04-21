@@ -111,7 +111,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         async session({token}) {
-            return token;
+            return { user: token.user, access_token: token.access_token, error: token.error };
         },
         async authorized({req, token}) {
             if (token && token.user && !token.error) {
