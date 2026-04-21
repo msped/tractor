@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django_q.models import OrmQ
 from django_q.tasks import async_task
@@ -131,8 +131,15 @@ class CaseDetailView(RetrieveUpdateDestroyAPIView):
     """
 
     permission_classes = [IsAuthenticated]
-    queryset = Case.objects.all()
     serializer_class = CaseDetailSerializer
+
+    def get_queryset(self):
+        return Case.objects.prefetch_related(
+            Prefetch(
+                "documents",
+                queryset=Document.objects.prefetch_related("redactions"),
+            )
+        )
     lookup_field = "id"
     lookup_url_kwarg = "case_id"
 
@@ -153,9 +160,11 @@ class DocumentListCreateView(ListCreateAPIView):
         IsAuthenticated,
     ]
     serializer_class = DocumentSerializer
-    queryset = Document.objects.all()
     lookup_field = "case__id"
     lookup_url_kwarg = "case_id"
+
+    def get_queryset(self):
+        return Document.objects.prefetch_related("redactions")
 
     def create(self, request, *args, **kwargs):
         """
