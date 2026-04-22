@@ -115,7 +115,7 @@ class CaseListCreateView(ListCreateAPIView):
     """
 
     permission_classes = [IsAuthenticated]
-    queryset = Case.objects.all()
+    queryset = Case.objects.select_related("created_by")
     serializer_class = CaseSerializer
 
     def perform_create(self, serializer):
@@ -134,10 +134,15 @@ class CaseDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = CaseDetailSerializer
 
     def get_queryset(self):
-        return Case.objects.prefetch_related(
+        return Case.objects.select_related("created_by").prefetch_related(
             Prefetch(
                 "documents",
-                queryset=Document.objects.prefetch_related("redactions"),
+                queryset=Document.objects.prefetch_related(
+                    Prefetch(
+                        "redactions",
+                        queryset=Redaction.objects.select_related("context"),
+                    )
+                ),
             )
         )
 
@@ -165,7 +170,12 @@ class DocumentListCreateView(ListCreateAPIView):
     lookup_url_kwarg = "case_id"
 
     def get_queryset(self):
-        return Document.objects.prefetch_related("redactions")
+        return Document.objects.prefetch_related(
+            Prefetch(
+                "redactions",
+                queryset=Redaction.objects.select_related("context"),
+            )
+        )
 
     def create(self, request, *args, **kwargs):
         """
@@ -271,9 +281,16 @@ class DocumentReviewView(RetrieveAPIView):
 
     permission_classes = [IsAuthenticated]
     serializer_class = DocumentReviewSerializer
-    queryset = Document.objects.all()
     lookup_field = "id"
     lookup_url_kwarg = "document_id"
+
+    def get_queryset(self):
+        return Document.objects.prefetch_related(
+            Prefetch(
+                "redactions",
+                queryset=Redaction.objects.select_related("context"),
+            )
+        )
 
 
 class RedactionListCreateView(ListCreateAPIView):
@@ -317,7 +334,9 @@ class BulkRedactionUpdateView(APIView):
             id__in=ids,
         ).update(is_accepted=is_accepted, justification=justification)
 
-        updated = Redaction.objects.filter(id__in=ids, document_id=document_id)
+        updated = Redaction.objects.filter(
+            id__in=ids, document_id=document_id
+        ).select_related("context")
         serializer = RedactionSerializer(updated, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
