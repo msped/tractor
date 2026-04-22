@@ -97,6 +97,7 @@ else:
 DATABASES = {
     "default": {
         **_db_config,
+        "CONN_MAX_AGE": 600,
         "TEST": {"NAME": "testdatabase"},
     }
 }
