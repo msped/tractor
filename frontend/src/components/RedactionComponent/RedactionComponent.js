@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -10,7 +10,8 @@ import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { ResubmitDialog } from '@/components/ResubmitDialog';
-import { bulkMarkByText } from '@/services/redactionService';
+import { bulkMarkByText, getExemptionTemplates } from '@/services/redactionService';
+import useSWR from 'swr';
 import toast from 'react-hot-toast';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
@@ -32,6 +33,12 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     const { data: session } = useSession();
     const router = useRouter();
     const [redactions, setRedactions] = useState(initialRedactions || []);
+
+    const { data: exemptionTemplates = [] } = useSWR(
+        session?.access_token ? ['exemptionTemplates', session.access_token] : null,
+        ([, token]) => getExemptionTemplates(token),
+        { dedupingInterval: 60000 }
+    );
 
     // State for rejection dialog (single and bulk)
     const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
@@ -135,7 +142,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
 
     const pendingCount = displaySections.pending.total;
 
-    const handleMarkAllInCase = ({ text, redactionType, action }) => {
+    const handleMarkAllInCase = useCallback(({ text, redactionType, action }) => {
         if (action === 'accept') {
             setMarkAllInCaseTarget({ text, redactionType, action });
         } else {
@@ -143,9 +150,9 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
             setRejectionTarget({ id: null, text });
             setRejectionDialogOpen(true);
         }
-    };
+    }, [setRejectionTarget, setRejectionDialogOpen]);
 
-    const handleMarkAllInCaseAcceptConfirm = async () => {
+    const handleMarkAllInCaseAcceptConfirm = useCallback(async () => {
         const { text, redactionType } = markAllInCaseTarget;
         setMarkAllInCaseTarget(null);
         try {
@@ -169,9 +176,9 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         } catch {
             toast.error('Failed to mark all in case. Please try again.');
         }
-    };
+    }, [markAllInCaseTarget, currentDocument.case, session?.access_token, setRedactions]);
 
-    const handleMarkAllInCaseRejectConfirm = async (_id, reason) => {
+    const handleMarkAllInCaseRejectConfirm = useCallback(async (_id, reason) => {
         const { text, redactionType } = markAllInCaseTarget;
         setRejectionDialogOpen(false);
         setRejectionTarget(null);
@@ -197,7 +204,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         } catch {
             toast.error('Failed to mark all in case. Please try again.');
         }
-    };
+    }, [markAllInCaseTarget, currentDocument.case, session?.access_token, setRedactions, setRejectionDialogOpen, setRejectionTarget]);
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
@@ -306,6 +313,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
             <Box sx={{ width: sidebarWidth, flexShrink: 0 }}>
                 <RedactionSidebar
                     redactions={displaySections}
+                    exemptionTemplates={exemptionTemplates}
                     onAccept={handleAcceptSuggestion}
                     onReject={handleOpenRejectDialog}
                     onRemove={handleRemoveRedaction}
