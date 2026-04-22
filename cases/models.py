@@ -202,6 +202,9 @@ class Document(models.Model):
 
     class Meta:
         ordering = ["uploaded_at"]
+        indexes = [
+            models.Index(fields=["status"], name="document_status_idx"),
+        ]
 
 
 class Redaction(models.Model):
@@ -259,6 +262,16 @@ class Redaction(models.Model):
 
     class Meta:
         ordering = ["start_char"]
+        indexes = [
+            models.Index(
+                fields=["text", "redaction_type"],
+                name="redaction_text_type_idx",
+            ),
+            models.Index(
+                fields=["document", "start_char", "end_char"],
+                name="redaction_doc_pos_idx",
+            ),
+        ]
 
 
 class RedactionContext(models.Model):
