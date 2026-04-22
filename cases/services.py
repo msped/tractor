@@ -10,6 +10,7 @@ import inflect
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
 from weasyprint import CSS, HTML
 from weasyprint.text.fonts import FontConfiguration
@@ -130,26 +131,28 @@ def process_document_and_create_redactions(document_id):
     )
 
     with transaction.atomic():
+        redactions_to_create = []
         for suggestion in ai_suggestions:
             # Filter out entities matching the data subject's name/DOB
             if _matches_data_subject(suggestion["text"], case):
                 continue
-
             redaction_type = ENTITY_LABEL_TO_REDACTION_TYPE.get(
                 suggestion["label"],
                 Redaction.RedactionType.THIRD_PARTY_PII,  # fallback default
             )
-            Redaction.objects.create(
-                document=document,
-                start_char=suggestion["start_char"],
-                end_char=suggestion["end_char"],
-                text=suggestion["text"],
-                redaction_type=redaction_type,
-                is_suggestion=True,
-                is_accepted=False,
-                source=suggestion.get("source", Redaction.Source.NER),
+            redactions_to_create.append(
+                Redaction(
+                    document=document,
+                    start_char=suggestion["start_char"],
+                    end_char=suggestion["end_char"],
+                    text=suggestion["text"],
+                    redaction_type=redaction_type,
+                    is_suggestion=True,
+                    is_accepted=False,
+                    source=suggestion.get("source", Redaction.Source.NER),
+                )
             )
-
+        Redaction.objects.bulk_create(redactions_to_create)
         _apply_existing_case_decisions(document)
 
     document.status = Document.Status.READY_FOR_REVIEW
@@ -171,8 +174,6 @@ def _apply_existing_case_decisions(document):
     accepted, or all rejected), apply that decision to the new pending
     redactions.  Mixed decisions are left as pending.
     """
-    from django.db.models import Count, Q
-
     case = document.case
 
     # Pending = is_accepted=False with no justification (mirrors frontend filter)
@@ -196,12 +197,16 @@ def _apply_existing_case_decisions(document):
             )
         )
 
-        if not existing_decided.exists():
+        counts = existing_decided.aggregate(
+            total=Count("id"),
+            accepted=Count("id", filter=Q(is_accepted=True)),
+        )
+        if counts["total"] == 0:
             continue
 
-        total = existing_decided.count()
-        accepted_count = existing_decided.filter(is_accepted=True).count()
-        rejected_count = existing_decided.filter(is_accepted=False).count()
+        total = counts["total"]
+        accepted_count = counts["accepted"]
+        rejected_count = total - accepted_count
 
         target_qs = new_pending.filter(
             text=text, redaction_type=redaction_type
@@ -281,53 +286,36 @@ def find_and_flag_matching_text_in_case(redaction_id):
         if not document.extracted_text:
             continue
 
-        document_modified = False
+        # Load all non-DS_INFO redactions for this document once, keyed by position.
+        existing_by_position = {
+            (r.start_char, r.end_char): r
+            for r in document.redactions.exclude(
+                redaction_type=Redaction.RedactionType.DS_INFORMATION
+            )
+        }
 
-        with transaction.atomic():
-            # Find all matches for the pattern
-            for match in re.finditer(
-                pattern, document.extracted_text, re.IGNORECASE
-            ):
-                start, end = match.span()
-                text = match.group(0)
+        redactions_to_create = []
+        redactions_to_update = []
 
-                # Try to find an existing redaction at this position
-                existing_redaction = (
-                    Redaction.objects.filter(
-                        document=document, start_char=start, end_char=end
-                    )
-                    .exclude(
-                        redaction_type=Redaction.RedactionType.DS_INFORMATION
-                    )
-                    .first()
+        for match in re.finditer(
+            pattern, document.extracted_text, re.IGNORECASE
+        ):
+            start, end = match.span()
+            text = match.group(0)
+
+            existing_redaction = existing_by_position.get((start, end))
+
+            if existing_redaction:
+                existing_redaction.redaction_type = (
+                    Redaction.RedactionType.DS_INFORMATION
                 )
-
-                if existing_redaction:
-                    # A redaction already exists.
-                    # Update it if it's not already DS_INFO.
-                    if (
-                        existing_redaction.redaction_type
-                        != Redaction.RedactionType.DS_INFORMATION
-                    ):
-                        existing_redaction.redaction_type = (
-                            Redaction.RedactionType.DS_INFORMATION
-                        )
-                        # Reset its status to a pending suggestion for review
-                        existing_redaction.is_suggestion = True
-                        existing_redaction.is_accepted = False
-                        existing_redaction.justification = None
-                        existing_redaction.save(
-                            update_fields=[
-                                "redaction_type",
-                                "is_suggestion",
-                                "is_accepted",
-                                "justification",
-                            ]
-                        )
-                        document_modified = True
-                else:
-                    # No redaction exists, so create a new one.
-                    Redaction.objects.create(
+                existing_redaction.is_suggestion = True
+                existing_redaction.is_accepted = False
+                existing_redaction.justification = None
+                redactions_to_update.append(existing_redaction)
+            else:
+                redactions_to_create.append(
+                    Redaction(
                         document=document,
                         start_char=start,
                         end_char=end,
@@ -336,7 +324,23 @@ def find_and_flag_matching_text_in_case(redaction_id):
                         is_suggestion=True,
                         is_accepted=False,
                     )
-                    document_modified = True
+                )
+
+        document_modified = bool(redactions_to_create or redactions_to_update)
+
+        with transaction.atomic():
+            if redactions_to_create:
+                Redaction.objects.bulk_create(redactions_to_create)
+            if redactions_to_update:
+                Redaction.objects.bulk_update(
+                    redactions_to_update,
+                    [
+                        "redaction_type",
+                        "is_suggestion",
+                        "is_accepted",
+                        "justification",
+                    ],
+                )
 
             # If we modified this document and it was already completed,
             # revert its status so it can be reviewed again.
@@ -579,13 +583,23 @@ def _generate_pdf_from_document(
     if not text:
         return None
 
-    redactions = document.redactions.filter(is_accepted=True).select_related(
-        "context"
-    )
-    if mode == "disclosure":
-        redactions = redactions.exclude(
-            redaction_type=Redaction.RedactionType.DS_INFORMATION
-        )
+    prefetched = getattr(document, "accepted_redactions_prefetched", None)
+    if prefetched is not None:
+        redactions = prefetched
+        if mode == "disclosure":
+            redactions = [
+                r
+                for r in redactions
+                if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
+            ]
+    else:
+        redactions = document.redactions.filter(
+            is_accepted=True
+        ).select_related("context")
+        if mode == "disclosure":
+            redactions = redactions.exclude(
+                redaction_type=Redaction.RedactionType.DS_INFORMATION
+            )
     sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
 
     tables = document.extracted_tables or []
@@ -677,7 +691,15 @@ def export_case_documents(case_id):
     os.makedirs(disclosure_dir)
 
     export_settings = DocumentExportSettings.get()
-    documents = case.documents.all()
+    documents = case.documents.prefetch_related(
+        Prefetch(
+            "redactions",
+            queryset=Redaction.objects.filter(is_accepted=True).select_related(
+                "context"
+            ),
+            to_attr="accepted_redactions_prefetched",
+        )
+    )
 
     try:
         for doc in documents:
@@ -805,10 +827,7 @@ def delete_original_files_past_threshold():
         case__updated_at__lt=threshold,
     ).exclude(original_file="")
 
-    count = documents.count()
-    for doc in documents:
-        doc.original_file = ""
-        doc.save(update_fields=["original_file"])
+    count = documents.update(original_file="")
 
     logger.info(
         "Deleted original files for %d document(s) (case terminal > %d days).",
