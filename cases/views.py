@@ -59,12 +59,16 @@ class DocumentExportSettingsView(APIView):
 class ExemptionTemplateListView(ListCreateAPIView):
     """
     GET: Returns all active exemption templates for use in the rejection dialog.
-    POST: Creates a new exemption template.
+    POST: Creates a new exemption template (admin only).
     """
 
-    permission_classes = [IsAuthenticated]
     serializer_class = ExemptionTemplateSerializer
     queryset = ExemptionTemplate.objects.filter(is_active=True)
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
 
 class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):

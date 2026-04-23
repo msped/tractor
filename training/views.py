@@ -1,6 +1,6 @@
 import io
+import multiprocessing
 import re
-import threading
 import zipfile
 
 from django_q.models import OrmQ, Schedule
@@ -30,6 +30,17 @@ from .serializers import (
     TrainingDocumentSerializer,
     TrainingRunSerializer,
 )
+
+_MAX_SAMPLE_TEXT_LENGTH = 10_000
+
+
+def _regex_worker(pattern_str, sample_text, queue):
+    compiled = re.compile(pattern_str)
+    matches = [
+        {"start": m.start(), "end": m.end(), "text": m.group()}
+        for m in compiled.finditer(sample_text)
+    ]
+    queue.put(matches)
 
 
 class CustomRecognizerListCreateView(ListCreateAPIView):
@@ -65,26 +76,31 @@ class ValidateRegexView(APIView):
                 {"error": "pattern is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if len(sample_text) > _MAX_SAMPLE_TEXT_LENGTH:
+            return Response(
+                {
+                    "valid": False,
+                    "error": f"sample_text exceeds {_MAX_SAMPLE_TEXT_LENGTH} character limit",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            compiled = re.compile(pattern)
+            re.compile(pattern)
         except re.error as exc:
             return Response(
                 {"valid": False, "error": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = {}
-
-        def _run():
-            result["matches"] = [
-                {"start": m.start(), "end": m.end(), "text": m.group()}
-                for m in compiled.finditer(sample_text)
-            ]
-
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
-        t.join(timeout=5)
-        if t.is_alive():
+        queue = multiprocessing.Queue()
+        p = multiprocessing.Process(
+            target=_regex_worker, args=(pattern, sample_text, queue)
+        )
+        p.start()
+        p.join(timeout=5)
+        if p.is_alive():
+            p.kill()
+            p.join()
             return Response(
                 {
                     "valid": False,
@@ -92,7 +108,8 @@ class ValidateRegexView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response({"valid": True, "matches": result.get("matches", [])})
+        matches = queue.get() if not queue.empty() else []
+        return Response({"valid": True, "matches": matches})
 
 
 class LLMPromptSettingsView(APIView):
