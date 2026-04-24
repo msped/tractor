@@ -335,7 +335,9 @@ def extract_document_structure(path):
                                 for w in raw_widths
                             ]
                     except Exception as e:
-                        logger.debug("Could not compute table column widths: %s", e)
+                        logger.debug(
+                            "Could not compute table column widths: %s", e
+                        )
 
                     tables_data.append(
                         {

@@ -146,7 +146,9 @@ def collect_training_data_detailed(source="both"):
                     )
                     training_docs_used.append(tdoc)
             except Exception as e:
-                logger.error("Could not process training doc %s: %s", tdoc.name, e)
+                logger.error(
+                    "Could not process training doc %s: %s", tdoc.name, e
+                )
 
     if source in ("redactions", "both"):
         completed_docs = Document.objects.filter(

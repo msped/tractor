@@ -521,7 +521,24 @@ class CustomRecognizerViewTests(BaseTrainingAPITestCase):
 
 
 class ValidateRegexViewTests(BaseTrainingAPITestCase):
-    def test_valid_pattern_with_matches(self):
+    @patch("training.views.multiprocessing.Queue")
+    @patch("training.views.multiprocessing.Process")
+    def test_valid_pattern_with_matches(
+        self, mock_process_cls, mock_queue_cls
+    ):
+        expected_matches = [
+            {"start": 5, "end": 9, "text": "1234"},
+            {"start": 13, "end": 17, "text": "5678"},
+        ]
+        mock_q = MagicMock()
+        mock_q.empty.return_value = False
+        mock_q.get.return_value = expected_matches
+        mock_queue_cls.return_value = mock_q
+
+        mock_proc = MagicMock()
+        mock_proc.is_alive.return_value = False
+        mock_process_cls.return_value = mock_proc
+
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.post(
             reverse("validate-regex"),

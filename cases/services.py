@@ -84,7 +84,10 @@ def process_document_and_create_redactions(document_id):
     try:
         document = Document.objects.get(id=document_id)
     except Document.DoesNotExist:
-        logger.error("Document with id %s not found — aborting redaction processing.", document_id)
+        logger.error(
+            "Document with id %s not found — aborting redaction processing.",
+            document_id,
+        )
         return
 
     if document.status != Document.Status.PROCESSING:
@@ -235,7 +238,10 @@ def find_and_flag_matching_text_in_case(redaction_id):
             "document__case"
         ).get(id=redaction_id)
     except Redaction.DoesNotExist:
-        logger.error("Source redaction with id %s not found — aborting case-wide flagging.", redaction_id)
+        logger.error(
+            "Source redaction with id %s not found — aborting case-wide flagging.",
+            redaction_id,
+        )
         return
 
     search_term = source_redaction.text

@@ -761,13 +761,13 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertIn("description", item)
 
     def test_create_exemption_template(self):
-        """POST creates a new active template."""
+        """POST by admin creates a new active template."""
         url = reverse("exemption-template-list")
         data = {
             "name": "S.42 - Legal Privilege",
             "description": "Legal advice exemption",
         }
-        response = self.client.post(url, data)
+        response = self.admin_client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["name"], "S.42 - Legal Privilege")
@@ -780,11 +780,18 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
             ).exists()
         )
 
+    def test_create_forbidden_for_non_admin(self):
+        """POST by a regular user is rejected with 403."""
+        url = reverse("exemption-template-list")
+        response = self.client.post(url, {"name": "S.42 - Legal Privilege"})
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_create_duplicate_name_fails(self):
         """POST with a duplicate name returns 400."""
         url = reverse("exemption-template-list")
         data = {"name": "S.40 - Personal Information"}
-        response = self.client.post(url, data)
+        response = self.admin_client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("name", response.data)
@@ -792,7 +799,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_missing_name_fails(self):
         """POST without a name returns 400."""
         url = reverse("exemption-template-list")
-        response = self.client.post(url, {})
+        response = self.admin_client.post(url, {})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
