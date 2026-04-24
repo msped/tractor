@@ -49,7 +49,7 @@ const providers = [
                 const data = response.data;
                 if (data) return data;
             } catch (error) {
-                console.error(error);
+                console.error("Credentials login failed:", error.response?.data?.detail ?? error.message);
             }
             return null;
         },
@@ -105,6 +105,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     token["refresh_token"] = response.data.refresh;
                     token["ref"] = getCurrentEpochTime() + BACKEND_ACCESS_TOKEN_LIFETIME;
                 } catch (error) {
+                    console.error("Token refresh failed:", error.response?.data?.detail ?? error.message);
                     token["error"] = "RefreshTokenError";
                 }
             }

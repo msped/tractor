@@ -4,6 +4,7 @@ import React from 'react';
 import { Container, Stack, Box, CircularProgress, Button } from '@mui/material';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
+import toast from 'react-hot-toast';
 import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
@@ -22,8 +23,8 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
         ([url, token]) => getCase(caseId, token),
         {
             fallbackData: initialCaseData,
-            // Set up polling interval ONLY if the export is processing
             refreshInterval: (data) => (data?.export_status === 'PROCESSING' ? 5000 : 0),
+            onError: () => toast.error('Failed to refresh case data. Please reload the page.'),
         }
     );
 

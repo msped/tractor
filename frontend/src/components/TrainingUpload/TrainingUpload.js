@@ -36,7 +36,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
             toast.success(`${docxFiles.length} document(s) uploaded successfully.`, { id: toastId });
             if (onUpload) onUpload();
         } catch (error) {
-            toast.error(`An error occurred during upload: ${error.message}`, { id: toastId });
+            toast.error(`An error occurred during upload: ${error?.message ?? 'please try again.'}`, { id: toastId });
         }
     };
 

@@ -144,7 +144,7 @@ def _call_ollama(
             content = json.loads(content)
         redactions_raw = content["redactions"]
     except Exception as exc:
-        logger.warning("Gemma extractor failed: %s", exc)
+        logger.error("Gemma extractor failed: %s", exc)
         return []
 
     logger.debug("Gemma raw redactions: %s", redactions_raw)

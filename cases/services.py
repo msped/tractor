@@ -84,12 +84,14 @@ def process_document_and_create_redactions(document_id):
     try:
         document = Document.objects.get(id=document_id)
     except Document.DoesNotExist:
-        print(f"Document with id {document_id} not found.")
+        logger.error("Document with id %s not found — aborting redaction processing.", document_id)
         return
 
     if document.status != Document.Status.PROCESSING:
-        print(
-            f"Document {document_id} is no longer processing (status: {document.status}). Aborting."
+        logger.warning(
+            "Document %s is no longer processing (status: %s). Aborting.",
+            document_id,
+            document.status,
         )
         return
 
@@ -233,7 +235,7 @@ def find_and_flag_matching_text_in_case(redaction_id):
             "document__case"
         ).get(id=redaction_id)
     except Redaction.DoesNotExist:
-        print(f"Source redaction with id {redaction_id} not found.")
+        logger.error("Source redaction with id %s not found — aborting case-wide flagging.", redaction_id)
         return
 
     search_term = source_redaction.text
@@ -675,6 +677,7 @@ def export_case_documents(case_id):
     try:
         case = Case.objects.get(id=case_id)
     except Case.DoesNotExist:
+        logger.error("Case with id %s not found — export aborted.", case_id)
         return
 
     # Create a temporary directory for this export

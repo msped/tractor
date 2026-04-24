@@ -16,9 +16,9 @@ export function SessionWatcher({ signOut = realSignOut, checkInterval = CHECK_IN
 
     useEffect(() => {
         if (status === "unauthenticated" || session?.error === "RefreshTokenError") {
-            signOut({ redirect: false }).then(() => {
-                router.push("/?error=SessionExpired");
-            });
+            signOut({ redirect: false })
+                .then(() => { router.push("/?error=SessionExpired"); })
+                .catch(err => { console.error("signOut failed during session expiry:", err); });
         }
     }, [session?.error, status, router, signOut]);
 

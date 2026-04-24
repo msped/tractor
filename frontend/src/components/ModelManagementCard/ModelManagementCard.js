@@ -34,9 +34,7 @@ const formatScore = (score) => {
 export const ModelManagementCard = () => {
     const { data: session } = useSession();
     const { data: models, error, isLoading, mutate } = useSWR(
-        // The key: if access_token is null, SWR will not fetch.
         session?.access_token ? ['models', session.access_token] : null,
-        // The fetcher: receives the key as arguments.
         ([key, token]) => getModels(token)
     );
     const [isSubmitting, setIsSubmitting] = useState(null);
