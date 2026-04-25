@@ -12,7 +12,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import UndoIcon from '@mui/icons-material/Undo';
 import RedoIcon from '@mui/icons-material/Redo';
-import { RedactionContextManager } from '../RedactionContextManager.js';
+import { RedactionContextManager } from '../RedactionContextManager';
 
 const REDACTION_TYPE_LABELS = {
     'PII': 'Third-Party PII',
