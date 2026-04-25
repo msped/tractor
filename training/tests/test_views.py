@@ -272,7 +272,7 @@ class RunManualTrainingViewTests(BaseTrainingAPITestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    @patch("training.views.async_task")
+    @patch("django_q.tasks.async_task")
     def test_run_manual_training_triggers_task(self, mock_async_task):
         """POST to run-now triggers the async_task."""
         TrainingDocument.objects.create(
@@ -345,7 +345,7 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
             self.client.get(url).status_code, status.HTTP_403_FORBIDDEN
         )
 
-    @patch("training.views.OrmQ")
+    @patch("django_q.models.OrmQ")
     def test_returns_not_running_when_no_tasks(self, mock_ormq):
         mock_ormq.objects.all.return_value = []
         self.client.force_authenticate(user=self.admin_user)
@@ -353,7 +353,7 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["is_running"])
 
-    @patch("training.views.OrmQ")
+    @patch("django_q.models.OrmQ")
     def test_returns_running_when_task_in_progress(self, mock_ormq):
         mock_entry = MagicMock()
         mock_entry.func.return_value = "training.tasks.train_model"

@@ -3,8 +3,6 @@ import multiprocessing
 import re
 import zipfile
 
-from django_q.models import OrmQ, Schedule
-from django_q.tasks import async_task
 from rest_framework import serializers, status, viewsets
 from rest_framework.generics import (
     ListCreateAPIView,
@@ -213,8 +211,11 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
 
 class TrainingScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
-    queryset = Schedule.objects.filter(func="training.tasks.train_model")
     serializer_class = ScheduleSerializer
+
+    def get_queryset(self):
+        from django_q.models import Schedule
+        return Schedule.objects.filter(func="training.tasks.train_model")
 
 
 class RunManualTrainingView(APIView):
@@ -232,6 +233,7 @@ class RunManualTrainingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        from django_q.tasks import async_task
         async_task(
             "training.tasks.train_model",
             source="training_docs",
@@ -264,6 +266,7 @@ class TrainingStatusView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        from django_q.models import OrmQ
         running = any(
             q.func() == "training.tasks.train_model"
             for q in OrmQ.objects.all()
