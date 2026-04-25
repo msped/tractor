@@ -16,7 +16,7 @@ class APIKeyListCreateViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin = User.objects.create_user(
-            username="admin", password="password", is_staff=True
+            username="admin", password="password", is_superuser=True
         )
         self.superuser = User.objects.create_user(
             username="superuser", password="password", is_superuser=True
@@ -120,7 +120,7 @@ class APIKeyRevokeViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin = User.objects.create_user(
-            username="admin", password="password", is_staff=True
+            username="admin", password="password", is_superuser=True
         )
         self.regular_user = User.objects.create_user(
             username="regular", password="password", is_staff=False
@@ -166,7 +166,7 @@ class APIKeyAuthenticationTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin = User.objects.create_user(
-            username="admin", password="password", is_staff=True
+            username="admin", password="password", is_superuser=True
         )
         self.service_user = User.objects.get(username="api_service")
         self.instance, self.raw_key = APIKey.generate(

@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_q.models import OrmQ
 from django_q.tasks import async_task
@@ -399,8 +399,7 @@ class BulkByTextRedactionView(APIView):
             document__case_id=case_id,
             text=data["text"],
             redaction_type=data["redaction_type"],
-            is_accepted=False,
-        ).filter(Q(justification__isnull=True) | Q(justification=""))
+        ).pending()
 
         with transaction.atomic():
             if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:

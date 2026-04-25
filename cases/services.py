@@ -181,10 +181,7 @@ def _apply_existing_case_decisions(document):
     """
     case = document.case
 
-    # Pending = is_accepted=False with no justification (mirrors frontend filter)
-    new_pending = document.redactions.filter(is_accepted=False).filter(
-        Q(justification__isnull=True) | Q(justification="")
-    )
+    new_pending = document.redactions.pending()
 
     pairs = list(new_pending.values_list("text", "redaction_type").distinct())
 
@@ -196,10 +193,7 @@ def _apply_existing_case_decisions(document):
                 redaction_type=redaction_type,
             )
             .exclude(document=document)
-            .exclude(
-                Q(is_accepted=False)
-                & (Q(justification__isnull=True) | Q(justification=""))
-            )
+            .decided()
         )
 
         counts = existing_decided.aggregate(
