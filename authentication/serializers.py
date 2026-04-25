@@ -29,9 +29,22 @@ class APIKeySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = APIKey
-        fields = ["id", "description", "created_at", "created_by_username"]
-        read_only_fields = ["id", "created_at", "created_by_username"]
+        fields = [
+            "id",
+            "description",
+            "created_at",
+            "created_by_username",
+            "expires_at",
+            "last_used_at",
+        ]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "created_by_username",
+            "last_used_at",
+        ]
 
 
 class APIKeyCreateSerializer(serializers.Serializer):
     description = serializers.CharField(max_length=255)
+    expires_at = serializers.DateField(required=False, allow_null=True)

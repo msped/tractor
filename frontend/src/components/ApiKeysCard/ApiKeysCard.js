@@ -34,26 +34,31 @@ export const ApiKeysCard = () => {
     );
 
     const [description, setDescription] = useState('');
+    const [expiresAt, setExpiresAt] = useState('');
     const [isAdding, setIsAdding] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newRawKey, setNewRawKey] = useState(null);
     const [confirmRevoke, setConfirmRevoke] = useState(null);
     const [manageOpen, setManageOpen] = useState(false);
 
+    const today = new Date().toISOString().split('T')[0];
+
     const handleCloseManage = () => {
         setManageOpen(false);
         setNewRawKey(null);
         setIsAdding(false);
         setDescription('');
+        setExpiresAt('');
     };
 
     const handleGenerate = async () => {
         if (!description.trim()) return;
         setIsSubmitting(true);
         try {
-            const result = await createApiKey(description.trim(), session?.access_token);
+            const result = await createApiKey(description.trim(), session?.access_token, expiresAt || null);
             setNewRawKey(result.key);
             setDescription('');
+            setExpiresAt('');
             setIsAdding(false);
             await mutate();
         } catch (e) {
@@ -147,7 +152,7 @@ export const ApiKeysCard = () => {
                     {isAdding && (
                         <Box
                             component="form"
-                            sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}
+                            sx={{ display: 'flex', flexDirection: 'column', gap: 3, mb: 2 }}
                             onSubmit={(e) => { e.preventDefault(); handleGenerate(); }}
                         >
                             <TextField
@@ -161,6 +166,21 @@ export const ApiKeysCard = () => {
                                 helperText="e.g. 'Case management integration'"
                                 slotProps={{ htmlInput: { 'aria-label': 'key description' } }}
                             />
+                            <TextField
+                                label="Expiry date (optional)"
+                                type="date"
+                                value={expiresAt}
+                                onChange={(e) => setExpiresAt(e.target.value)}
+                                size="small"
+                                fullWidth
+                                slotProps={{
+                                    htmlInput: {
+                                        min: new Date().toISOString().split('T')[0],
+                                        'aria-label': 'expiry date',
+                                    },
+                                    inputLabel: { shrink: true },
+                                }}
+                            />
                             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
                                 <Button
                                     type="submit"
@@ -169,7 +189,7 @@ export const ApiKeysCard = () => {
                                 >
                                     {isSubmitting ? <CircularProgress size={20} color="inherit" /> : 'Generate'}
                                 </Button>
-                                <Button onClick={() => { setIsAdding(false); setDescription(''); }}>
+                                <Button onClick={() => { setIsAdding(false); setDescription(''); setExpiresAt(''); }}>
                                     Cancel
                                 </Button>
                             </Box>
@@ -196,6 +216,18 @@ export const ApiKeysCard = () => {
                                                     Created {new Date(key.created_at).toLocaleDateString()}
                                                     {key.created_by_username && ` by ${key.created_by_username}`}
                                                 </Typography>
+                                                {key.expires_at && (
+                                                    <Typography
+                                                        variant="caption"
+                                                        display="block"
+                                                        color={new Date(key.expires_at) < new Date() ? 'error' : 'text.secondary'}
+                                                        aria-label={`expiry ${key.description}`}
+                                                    >
+                                                        {new Date(key.expires_at) < new Date()
+                                                            ? `Expired ${new Date(key.expires_at).toLocaleDateString()}`
+                                                            : `Expires ${new Date(key.expires_at).toLocaleDateString()}`}
+                                                    </Typography>
+                                                )}
                                             </Box>
                                             <IconButton
                                                 aria-label={`revoke ${key.description}`}

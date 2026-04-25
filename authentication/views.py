@@ -1,3 +1,6 @@
+from datetime import datetime, time
+from datetime import timezone as dt_timezone
+
 from allauth.socialaccount.providers.microsoft.views import (
     MicrosoftGraphOAuth2Adapter,
 )
@@ -43,11 +46,21 @@ class APIKeyListCreateView(APIView):
         serializer = APIKeyCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        expires_date = serializer.validated_data.get("expires_at")
+        expires_at = (
+            datetime.combine(
+                expires_date, time(23, 59, 59), tzinfo=dt_timezone.utc
+            )
+            if expires_date
+            else None
+        )
+
         api_service_user = User.objects.get(username="api_service")
         instance, raw_key = APIKey.generate(
             description=serializer.validated_data["description"],
             created_by=request.user,
             user=api_service_user,
+            expires_at=expires_at,
         )
         return Response(
             {
