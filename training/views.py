@@ -3,6 +3,7 @@ import multiprocessing
 import re
 import zipfile
 
+import filetype
 from rest_framework import serializers, status, viewsets
 from rest_framework.generics import (
     ListCreateAPIView,
@@ -196,9 +197,16 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
-        if not uploaded_file.name.endswith(".docx"):
+        if not uploaded_file.name.lower().endswith(".docx"):
             raise serializers.ValidationError(
                 "Only .docx files are supported."
+            )
+        header = uploaded_file.read(261)
+        uploaded_file.seek(0)
+        kind = filetype.guess(header)
+        if kind is None or kind.mime != "application/zip":
+            raise serializers.ValidationError(
+                "File content does not match a valid .docx file."
             )
         content = uploaded_file.read()
         uploaded_file.seek(0)
@@ -215,6 +223,7 @@ class TrainingScheduleViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         from django_q.models import Schedule
+
         return Schedule.objects.filter(func="training.tasks.train_model")
 
 
@@ -234,6 +243,7 @@ class RunManualTrainingView(APIView):
             )
 
         from django_q.tasks import async_task
+
         async_task(
             "training.tasks.train_model",
             source="training_docs",
@@ -267,6 +277,7 @@ class TrainingStatusView(APIView):
 
     def get(self, request):
         from django_q.models import OrmQ
+
         running = any(
             q.func() == "training.tasks.train_model"
             for q in OrmQ.objects.all()

@@ -1,5 +1,6 @@
 import os
 
+import filetype
 from rest_framework import serializers
 
 from .models import (
@@ -35,6 +36,15 @@ class CaseSerializer(serializers.ModelSerializer):
         ]
 
 
+_ALLOWED_EXTENSIONS = {".docx", ".pdf"}
+# DOCX is a ZIP container — filetype identifies it as application/zip
+_MIME_TO_EXT = {
+    "application/pdf": ".pdf",
+    "application/zip": ".docx",
+}
+_MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+
+
 class DocumentSerializer(serializers.ModelSerializer):
     case = serializers.PrimaryKeyRelatedField(
         queryset=Case.objects.all(), write_only=True
@@ -56,6 +66,30 @@ class DocumentSerializer(serializers.ModelSerializer):
         Returns a list of redactions for the document.
         """
         return RedactionSerializer(obj.redactions.all(), many=True).data
+
+    def validate_original_file(self, file):
+        ext = os.path.splitext(file.name)[1].lower()
+        if ext == ".doc":
+            raise serializers.ValidationError(
+                "Legacy .doc files are not supported. "
+                "Please save the document as .docx or PDF and re-upload."
+            )
+        if ext not in _ALLOWED_EXTENSIONS:
+            raise serializers.ValidationError(
+                f"Unsupported file type '{ext}'. Accepted formats: .docx, .pdf"
+            )
+        if file.size > _MAX_UPLOAD_BYTES:
+            raise serializers.ValidationError(
+                "File exceeds the 100 MB size limit."
+            )
+        header = file.read(261)
+        file.seek(0)
+        kind = filetype.guess(header)
+        if kind is None or _MIME_TO_EXT.get(kind.mime) != ext:
+            raise serializers.ValidationError(
+                "File content does not match the declared file type."
+            )
+        return file
 
     class Meta:
         model = Document
@@ -84,20 +118,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        """
-        Override to handle file uploads and set the filename and file_type.
-        """
         original_file = validated_data.pop("original_file")
-        ext = os.path.splitext(original_file.name)[1].lower()
-        if ext == ".doc":
-            raise serializers.ValidationError(
-                {
-                    "detail": (
-                        "Legacy .doc files are not supported. "
-                        "Please save the document as .docx or PDF and re-upload."
-                    )
-                }
-            )
         instance = Document.objects.create(
             original_file=original_file, **validated_data
         )

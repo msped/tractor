@@ -1,6 +1,8 @@
+import io
 import os
 import shutil
 import tempfile
+import zipfile
 from datetime import date
 
 from django.contrib.auth import get_user_model
@@ -32,6 +34,17 @@ User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
 
 
+def _make_docx_bytes() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("[Content_Types].xml", "")
+    return buf.getvalue()
+
+
+def _make_pdf_bytes() -> bytes:
+    return b"%PDF-1.4 minimal"
+
+
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class SerializerTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
@@ -46,7 +59,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
             created_by=self.user,
         )
         self.test_file = SimpleUploadedFile(
-            "document.pdf", b"This is a test file.", "application/pdf"
+            "document.pdf", _make_pdf_bytes(), "application/pdf"
         )
         self.document = Document.objects.create(
             case=self.case,
@@ -110,7 +123,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
 
     def test_document_serializer_create(self):
         """Test deserialization and creation of a Document instance."""
-        new_file = SimpleUploadedFile("report.docx", b"Another file.")
+        new_file = SimpleUploadedFile("report.docx", _make_docx_bytes())
         data = {"case": self.case.pk, "original_file": new_file}
 
         serializer = DocumentSerializer(data=data)
@@ -125,20 +138,36 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(os.path.exists(instance.original_file.path))
 
     def test_document_serializer_rejects_doc_files(self):
-        """Test that legacy .doc files are rejected with a validation error."""
-        from rest_framework.exceptions import ValidationError
-
+        """Test that legacy .doc files are rejected during field validation."""
         doc_file = SimpleUploadedFile("statement.doc", b"binary content")
         data = {"case": self.case.pk, "original_file": doc_file}
 
         serializer = DocumentSerializer(data=data)
-        self.assertTrue(serializer.is_valid(raise_exception=True))
-        with self.assertRaises(ValidationError) as ctx:
-            serializer.save()
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("original_file", serializer.errors)
         self.assertIn(
             "Legacy .doc files are not supported",
-            str(ctx.exception.detail),
+            str(serializer.errors["original_file"]),
         )
+
+    def test_document_serializer_rejects_unsupported_extension(self):
+        """Test that non-.docx/.pdf extensions are rejected."""
+        txt_file = SimpleUploadedFile("report.txt", b"content")
+        data = {"case": self.case.pk, "original_file": txt_file}
+
+        serializer = DocumentSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("original_file", serializer.errors)
+
+    def test_document_serializer_rejects_mismatched_mime(self):
+        """Test that a file whose content doesn't match its extension is rejected."""
+        # PDF bytes renamed to .docx — MIME check should catch this
+        bad_file = SimpleUploadedFile("report.docx", _make_pdf_bytes())
+        data = {"case": self.case.pk, "original_file": bad_file}
+
+        serializer = DocumentSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("original_file", serializer.errors)
 
     def test_document_serializer_update_status(self):
         """Test updating a Document's status via the serializer."""

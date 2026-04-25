@@ -1,7 +1,9 @@
+import io
 import os
 import shutil
 import tempfile
 import uuid
+import zipfile
 from datetime import date
 from unittest.mock import patch
 
@@ -24,6 +26,13 @@ from ..models import (
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
+
+
+def _make_docx_bytes() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("[Content_Types].xml", "")
+    return buf.getvalue()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
@@ -174,8 +183,9 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_multiple_documents(self):
         """Test uploading multiple documents to a case."""
         url = reverse("document-list-create", kwargs={"case_id": self.case.id})
-        file1 = SimpleUploadedFile("file1.txt", b"content1")
-        file2 = SimpleUploadedFile("file2.txt", b"content2")
+        docx_bytes = _make_docx_bytes()
+        file1 = SimpleUploadedFile("file1.docx", docx_bytes)
+        file2 = SimpleUploadedFile("file2.docx", docx_bytes)
 
         # Note: In tests, getlist works on a key with multiple values
         data = {"original_file": [file1, file2]}
@@ -185,7 +195,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         # 1 existing + 2 new
         self.assertEqual(self.case.documents.count(), 3)
         self.assertEqual(len(response.data), 2)
-        self.assertEqual(response.data[0]["filename"], "file1.txt")
+        self.assertEqual(response.data[0]["filename"], "file1.docx")
 
     def test_create_document_invalid_data(self):
         """

@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 import zipfile
 from datetime import timedelta
 from html import escape as html_escape
@@ -680,10 +681,9 @@ def export_case_documents(case_id):
         logger.error("Case with id %s not found — export aborted.", case_id)
         return
 
-    # Create a temporary directory for this export
-    temp_export_dir = f"/tmp/export_{case_id}"
-    if os.path.exists(temp_export_dir):
-        shutil.rmtree(temp_export_dir)
+    # Create an isolated temporary directory for this export
+    temp_parent = tempfile.mkdtemp(prefix=f"export_{case_id}_")
+    temp_export_dir = os.path.join(temp_parent, "export")
 
     # Define and create the required folder structure
     unedited_dir = os.path.join(temp_export_dir, "unedited")
@@ -748,7 +748,7 @@ def export_case_documents(case_id):
                 ) as f:
                     f.write(disclosure_pdf_content)
 
-        zip_file_path = f"{temp_export_dir}.zip"
+        zip_file_path = os.path.join(temp_parent, "package.zip")
         with zipfile.ZipFile(zip_file_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             for root, _, files in os.walk(temp_export_dir):
                 for file in files:
@@ -768,11 +768,11 @@ def export_case_documents(case_id):
         case.export_status = Case.ExportStatus.COMPLETED
         case.save(update_fields=["export_file", "export_status"])
 
-        shutil.rmtree(temp_export_dir)
-        os.remove(zip_file_path)
+        shutil.rmtree(temp_parent)
 
     except Exception:
         logging.exception("Export failed for case %s", case_id)
+        shutil.rmtree(temp_parent, ignore_errors=True)
         case.export_status = Case.ExportStatus.ERROR
         case.save(update_fields=["export_status"])
 
