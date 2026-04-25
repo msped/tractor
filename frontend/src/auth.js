@@ -25,8 +25,8 @@ const SIGN_IN_HANDLERS = {
             )
             account['meta'] = response.data;
             return true;
-        } catch (error) {
-            console.error("Sign in handler error: ", error);
+        } catch {
+            console.error("Microsoft sign-in failed");
             return false
         }
     },
@@ -48,8 +48,8 @@ const providers = [
                 );
                 const data = response.data;
                 if (data) return data;
-            } catch (error) {
-                console.error("Credentials login failed:", error.response?.data?.detail ?? error.message);
+            } catch {
+                console.error("Credentials login failed");
             }
             return null;
         },
@@ -104,8 +104,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     token["access_token"] = response.data.access;
                     token["refresh_token"] = response.data.refresh;
                     token["ref"] = getCurrentEpochTime() + BACKEND_ACCESS_TOKEN_LIFETIME;
-                } catch (error) {
-                    console.error("Token refresh failed:", error.response?.data?.detail ?? error.message);
+                } catch {
+                    console.error("Token refresh failed");
                     token["error"] = "RefreshTokenError";
                 }
             }
