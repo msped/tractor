@@ -14,7 +14,8 @@ export function useDocumentControls({ accessToken, undo, redo, clearHistory, cur
     const [sidebarWidth, setSidebarWidth] = useState(() => {
         if (typeof window !== 'undefined') {
             const saved = localStorage.getItem('sidebarWidth');
-            return saved ? parseInt(saved, 10) : 450;
+            const parsed = saved ? parseInt(saved, 10) : NaN;
+            return Number.isNaN(parsed) ? 450 : parsed;
         }
         return 450;
     });
