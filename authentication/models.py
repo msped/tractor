@@ -30,6 +30,16 @@ class APIKey(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Key expires at this time. Leave blank for no expiry.",
+    )
+    last_used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time this key was used to authenticate.",
+    )
 
     class Meta:
         ordering = ["-created_at"]

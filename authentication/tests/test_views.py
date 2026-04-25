@@ -1,7 +1,9 @@
 import hashlib
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
@@ -228,3 +230,30 @@ class APIKeyAuthenticationTests(NetworkBlockerMixin, APITestCase):
             HTTP_AUTHORIZATION=f"Api-Key {self.raw_key}",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_expired_api_key_returns_401(self):
+        self.instance.expires_at = timezone.now() - timedelta(seconds=1)
+        self.instance.save()
+        response = self.client.get(
+            self.cases_url,
+            HTTP_AUTHORIZATION=f"Api-Key {self.raw_key}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_non_expired_api_key_is_accepted(self):
+        self.instance.expires_at = timezone.now() + timedelta(days=1)
+        self.instance.save()
+        response = self.client.get(
+            self.cases_url,
+            HTTP_AUTHORIZATION=f"Api-Key {self.raw_key}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_successful_auth_updates_last_used_at(self):
+        self.assertIsNone(self.instance.last_used_at)
+        self.client.get(
+            self.cases_url,
+            HTTP_AUTHORIZATION=f"Api-Key {self.raw_key}",
+        )
+        self.instance.refresh_from_db()
+        self.assertIsNotNone(self.instance.last_used_at)
