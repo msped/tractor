@@ -16,12 +16,16 @@ const mockKeys = [
         description: 'Case management integration',
         created_at: '2026-01-15T10:00:00Z',
         created_by_username: 'admin',
+        expires_at: null,
+        last_used_at: null,
     },
     {
         id: 2,
         description: 'Custom workflow tool',
         created_at: '2026-02-20T14:30:00Z',
         created_by_username: 'admin',
+        expires_at: '2099-12-31T23:59:59Z',
+        last_used_at: null,
     },
 ];
 
@@ -195,5 +199,58 @@ describe('<ApiKeysCard />', () => {
         cy.get('button[type="submit"]').click();
         cy.wait('@createFail');
         cy.get('input[aria-label="key description"]').should('exist');
+    });
+
+    it('shows the expiry date field in the generate form', () => {
+        cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
+        cy.wait('@getKeys');
+        cy.contains('button', 'Manage').click();
+        cy.contains('button', 'Generate Key').click();
+        cy.get('input[aria-label="expiry date"]').should('exist');
+    });
+
+    it('sends expires_at when an expiry date is set', () => {
+        cy.intercept('POST', '**/auth/api-keys', (req) => {
+            expect(req.body.expires_at).to.equal('2099-06-30');
+            req.reply({ statusCode: 201, body: { id: 3, description: 'Test', created_at: '2026-04-25T10:00:00Z', key: 'abc123', expires_at: '2099-06-30T23:59:59Z', last_used_at: null } });
+        }).as('createKey');
+
+        cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
+        cy.wait('@getKeys');
+        cy.contains('button', 'Manage').click();
+        cy.contains('button', 'Generate Key').click();
+        cy.get('input[aria-label="key description"]').type('Test');
+        cy.get('input[aria-label="expiry date"]').type('2099-06-30');
+        cy.get('button[type="submit"]').click();
+        cy.wait('@createKey');
+    });
+
+    it('does not send expires_at when expiry date is left blank', () => {
+        cy.intercept('POST', '**/auth/api-keys', (req) => {
+            expect(req.body.expires_at).to.be.undefined;
+            req.reply({ statusCode: 201, body: { id: 3, description: 'Test', created_at: '2026-04-25T10:00:00Z', key: 'abc123', expires_at: null, last_used_at: null } });
+        }).as('createKey');
+
+        cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
+        cy.wait('@getKeys');
+        cy.contains('button', 'Manage').click();
+        cy.contains('button', 'Generate Key').click();
+        cy.get('input[aria-label="key description"]').type('Test');
+        cy.get('button[type="submit"]').click();
+        cy.wait('@createKey');
+    });
+
+    it('displays the expiry date for keys that have one', () => {
+        cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
+        cy.wait('@getKeys');
+        cy.contains('button', 'Manage').click();
+        cy.get('[aria-label="expiry Custom workflow tool"]').should('contain.text', 'Expires');
+    });
+
+    it('does not show expiry label for keys with no expiry', () => {
+        cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
+        cy.wait('@getKeys');
+        cy.contains('button', 'Manage').click();
+        cy.get('[aria-label="expiry Case management integration"]').should('not.exist');
     });
 });

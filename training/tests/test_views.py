@@ -1,5 +1,7 @@
+import io
 import shutil
 import tempfile
+import zipfile
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -38,11 +40,14 @@ class BaseTrainingAPITestCase(NetworkBlockerMixin, APITestCase):
             name="test_model_v1", path="/path/to/model_v1"
         )
         TrainingRun.objects.create(model=self.model, source="redactions")
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            zf.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types/>')
+        zip_buffer.seek(0)
         self.docx_file = SimpleUploadedFile(
             "test.docx",
-            b"file_content",
-            "application/vnd.openxmlformats-officedocument\
-                wordprocessingml.document",
+            zip_buffer.read(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
 
     def tearDown(self):
@@ -267,7 +272,7 @@ class RunManualTrainingViewTests(BaseTrainingAPITestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    @patch("training.views.async_task")
+    @patch("django_q.tasks.async_task")
     def test_run_manual_training_triggers_task(self, mock_async_task):
         """POST to run-now triggers the async_task."""
         TrainingDocument.objects.create(
@@ -340,7 +345,7 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
             self.client.get(url).status_code, status.HTTP_403_FORBIDDEN
         )
 
-    @patch("training.views.OrmQ")
+    @patch("django_q.models.OrmQ")
     def test_returns_not_running_when_no_tasks(self, mock_ormq):
         mock_ormq.objects.all.return_value = []
         self.client.force_authenticate(user=self.admin_user)
@@ -348,7 +353,7 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["is_running"])
 
-    @patch("training.views.OrmQ")
+    @patch("django_q.models.OrmQ")
     def test_returns_running_when_task_in_progress(self, mock_ormq):
         mock_entry = MagicMock()
         mock_entry.func.return_value = "training.tasks.train_model"
@@ -516,7 +521,24 @@ class CustomRecognizerViewTests(BaseTrainingAPITestCase):
 
 
 class ValidateRegexViewTests(BaseTrainingAPITestCase):
-    def test_valid_pattern_with_matches(self):
+    @patch("training.views.multiprocessing.Queue")
+    @patch("training.views.multiprocessing.Process")
+    def test_valid_pattern_with_matches(
+        self, mock_process_cls, mock_queue_cls
+    ):
+        expected_matches = [
+            {"start": 5, "end": 9, "text": "1234"},
+            {"start": 13, "end": 17, "text": "5678"},
+        ]
+        mock_q = MagicMock()
+        mock_q.empty.return_value = False
+        mock_q.get.return_value = expected_matches
+        mock_queue_cls.return_value = mock_q
+
+        mock_proc = MagicMock()
+        mock_proc.is_alive.return_value = False
+        mock_process_cls.return_value = mock_proc
+
         self.client.force_authenticate(user=self.regular_user)
         response = self.client.post(
             reverse("validate-regex"),

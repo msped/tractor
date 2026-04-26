@@ -248,7 +248,8 @@ def extract_document_structure(path):
 
     try:
         doc = Document(path)
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to parse DOCX at %s: %s", path, e)
         return None, None
 
     elements = []
@@ -333,8 +334,10 @@ def extract_document_structure(path):
                                 round(w / total * 100, 2) if w else None
                                 for w in raw_widths
                             ]
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(
+                            "Could not compute table column widths: %s", e
+                        )
 
                     tables_data.append(
                         {
@@ -378,7 +381,8 @@ def _extract_text_from_pdf(path):
             if page_text:
                 parts.append(page_text)
         return "\n\n".join(parts)
-    except Exception:
+    except Exception as e:
+        logger.error("Failed to extract text from PDF %s: %s", path, e)
         return ""
 
 

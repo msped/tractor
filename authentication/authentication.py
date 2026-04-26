@@ -1,5 +1,6 @@
 import hashlib
 
+from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission
@@ -14,7 +15,7 @@ class IsAdminOrSuperuser(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and (request.user.is_staff or request.user.is_superuser)
+            and request.user.is_superuser
         )
 
 
@@ -41,6 +42,13 @@ class APIKeyAuthentication(BaseAuthentication):
             )
         except APIKey.DoesNotExist:
             raise AuthenticationFailed("Invalid or revoked API key.")
+
+        if api_key.expires_at and api_key.expires_at < timezone.now():
+            raise AuthenticationFailed("API key has expired.")
+
+        APIKey.objects.filter(pk=api_key.pk).update(
+            last_used_at=timezone.now()
+        )
 
         return (api_key.user, api_key)
 

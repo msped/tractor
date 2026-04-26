@@ -1,7 +1,9 @@
+import io
 import os
 import shutil
 import tempfile
 import uuid
+import zipfile
 from datetime import date
 from unittest.mock import patch
 
@@ -24,6 +26,13 @@ from ..models import (
 
 User = get_user_model()
 MEDIA_ROOT = tempfile.mkdtemp()
+
+
+def _make_docx_bytes() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("[Content_Types].xml", "")
+    return buf.getvalue()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
@@ -174,8 +183,9 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_multiple_documents(self):
         """Test uploading multiple documents to a case."""
         url = reverse("document-list-create", kwargs={"case_id": self.case.id})
-        file1 = SimpleUploadedFile("file1.txt", b"content1")
-        file2 = SimpleUploadedFile("file2.txt", b"content2")
+        docx_bytes = _make_docx_bytes()
+        file1 = SimpleUploadedFile("file1.docx", docx_bytes)
+        file2 = SimpleUploadedFile("file2.docx", docx_bytes)
 
         # Note: In tests, getlist works on a key with multiple values
         data = {"original_file": [file1, file2]}
@@ -185,7 +195,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         # 1 existing + 2 new
         self.assertEqual(self.case.documents.count(), 3)
         self.assertEqual(len(response.data), 2)
-        self.assertEqual(response.data[0]["filename"], "file1.txt")
+        self.assertEqual(response.data[0]["filename"], "file1.docx")
 
     def test_create_document_invalid_data(self):
         """
@@ -726,6 +736,11 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
             username="exemptuser", password="password"
         )
         self.client.force_authenticate(user=self.user)
+        admin = User.objects.create_superuser(
+            username="exemptadmin", password="password"
+        )
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(user=admin)
 
         self.active = ExemptionTemplate.objects.create(
             name="S.40 - Personal Information", is_active=True
@@ -756,13 +771,13 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertIn("description", item)
 
     def test_create_exemption_template(self):
-        """POST creates a new active template."""
+        """POST by admin creates a new active template."""
         url = reverse("exemption-template-list")
         data = {
             "name": "S.42 - Legal Privilege",
             "description": "Legal advice exemption",
         }
-        response = self.client.post(url, data)
+        response = self.admin_client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["name"], "S.42 - Legal Privilege")
@@ -775,11 +790,18 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
             ).exists()
         )
 
+    def test_create_forbidden_for_non_admin(self):
+        """POST by a regular user is rejected with 403."""
+        url = reverse("exemption-template-list")
+        response = self.client.post(url, {"name": "S.42 - Legal Privilege"})
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_create_duplicate_name_fails(self):
         """POST with a duplicate name returns 400."""
         url = reverse("exemption-template-list")
         data = {"name": "S.40 - Personal Information"}
-        response = self.client.post(url, data)
+        response = self.admin_client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("name", response.data)
@@ -787,26 +809,34 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_missing_name_fails(self):
         """POST without a name returns 400."""
         url = reverse("exemption-template-list")
-        response = self.client.post(url, {})
+        response = self.admin_client.post(url, {})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_delete_exemption_template(self):
-        """DELETE removes the template."""
+        """DELETE removes the template (admin only)."""
         url = reverse(
             "exemption-template-detail", kwargs={"pk": self.active.pk}
         )
-        response = self.client.delete(url)
+        response = self.admin_client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(
             ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
         )
 
+    def test_delete_exemption_template_forbidden_for_non_admin(self):
+        """DELETE is forbidden for non-admin users."""
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_delete_nonexistent_template_returns_404(self):
         """DELETE on a non-existent pk returns 404."""
         url = reverse("exemption-template-detail", kwargs={"pk": 99999})
-        response = self.client.delete(url)
+        response = self.admin_client.delete(url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 

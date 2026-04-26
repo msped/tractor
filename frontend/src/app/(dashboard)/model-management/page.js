@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Typography, Grid, Card, CardContent, Button, Box, Container } from "@mui/material";
 import { ModelManagementCard } from '@/components/ModelManagementCard';
-import { ScheduledTrainingCard } from '@/components/ScheduleTrainingCard';
+import { ScheduledTrainingCard } from '@/components/ScheduledTrainingCard';
 import { TrainingRunList } from '@/components/TrainingRunList';
 import { TrainingStatusBanner } from '@/components/TrainingStatusBanner';
 import { getTrainingSchedules, getTrainingRuns } from '@/services/trainingService';

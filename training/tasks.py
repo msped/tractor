@@ -1,3 +1,4 @@
+import logging
 import random
 import shutil
 from pathlib import Path
@@ -18,6 +19,8 @@ from .models import (
     TrainingRunCaseDoc,
     TrainingRunTrainingDoc,
 )
+
+logger = logging.getLogger(__name__)
 
 HIGHLIGHT_COLOR_TO_LABEL = {
     "BRIGHT_GREEN": "THIRD_PARTY",
@@ -143,7 +146,9 @@ def collect_training_data_detailed(source="both"):
                     )
                     training_docs_used.append(tdoc)
             except Exception as e:
-                print(f"Could not process training doc {tdoc.name}: {e}")
+                logger.error(
+                    "Could not process training doc %s: %s", tdoc.name, e
+                )
 
     if source in ("redactions", "both"):
         completed_docs = Document.objects.filter(
@@ -321,7 +326,7 @@ def train_model(source="redactions", user=None):
         collect_training_data_detailed(source)
     )
 
-    if len(train_data) < 25:
+    if len(train_data) < 75:
         print(
             f"Not enough training data ({len(train_data)} examples). Aborting."
         )

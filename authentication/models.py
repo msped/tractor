@@ -30,6 +30,16 @@ class APIKey(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Key expires at this time. Leave blank for no expiry.",
+    )
+    last_used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time this key was used to authenticate.",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -38,7 +48,7 @@ class APIKey(models.Model):
         return f"{self.description} (created {self.created_at:%Y-%m-%d})"
 
     @classmethod
-    def generate(cls, description, created_by, user):
+    def generate(cls, description, created_by, user, expires_at=None):
         """
         Creates and saves a new APIKey. Returns (instance, raw_key).
         raw_key is shown once and never stored.
@@ -50,5 +60,6 @@ class APIKey(models.Model):
             description=description,
             key_hash=key_hash,
             created_by=created_by,
+            expires_at=expires_at,
         )
         return instance, raw

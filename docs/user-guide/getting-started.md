@@ -35,7 +35,7 @@ You will requested to provide information relating to the case:
 - Data Subject Name
 - Data Subject Date of Birth
 
-The case reference can be upto a 6 digit number, however can be changed to suit to your needs by modifying `case_reference` field on `cases/models.py` in the `Cases class`.
+The case reference can be up to 6 characters (alphanumeric), however can be changed to suit to your needs by modifying `case_reference` field on `cases/models.py` in the `Cases class`.
 
 Once these fields are complete, you can click the button 'Create Case' which will redirect you the case page.
 
@@ -43,7 +43,7 @@ Once these fields are complete, you can click the button 'Create Case' which wil
 
 After navigating to the cases page of the case you would like to upload documents to, underneath the Case information you will see a section for the case documents.
 
-To upload new documents, click on 'Upload Document' on the top right of this section. A modal will open and give you the option to either drang and drop the files into the area, or clicking in the area will open the file browser to select files.
+To upload new documents, click on 'Upload Document' on the top right of this section. A modal will open and give you the option to either drag and drop the files into the area, or clicking in the area will open the file browser to select files.
 
 The current supported documents are docx and PDF.
 

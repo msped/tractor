@@ -31,6 +31,9 @@ cp .env.example .env
 # Run migrations
 python manage.py migrate
 
+# Download the GLiNER model (required on first setup)
+python manage.py download_model
+
 # Start the development server
 python manage.py runserver
 ```

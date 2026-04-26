@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from urllib.parse import urlparse
 
 import requests
 from django.conf import settings
@@ -8,6 +9,23 @@ from django.conf import settings
 from training.models import LLMPromptSettings
 
 logger = logging.getLogger(__name__)
+
+# Hostnames that are permitted as OLLAMA_HOST targets.
+# Prevents SSRF if the env var is misconfigured or tampered with.
+_OLLAMA_ALLOWED_HOSTS = {"localhost", "127.0.0.1", "ollama", "::1"}
+
+
+def _validated_ollama_url(path: str) -> str:
+    host = settings.OLLAMA_HOST
+    parsed = urlparse(host)
+    if parsed.hostname not in _OLLAMA_ALLOWED_HOSTS:
+        raise ValueError(
+            f"OLLAMA_HOST '{parsed.hostname}' is not in the allowlist "
+            f"{_OLLAMA_ALLOWED_HOSTS}. Update _OLLAMA_ALLOWED_HOSTS if this "
+            "host is intentional."
+        )
+    return f"{host}{path}"
+
 
 REDACTION_SCHEMA = {
     "type": "object",
@@ -124,7 +142,7 @@ def _call_ollama(
 
     try:
         response = requests.post(
-            f"{settings.OLLAMA_HOST}/api/chat",
+            _validated_ollama_url("/api/chat"),
             json={
                 "model": settings.OLLAMA_MODEL,
                 "stream": False,
@@ -134,7 +152,7 @@ def _call_ollama(
                     {"role": "user", "content": user_message},
                 ],
             },
-            timeout=120,
+            timeout=(10, 120),  # (connect, read)
         )
         response.raise_for_status()
         content = response.json()["message"]["content"]
@@ -144,7 +162,7 @@ def _call_ollama(
             content = json.loads(content)
         redactions_raw = content["redactions"]
     except Exception as exc:
-        logger.warning("Gemma extractor failed: %s", exc)
+        logger.error("Gemma extractor failed: %s", exc)
         return []
 
     logger.debug("Gemma raw redactions: %s", redactions_raw)

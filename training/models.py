@@ -4,6 +4,22 @@ from auditlog.registry import auditlog
 from django.db import models
 
 
+class SingletonModel(models.Model):
+    """Abstract base for settings models that should have exactly one row (pk=1)."""
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class Model(models.Model):
     """
     Represents a trained SpanCat model version.
@@ -203,18 +219,9 @@ Return verbatim passages from the document. Prefer longer spans that capture the
 context of the disclosure rather than isolated words."""
 
 
-class LLMPromptSettings(models.Model):
+class LLMPromptSettings(SingletonModel):
     system_prompt = models.TextField(default=DEFAULT_SYSTEM_PROMPT)
 
-    class Meta:
+    class Meta(SingletonModel.Meta):
         verbose_name = "LLM Prompt Settings"
         verbose_name_plural = "LLM Prompt Settings"
-
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super().save(*args, **kwargs)
-
-    @classmethod
-    def get(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj

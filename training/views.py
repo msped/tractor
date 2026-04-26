@@ -1,7 +1,9 @@
+import io
+import multiprocessing
 import re
+import zipfile
 
-from django_q.models import OrmQ, Schedule
-from django_q.tasks import async_task
+import filetype
 from rest_framework import serializers, status, viewsets
 from rest_framework.generics import (
     ListCreateAPIView,
@@ -27,6 +29,17 @@ from .serializers import (
     TrainingDocumentSerializer,
     TrainingRunSerializer,
 )
+
+_MAX_SAMPLE_TEXT_LENGTH = 10_000
+
+
+def _regex_worker(pattern_str, sample_text, queue):
+    compiled = re.compile(pattern_str)
+    matches = [
+        {"start": m.start(), "end": m.end(), "text": m.group()}
+        for m in compiled.finditer(sample_text)
+    ]
+    queue.put(matches)
 
 
 class CustomRecognizerListCreateView(ListCreateAPIView):
@@ -62,17 +75,39 @@ class ValidateRegexView(APIView):
                 {"error": "pattern is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if len(sample_text) > _MAX_SAMPLE_TEXT_LENGTH:
+            return Response(
+                {
+                    "valid": False,
+                    "error": f"sample_text exceeds {_MAX_SAMPLE_TEXT_LENGTH} character limit",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            compiled = re.compile(pattern)
+            re.compile(pattern)
         except re.error as exc:
             return Response(
                 {"valid": False, "error": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        matches = [
-            {"start": m.start(), "end": m.end(), "text": m.group()}
-            for m in compiled.finditer(sample_text)
-        ]
+
+        queue = multiprocessing.Queue()
+        p = multiprocessing.Process(
+            target=_regex_worker, args=(pattern, sample_text, queue)
+        )
+        p.start()
+        p.join(timeout=5)
+        if p.is_alive():
+            p.kill()
+            p.join()
+            return Response(
+                {
+                    "valid": False,
+                    "error": "Regex timed out — pattern is too complex",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        matches = queue.get() if not queue.empty() else []
         return Response({"valid": True, "matches": matches})
 
 
@@ -162,7 +197,20 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
-        if not uploaded_file.name.endswith(".docx"):
+        if not uploaded_file.name.lower().endswith(".docx"):
+            raise serializers.ValidationError(
+                "Only .docx files are supported."
+            )
+        header = uploaded_file.read(261)
+        uploaded_file.seek(0)
+        kind = filetype.guess(header)
+        if kind is None or kind.mime != "application/zip":
+            raise serializers.ValidationError(
+                "File content does not match a valid .docx file."
+            )
+        content = uploaded_file.read()
+        uploaded_file.seek(0)
+        if not zipfile.is_zipfile(io.BytesIO(content)):
             raise serializers.ValidationError(
                 "Only .docx files are supported."
             )
@@ -171,8 +219,12 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
 
 class TrainingScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
-    queryset = Schedule.objects.filter(func="training.tasks.train_model")
     serializer_class = ScheduleSerializer
+
+    def get_queryset(self):
+        from django_q.models import Schedule
+
+        return Schedule.objects.filter(func="training.tasks.train_model")
 
 
 class RunManualTrainingView(APIView):
@@ -189,6 +241,8 @@ class RunManualTrainingView(APIView):
                 {"detail": "No unprocessed training documents found."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        from django_q.tasks import async_task
 
         async_task(
             "training.tasks.train_model",
@@ -222,6 +276,8 @@ class TrainingStatusView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
+        from django_q.models import OrmQ
+
         running = any(
             q.func() == "training.tasks.train_model"
             for q in OrmQ.objects.all()

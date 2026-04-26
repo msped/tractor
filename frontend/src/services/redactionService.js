@@ -37,9 +37,9 @@ export const updateRedaction = async (redactionId, updateData, accessToken) => {
         return response.data
     } catch (error) {
         if (error.response && error.response.data) {
-            throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
+            throw new Error(`Failed to update redaction: ${error.response.data.detail || 'Unknown error'}`);
         } else {
-            throw new Error('Failed to create redaction. Please try again.');
+            throw new Error('Failed to update redaction. Please try again.');
         }
     }
 };
@@ -59,9 +59,9 @@ export const deleteRedaction = async (redactionId, accessToken) => {
 
     } catch (error) {
         if (error.response && error.response.data) {
-            throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
+            throw new Error(`Failed to delete redaction: ${error.response.data.detail || 'Unknown error'}`);
         } else {
-            throw new Error('Failed to create redaction. Please try again.');
+            throw new Error('Failed to delete redaction. Please try again.');
         }
     }
 };

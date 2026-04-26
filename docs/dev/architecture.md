@@ -186,6 +186,15 @@ GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in t
 
 Both analyzers are instantiated lazily and cached as module-level singletons.
 
+#### Custom Recognizers
+
+Administrators can extend the Presidio analyzers with organisation-specific patterns via the Settings page (**Custom Recognizers** card). Each `CustomRecognizer` defines an entity label and one or more detection methods:
+
+- **Pattern**: a regex with a confidence score, validated against the Presidio scoring rules
+- **Deny list**: a fixed list of strings to match exactly (e.g. known officer names or case codes)
+
+Custom recognizers are stored in the `CustomRecognizer`, `CustomPattern`, and `CustomDenyListItem` models in the `training` app and managed via the CRUD API at `/api/model-management/custom-recognizers/`. A `post_save`/`post_delete` signal on `CustomRecognizer` invalidates the Presidio analyzer singletons so changes take effect on the next document processed without requiring a server restart.
+
 ### Gemma (Contextual AI — LLM)
 
 [Gemma](https://ollama.com/library/gemma3) is a locally-hosted LLM served via [Ollama](https://ollama.com/). Unlike the other three models, Gemma does not use pattern-matching or trained NER — it reads the document text and reasons about what information would be disclosable given the context.

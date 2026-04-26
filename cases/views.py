@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_q.models import OrmQ
 from django_q.tasks import async_task
@@ -59,12 +59,16 @@ class DocumentExportSettingsView(APIView):
 class ExemptionTemplateListView(ListCreateAPIView):
     """
     GET: Returns all active exemption templates for use in the rejection dialog.
-    POST: Creates a new exemption template.
+    POST: Creates a new exemption template (admin only).
     """
 
-    permission_classes = [IsAuthenticated]
     serializer_class = ExemptionTemplateSerializer
     queryset = ExemptionTemplate.objects.filter(is_active=True)
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
 
 class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
@@ -72,7 +76,7 @@ class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
     GET/PATCH/DELETE a single exemption template.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
     serializer_class = ExemptionTemplateSerializer
     queryset = ExemptionTemplate.objects.all()
 
@@ -115,7 +119,7 @@ class CaseListCreateView(ListCreateAPIView):
     """
 
     permission_classes = [IsAuthenticated]
-    queryset = Case.objects.all()
+    queryset = Case.objects.select_related("created_by")
     serializer_class = CaseSerializer
 
     def perform_create(self, serializer):
@@ -131,8 +135,21 @@ class CaseDetailView(RetrieveUpdateDestroyAPIView):
     """
 
     permission_classes = [IsAuthenticated]
-    queryset = Case.objects.all()
     serializer_class = CaseDetailSerializer
+
+    def get_queryset(self):
+        return Case.objects.select_related("created_by").prefetch_related(
+            Prefetch(
+                "documents",
+                queryset=Document.objects.prefetch_related(
+                    Prefetch(
+                        "redactions",
+                        queryset=Redaction.objects.select_related("context"),
+                    )
+                ),
+            )
+        )
+
     lookup_field = "id"
     lookup_url_kwarg = "case_id"
 
@@ -153,9 +170,16 @@ class DocumentListCreateView(ListCreateAPIView):
         IsAuthenticated,
     ]
     serializer_class = DocumentSerializer
-    queryset = Document.objects.all()
     lookup_field = "case__id"
     lookup_url_kwarg = "case_id"
+
+    def get_queryset(self):
+        return Document.objects.prefetch_related(
+            Prefetch(
+                "redactions",
+                queryset=Redaction.objects.select_related("context"),
+            )
+        )
 
     def create(self, request, *args, **kwargs):
         """
@@ -261,9 +285,16 @@ class DocumentReviewView(RetrieveAPIView):
 
     permission_classes = [IsAuthenticated]
     serializer_class = DocumentReviewSerializer
-    queryset = Document.objects.all()
     lookup_field = "id"
     lookup_url_kwarg = "document_id"
+
+    def get_queryset(self):
+        return Document.objects.prefetch_related(
+            Prefetch(
+                "redactions",
+                queryset=Redaction.objects.select_related("context"),
+            )
+        )
 
 
 class RedactionListCreateView(ListCreateAPIView):
@@ -307,7 +338,9 @@ class BulkRedactionUpdateView(APIView):
             id__in=ids,
         ).update(is_accepted=is_accepted, justification=justification)
 
-        updated = Redaction.objects.filter(id__in=ids, document_id=document_id)
+        updated = Redaction.objects.filter(
+            id__in=ids, document_id=document_id
+        ).select_related("context")
         serializer = RedactionSerializer(updated, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -366,8 +399,7 @@ class BulkByTextRedactionView(APIView):
             document__case_id=case_id,
             text=data["text"],
             redaction_type=data["redaction_type"],
-            is_accepted=False,
-        ).filter(Q(justification__isnull=True) | Q(justification=""))
+        ).pending()
 
         with transaction.atomic():
             if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:

@@ -138,6 +138,14 @@ If you get an error like cannot load library 'xxx': error xxx, it means that Wea
 
 ---
 
+## Production Deployment
+
+Tractor is designed to be deployed with Docker Compose. The production stack includes a Django backend (Gunicorn), Next.js frontend, nginx reverse proxy, django-q worker, and optional Ollama LLM service.
+
+See the full **[Production Deployment Guide](docs/dev/deployment.md)** for step-by-step instructions covering environment variables, Docker Compose, storage backends, and GPU configuration.
+
+---
+
 ## Model Management
 
 ### GLiNER (Third-Party PII)

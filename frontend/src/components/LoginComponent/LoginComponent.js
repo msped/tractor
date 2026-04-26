@@ -13,8 +13,12 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
 
     useEffect(() => {
         const fetchProviders = async () => {
-            const res = await getProviders();
-            setProviders(res);
+            try {
+                const res = await getProviders();
+                setProviders(res);
+            } catch {
+                setError("Failed to load login options. Please refresh the page.");
+            }
         };
         fetchProviders();
     }, []);

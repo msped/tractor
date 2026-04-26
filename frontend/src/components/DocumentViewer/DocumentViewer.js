@@ -1,5 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { Paper, Box, Typography } from '@mui/material';
+import DOMPurify from 'dompurify';
 
 const HIGHLIGHT_COLORS = {
     // For pending suggestions, which are always yellow
@@ -180,7 +181,7 @@ const renderSegmentWithTables = (segText, segStart, tableRegions, parts, keyPref
                 key={`${keyPrefix}-table-${table.id}`}
                 component="div"
                 sx={getTableStyles(table.hasBorders !== false, scaledFontSize)}
-                dangerouslySetInnerHTML={{ __html: table.html }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(table.html, { USE_PROFILES: { html: true } }) }}
             />
         );
         renderedTables.add(table.id);
@@ -487,7 +488,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                             key={`table-${element.table_id}`}
                             component="div"
                             sx={getTableStyles(tableData.hasBorders !== false, scaledFontSize)}
-                            dangerouslySetInnerHTML={{ __html: tableData.html }}
+                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(tableData.html, { USE_PROFILES: { html: true } }) }}
                         />
                     );
                 }

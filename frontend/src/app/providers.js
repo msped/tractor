@@ -3,6 +3,8 @@ import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { SessionProvider } from "next-auth/react";
+import { SWRConfig } from 'swr';
+import toast from 'react-hot-toast';
 import { createAppTheme } from '@/theme';
 import { ColorModeProvider, useColorMode } from '@/contexts/ColorModeContext';
 
@@ -23,7 +25,9 @@ export default function Providers({ children }) {
             <ColorModeProvider>
                 <AppRouterCacheProvider>
                     <ThemeWrapper>
-                        {children}
+                        <SWRConfig value={{ onError: () => toast.error('Failed to load data. Please refresh the page.') }}>
+                            {children}
+                        </SWRConfig>
                     </ThemeWrapper>
                 </AppRouterCacheProvider>
             </ColorModeProvider>

@@ -1,13 +1,7 @@
 import React from 'react';
 import { RedactionSidebar } from './RedactionSidebar';
 
-const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
-
 describe('<RedactionSidebar />', () => {
-    beforeEach(() => {
-        cy.intercept('GET', '**/cases/exemptions', { body: mockExemptionTemplates }).as('getExemptions');
-    });
-
     // Individual (non-merged, non-group) display items in new format
     const mockRedactions = {
         pending: {
@@ -46,6 +40,7 @@ describe('<RedactionSidebar />', () => {
 
     beforeEach(() => {
         baseProps = {
+            exemptionTemplates: mockExemptionTemplates,
             onAccept: cy.stub().as('onAccept'),
             onReject: cy.stub().as('onReject'),
             onRemove: cy.stub().as('onRemove'),
@@ -71,13 +66,13 @@ describe('<RedactionSidebar />', () => {
             rejected: { total: 0, items: [] },
             manual: { total: 0, items: [] },
         };
-        cy.fullMount(<RedactionSidebar {...baseProps} redactions={emptyRedactions} />, mountOpts);
+        cy.fullMount(<RedactionSidebar {...baseProps} redactions={emptyRedactions} />);
         cy.contains('No redactions or suggestions yet.').should('be.visible');
     });
 
     context('Rendering with redactions', () => {
         beforeEach(() => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
         });
 
         it('renders all redaction sections with correct counts', () => {
@@ -122,7 +117,7 @@ describe('<RedactionSidebar />', () => {
                     ],
                 },
             };
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={llmRedactions} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={llmRedactions} />);
             cy.contains('li', 'llm text').within(() => {
                 cy.contains('Source: AI (Contextual)').should('be.visible');
             });
@@ -153,7 +148,7 @@ describe('<RedactionSidebar />', () => {
 
     context('User Interactions', () => {
         beforeEach(() => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
         });
 
         it('calls onAccept when "Accept" is clicked', () => {
@@ -204,9 +199,7 @@ describe('<RedactionSidebar />', () => {
         });
 
         it('shows "No exemptions found" when no templates are configured', () => {
-            cy.intercept('GET', '**/cases/exemptions', { body: [] }).as('getExemptionsEmpty');
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
-            cy.wait('@getExemptionsEmpty');
+            cy.fullMount(<RedactionSidebar {...baseProps} exemptionTemplates={[]} redactions={mockRedactions} />);
             cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
             cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
         });
@@ -219,7 +212,7 @@ describe('<RedactionSidebar />', () => {
 
     context('Change Type and Accept Menu', () => {
         beforeEach(() => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
         });
 
         it('opens the menu and shows correct options', () => {
@@ -250,8 +243,7 @@ describe('<RedactionSidebar />', () => {
         it('expands the correct accordion and scrolls to the item', () => {
             const scrollIntoViewStub = cy.stub().as('scrollIntoView');
             cy.fullMount(
-                <RedactionSidebar {...baseProps} redactions={mockRedactions} scrollToId="a1" />,
-                mountOpts
+                <RedactionSidebar {...baseProps} redactions={mockRedactions} scrollToId="a1" />
             ).then(({ component, rerender }) => {
                 cy.contains('li', 'accepted text').then($el => {
                     $el[0].scrollIntoView = scrollIntoViewStub;
@@ -276,7 +268,7 @@ describe('<RedactionSidebar />', () => {
 
     context('Context Management', () => {
         beforeEach(() => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} />);
             // Set a larger viewport to prevent clipping issues in headless mode
             cy.viewport(1280, 720);
             cy.contains('accepted (2)').click();
@@ -343,7 +335,7 @@ describe('<RedactionSidebar />', () => {
         };
 
         beforeEach(() => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} />);
         });
 
         it('shows section count as total DB records', () => {
@@ -390,8 +382,7 @@ describe('<RedactionSidebar />', () => {
         it('calls onMarkAllInCase with accept action from Accept All dropdown', () => {
             const onMarkAllInCase = cy.stub().as('onMarkAllInCase');
             cy.fullMount(
-                <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />,
-                mountOpts
+                <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />
             );
             cy.get('button[aria-label="change redaction type and accept all"]').click();
             cy.contains('[role="menuitem"]', 'Accept all in case').click();
@@ -405,8 +396,7 @@ describe('<RedactionSidebar />', () => {
         it('calls onMarkAllInCase with reject action from Reject All dropdown', () => {
             const onMarkAllInCase = cy.stub().as('onMarkAllInCase');
             cy.fullMount(
-                <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />,
-                mountOpts
+                <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />
             );
             cy.get('button[aria-label="reject all with reason"]').click();
             cy.contains('[role="menuitem"]', 'Reject all in case').click();
@@ -460,7 +450,7 @@ describe('<RedactionSidebar />', () => {
         };
 
         beforeEach(() => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactionsWithMerged} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactionsWithMerged} />);
         });
 
         it('shows section count as total DB records', () => {
@@ -519,29 +509,29 @@ describe('<RedactionSidebar />', () => {
 
     context('REMOVE Highlight Tool button', () => {
         it('renders the Remove button when documentCompleted is false', () => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={cy.stub()} documentCompleted={false} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={cy.stub()} documentCompleted={false} />);
             cy.contains('button', 'Remove').should('be.visible');
         });
 
         it('does not render the Remove button when documentCompleted is true', () => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={cy.stub()} documentCompleted={true} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={cy.stub()} documentCompleted={true} />);
             cy.contains('button', 'Remove').should('not.exist');
         });
 
         it('calls onToggleHighlightTool with REMOVE when the Remove button is clicked', () => {
             const onToggleHighlightTool = cy.stub().as('onToggleHighlightTool');
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={onToggleHighlightTool} documentCompleted={false} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType={null} onToggleHighlightTool={onToggleHighlightTool} documentCompleted={false} />);
             cy.contains('button', 'Remove').click();
             cy.get('@onToggleHighlightTool').should('have.been.calledOnceWith', 'REMOVE');
         });
 
         it('shows the Remove button as active when activeHighlightType is REMOVE', () => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="REMOVE" onToggleHighlightTool={cy.stub()} documentCompleted={false} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="REMOVE" onToggleHighlightTool={cy.stub()} documentCompleted={false} />);
             cy.contains('button', 'Remove').should('have.css', 'opacity', '1');
         });
 
         it('shows the Remove button as inactive when a different tool is active', () => {
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="PII" onToggleHighlightTool={cy.stub()} documentCompleted={false} />, mountOpts);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="PII" onToggleHighlightTool={cy.stub()} documentCompleted={false} />);
             cy.contains('button', 'Remove').should('have.css', 'opacity', '0.45');
         });
     });

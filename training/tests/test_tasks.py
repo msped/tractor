@@ -331,7 +331,7 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.tasks.Task")
     def test_train_model_aborts_with_insufficient_data(self, mock_task):
-        """train_model() aborts if fewer than 25 training examples exist."""
+        """train_model() aborts if fewer than 75 training examples exist."""
         mock_task.objects.filter.return_value.count.return_value = 0
 
         initial_model_count = Model.objects.count()
@@ -354,10 +354,10 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         """train_model() creates a Model with model_type=SPANCAT and a TrainingRun."""
         mock_task.objects.filter.return_value.count.return_value = 0
 
-        # Provide enough fake training data (>=25 entries)
+        # Provide enough fake training data (>=75 entries)
         fake_data = [
             (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
-            for i in range(25)
+            for i in range(75)
         ]
         mock_collect.return_value = (fake_data, [], [])
 
@@ -403,7 +403,7 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
         fake_data = [
             (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
-            for i in range(25)
+            for i in range(75)
         ]
         mock_collect.return_value = (fake_data, [], [])
 
@@ -446,7 +446,7 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
 
         fake_data = [
             (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
-            for i in range(25)
+            for i in range(75)
         ]
         mock_collect.return_value = (fake_data, [training_doc], [case_doc])
 

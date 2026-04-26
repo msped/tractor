@@ -14,11 +14,13 @@ export const getApiKeys = async (accessToken) => {
     }
 };
 
-export const createApiKey = async (description, accessToken) => {
+export const createApiKey = async (description, accessToken, expiresAt = null) => {
     try {
+        const body = { description };
+        if (expiresAt) body.expires_at = expiresAt;
         const response = await apiClient.post(
             '/auth/api-keys',
-            { description },
+            body,
             {
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,

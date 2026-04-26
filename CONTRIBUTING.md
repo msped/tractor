@@ -14,11 +14,12 @@ Thank you for your interest in contributing to Tractor! This document provides g
 ### Backend (Django)
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+uv venv env
+source env/bin/activate  # On Windows: env\Scripts\activate
+uv sync
 cp .env.example .env
 python manage.py migrate
+python manage.py download_model
 python manage.py runserver
 ```
 

@@ -4,10 +4,11 @@ from auditlog.registry import auditlog
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django_q.tasks import async_task
 
-from training.models import Model
+from training.models import Model, SingletonModel
 
 
 def case_export_upload_to(instance, filename):
@@ -202,6 +203,24 @@ class Document(models.Model):
 
     class Meta:
         ordering = ["uploaded_at"]
+        indexes = [
+            models.Index(fields=["status"], name="document_status_idx"),
+        ]
+
+
+class RedactionQuerySet(models.QuerySet):
+    def pending(self):
+        """Redactions that have not yet been accepted or explicitly rejected."""
+        return self.filter(is_accepted=False).filter(
+            Q(justification__isnull=True) | Q(justification="")
+        )
+
+    def decided(self):
+        """Redactions that have been accepted or explicitly rejected."""
+        return self.exclude(
+            Q(is_accepted=False)
+            & (Q(justification__isnull=True) | Q(justification=""))
+        )
 
 
 class Redaction(models.Model):
@@ -218,6 +237,8 @@ class Redaction(models.Model):
     class Source(models.TextChoices):
         NER = "NER", "NER"
         LLM = "LLM", "LLM"
+
+    objects = RedactionQuerySet.as_manager()
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -259,6 +280,16 @@ class Redaction(models.Model):
 
     class Meta:
         ordering = ["start_char"]
+        indexes = [
+            models.Index(
+                fields=["text", "redaction_type"],
+                name="redaction_text_type_idx",
+            ),
+            models.Index(
+                fields=["document", "start_char", "end_char"],
+                name="redaction_doc_pos_idx",
+            ),
+        ]
 
 
 class RedactionContext(models.Model):
@@ -305,7 +336,7 @@ class ExemptionTemplate(models.Model):
         ordering = ["name"]
 
 
-class DocumentExportSettings(models.Model):
+class DocumentExportSettings(SingletonModel):
     class FontFamily(models.TextChoices):
         ARIAL = "arial", "Arial"
         TIMES_NEW_ROMAN = "times_new_roman", "Times New Roman"
@@ -334,18 +365,9 @@ class DocumentExportSettings(models.Model):
     def font_family_css(self):
         return self._FONT_CSS.get(self.font_family, "Arial, sans-serif")
 
-    class Meta:
+    class Meta(SingletonModel.Meta):
         verbose_name = "Document Export Settings"
         verbose_name_plural = "Document Export Settings"
-
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super().save(*args, **kwargs)
-
-    @classmethod
-    def get(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
 
 
 auditlog.register(Case)

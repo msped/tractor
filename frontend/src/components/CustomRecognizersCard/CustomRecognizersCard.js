@@ -74,7 +74,7 @@ const RegexTester = ({ pattern, accessToken }) => {
             const res = await validateRegex(pat, text, accessToken);
             setResult(res);
         } catch {
-            // silently ignore transient network errors in the tester
+            setResult({ valid: false, error: 'Network error — could not validate pattern.' });
         }
     }, [accessToken]);
 
