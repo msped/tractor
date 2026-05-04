@@ -1,12 +1,8 @@
 import apiClient from '@/api/apiClient';
 
-export const getApiKeys = async (accessToken) => {
+export const getApiKeys = async () => {
     try {
-        const response = await apiClient.get('/auth/api-keys', {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get('/auth/api-keys');
         return response.data;
     } catch (error) {
         console.error("Failed to get API keys:", error.response?.data || error.message);
@@ -14,19 +10,11 @@ export const getApiKeys = async (accessToken) => {
     }
 };
 
-export const createApiKey = async (description, accessToken, expiresAt = null) => {
+export const createApiKey = async (description, expiresAt = null) => {
     try {
         const body = { description };
         if (expiresAt) body.expires_at = expiresAt;
-        const response = await apiClient.post(
-            '/auth/api-keys',
-            body,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
-        );
+        const response = await apiClient.post('/auth/api-keys', body);
         return response.data;
     } catch (error) {
         console.error("Failed to create API key:", error.response?.data || error.message);
@@ -34,13 +22,9 @@ export const createApiKey = async (description, accessToken, expiresAt = null) =
     }
 };
 
-export const revokeApiKey = async (keyId, accessToken) => {
+export const revokeApiKey = async (keyId) => {
     try {
-        await apiClient.delete(`/auth/api-keys/${keyId}`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        await apiClient.delete(`/auth/api-keys/${keyId}`);
         return true;
     } catch (error) {
         console.error("Failed to revoke API key:", error.response?.data || error.message);
