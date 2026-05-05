@@ -19,7 +19,7 @@ Tractor uses two env files:
 | File            | Used by             | Contains                                 |
 |-----------------|---------------------|------------------------------------------|
 | `.env`          | backend, worker, db | Django secrets, database, storage config |
-| `frontend/.env` | frontend            | NextAuth, Microsoft SSO, API host        |
+| `frontend/.env` | frontend            | better-auth, Microsoft SSO, API host     |
 
 Copy the examples and fill in the values:
 
@@ -53,17 +53,28 @@ cp frontend/.env.example frontend/.env
 
 ### Frontend (`frontend/.env`)
 
-| Variable                         | Description                                                   | Example                  |
-|----------------------------------|---------------------------------------------------------------|--------------------------|
-| `NEXT_PUBLIC_API_HOST`           | Public-facing backend URL (used by the browser to reach the API) | `https://yourdomain.com` |
-| `AUTH_SECRET`                    | NextAuth secret                                               | Long random string       |
-| `AUTH_URL`                       | Full public URL of the frontend                               | `https://yourdomain.com` |
-| `AUTH_TRUST_HOST`                | Trust the forwarded host header (required behind a proxy)     | `true`                   |
-| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Microsoft Entra application (client) ID (optional — see below)|                          |
-| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Microsoft Entra client secret (optional — see below)          |                          |
-| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft Entra issuer URL (optional — see below)             |                          |
+| Variable                              | Description                                                                            | Example                  |
+|---------------------------------------|----------------------------------------------------------------------------------------|--------------------------|
+| `NEXT_PUBLIC_API_HOST`                | Public-facing backend URL (used by the browser to reach the API)                       | `https://yourdomain.com` |
+| `INTERNAL_API_HOST`                   | Backend URL reachable from the frontend container (Docker network hostname)             | `http://backend:8000`    |
+| `BETTER_AUTH_SECRET`                  | better-auth secret for session signing and encryption                                  | Long random string       |
+| `BETTER_AUTH_URL`                     | Server-side base URL of the frontend (used by better-auth API routes)                  | `https://yourdomain.com` |
+| `NEXT_PUBLIC_BETTER_AUTH_URL`         | Public-facing base URL of the frontend (used by the browser)                           | `https://yourdomain.com` |
+| `BETTER_AUTH_MICROSOFT_CLIENT_ID`     | Microsoft Entra application (client) ID (optional — see below)                         |                          |
+| `BETTER_AUTH_MICROSOFT_CLIENT_SECRET` | Microsoft Entra client secret (optional — see below)                                   |                          |
+| `BETTER_AUTH_MICROSOFT_TENANT_ID`     | Microsoft Entra tenant ID (optional — defaults to `common` for multi-tenant)           |                          |
 
-Username/password login is always available. Microsoft SSO is only enabled when **all three** `AUTH_MICROSOFT_ENTRA_ID_*` variables are set — omit them entirely if you don't need SSO.
+Username/password login is always available. Microsoft SSO is only enabled when `BETTER_AUTH_MICROSOFT_CLIENT_ID` and `BETTER_AUTH_MICROSOFT_CLIENT_SECRET` are both set — `BETTER_AUTH_MICROSOFT_TENANT_ID` is optional and defaults to `common`. Omit the Microsoft vars entirely if you don't need SSO.
+
+#### Azure App Registration
+
+In your Azure App Registration, add the following **Web** redirect URI:
+
+```
+https://yourdomain.com/api/auth/oauth2/callback/microsoft
+```
+
+This must match `BETTER_AUTH_URL` with the path `/api/auth/oauth2/callback/microsoft` appended. Once the env vars are set, the **Sign in with Microsoft** button appears on the login page automatically.
 
 ---
 

@@ -198,6 +198,47 @@ MySQL 8.0 or later is required. Tractor does not use any PostgreSQL-only field t
 
 ---
 
+## Microsoft SSO (optional)
+
+Microsoft Entra ID login is disabled by default and only activates when the three `BETTER_AUTH_MICROSOFT_*` env vars are set.
+
+### Azure App Registration
+
+1. In the [Azure portal](https://portal.azure.com) go to **Entra ID → App registrations → New registration**.
+2. Under **Redirect URIs**, add a **Web** URI pointing at your frontend:
+   - Local dev: `http://localhost:3000/api/auth/oauth2/callback/microsoft`
+   - Production: `https://yourdomain.com/api/auth/oauth2/callback/microsoft`
+3. Note the **Application (client) ID** and **Directory (tenant) ID** from the Overview page.
+4. Under **Certificates & secrets**, create a new client secret and copy the value immediately.
+
+### Frontend env vars
+
+Add to `frontend/.env`:
+
+```bash
+BETTER_AUTH_MICROSOFT_CLIENT_ID=<application-client-id>
+BETTER_AUTH_MICROSOFT_CLIENT_SECRET=<client-secret-value>
+BETTER_AUTH_MICROSOFT_TENANT_ID=<directory-tenant-id>
+```
+
+`BETTER_AUTH_MICROSOFT_TENANT_ID` defaults to `common` (multi-tenant) if omitted. Set it to your specific tenant ID to restrict login to your organisation's accounts.
+
+Once set, a **Sign in with Microsoft** button appears on the login page automatically.
+
+### Django Social Application
+
+Django's allauth layer also needs a Social Application record to validate the Microsoft token. In Django admin (`/admin/`) go to **Social applications → Add**:
+
+- **Provider**: Microsoft Graph
+- **Name**: Microsoft (or any label)
+- **Client ID**: your Azure Application (client) ID
+- **Secret key**: your Azure client secret
+- **Sites**: move your site to Chosen sites
+
+Without this record the `POST /api/auth/microsoft` backend call will fail.
+
+---
+
 ## Environment Variables
 
 ### Django settings
@@ -231,13 +272,15 @@ The project uses split settings under `backend/settings/`:
 
 ### Frontend (frontend/.env)
 
-| Variable                         | Purpose                                                     |
-|----------------------------------|-------------------------------------------------------------|
-| `NEXT_PUBLIC_API_HOST`           | Backend API URL — for local dev use `http://localhost:8000` |
-| `AUTH_SECRET`                    | NextAuth secret for session encryption                      |
-| `AUTH_MICROSOFT_ENTRA_ID_ID`     | Microsoft Entra ID client ID (optional)                     |
-| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Microsoft Entra ID client secret (optional)                 |
-| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft Entra ID issuer URL (optional)                    |
+| Variable                              | Purpose                                                                     |
+|---------------------------------------|-----------------------------------------------------------------------------|
+| `NEXT_PUBLIC_API_HOST`                | Backend API URL — for local dev use `http://localhost:8000`                 |
+| `BETTER_AUTH_SECRET`                  | better-auth secret for session signing and encryption                       |
+| `BETTER_AUTH_URL`                     | Server-side base URL of the frontend (e.g. `http://localhost:3000`)         |
+| `NEXT_PUBLIC_BETTER_AUTH_URL`         | Public-facing base URL of the frontend (e.g. `http://localhost:3000`)       |
+| `BETTER_AUTH_MICROSOFT_CLIENT_ID`     | Microsoft Entra ID client ID (optional)                                     |
+| `BETTER_AUTH_MICROSOFT_CLIENT_SECRET` | Microsoft Entra ID client secret (optional)                                 |
+| `BETTER_AUTH_MICROSOFT_TENANT_ID`     | Microsoft Entra ID tenant ID (optional — defaults to `common`)              |
 
 !!! note
-    The Microsoft Entra ID variables are only required if SSO is being configured.
+    The `BETTER_AUTH_MICROSOFT_*` variables are only required if SSO is being configured.

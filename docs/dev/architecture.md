@@ -11,7 +11,7 @@ This document describes the technical architecture of Tractor.
 | Database       | PostgreSQL 15                                                                 |  
 | Task Queue     | django-q2                                                                     |
 | NLP            | SpanCat (spaCy 3.8), GLiNER (HuggingFace), Microsoft Presidio, Gemma (Ollama) |
-| Authentication | NextAuth v5, JWT                                                              |
+| Authentication | better-auth, JWT                                                              |
 
 ## Project Structure
 
@@ -119,10 +119,10 @@ Tractor supports two authentication methods, both enforced at the DRF layer.
 
 ### JWT (Interactive Users)
 
-1. The Next.js frontend authenticates via **NextAuth v5** using either username/password credentials or **Microsoft Entra ID** OAuth2.
-2. On login, NextAuth calls `POST /api/auth/login` (or `POST /api/auth/microsoft`) and stores the Django-issued JWT access and refresh tokens inside the NextAuth session JWT (server-side only).
-3. All frontend API calls include `Authorization: Bearer <access_token>`.
-4. The access token is valid for 60 minutes. NextAuth transparently refreshes it via `POST /api/auth/token/refresh` using the 7-day refresh token before expiry.
+1. The Next.js frontend authenticates via **better-auth** using either username/password credentials or **Microsoft Entra ID** OAuth2.
+2. On login, better-auth calls `POST /api/auth/login` (or `POST /api/auth/microsoft`) and stores the Django-issued JWT access token in the session and the refresh token in an `httpOnly` `django_rt` cookie. The session is cached as a signed JWE cookie — no database round-trip is needed to verify the session on subsequent requests.
+3. `SessionContext` syncs the access token from the better-auth session into the Axios client via `setClientToken`. All frontend API calls include `Authorization: Bearer <access_token>`.
+4. The access token is valid for 60 minutes. On a `401` response, `apiClient.js` calls `POST /api/auth/refresh-django-token`, which reads the `django_rt` cookie and exchanges it with Django via `POST /api/auth/token/refresh`. The new token is cached and the original request is retried automatically.
 5. DRF authenticates the request via `rest_framework_simplejwt.authentication.JWTAuthentication`.
 
 ### API Key (External Services / Machine-to-Machine)
