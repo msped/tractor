@@ -4,7 +4,6 @@ import toast from 'react-hot-toast';
 
 export function useRedactionActions({
     documentId,
-    accessToken,
     redactions,
     setRedactions,
     pushHistory,
@@ -33,61 +32,60 @@ export function useRedactionActions({
         if (!prev) return;
         try {
             const updatedRedaction = await updateRedaction(
-                redactionId, { is_accepted: true },
-                accessToken
+                redactionId, { is_accepted: true }
             );
             applySingle(updatedRedaction);
             pushHistory(
-                async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null }, accessToken)),
-                async () => applySingle(await updateRedaction(redactionId, { is_accepted: true }, accessToken))
+                async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null })),
+                async () => applySingle(await updateRedaction(redactionId, { is_accepted: true }))
             );
         } catch (error) {
             toast.error("Failed to accept suggestion. Please try again.");
         }
-    }, [redactions, accessToken, pushHistory, applySingle, setScrollToId]);
+    }, [redactions, pushHistory, applySingle, setScrollToId]);
 
     const handleBulkAccept = useCallback(async (ids) => {
         setScrollToId(null);
         try {
             const updatedRedactions = await bulkUpdateRedactions(
-                documentId, ids, true, null, accessToken
+                documentId, ids, true, null
             );
             applyUpdates(updatedRedactions);
             pushHistory(
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null, accessToken)),
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, true, null, accessToken))
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, true, null))
             );
         } catch (error) {
             toast.error("Failed to accept suggestions. Please try again.");
         }
-    }, [documentId, accessToken, pushHistory, applyUpdates, setScrollToId]);
+    }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
     const handleRejectAsDisclosable = useCallback(async (ids, justification) => {
         setScrollToId(null);
         try {
             if (ids.length === 1) {
                 const updated = await updateRedaction(
-                    ids[0], { is_accepted: false, justification }, accessToken
+                    ids[0], { is_accepted: false, justification }
                 );
                 applySingle(updated);
                 pushHistory(
-                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification: null }, accessToken)),
-                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification }, accessToken))
+                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification: null })),
+                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification }))
                 );
             } else {
                 const updatedList = await bulkUpdateRedactions(
-                    documentId, ids, false, justification, accessToken
+                    documentId, ids, false, justification
                 );
                 applyUpdates(updatedList);
                 pushHistory(
-                    async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null, accessToken)),
-                    async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, justification, accessToken))
+                    async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
+                    async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, justification))
                 );
             }
         } catch (error) {
             toast.error("Failed to reject suggestion. Please try again.");
         }
-    }, [documentId, accessToken, pushHistory, applySingle, applyUpdates, setScrollToId]);
+    }, [documentId, pushHistory, applySingle, applyUpdates, setScrollToId]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         setScrollToId(null);
@@ -99,41 +97,40 @@ export function useRedactionActions({
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId,
-                { redaction_type: newType, is_accepted: true, is_suggestion: false },
-                accessToken
+                { redaction_type: newType, is_accepted: true, is_suggestion: false }
             );
             applySingle(updatedRedaction);
             toast.success("Suggestion type changed and accepted.");
             pushHistory(
-                async () => applySingle(await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion }, accessToken)),
-                async () => applySingle(await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }, accessToken))
+                async () => applySingle(await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion })),
+                async () => applySingle(await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }))
             );
         } catch (error) {
             toast.error("Failed to change suggestion type. Please try again.");
         }
-    }, [redactions, accessToken, pushHistory, applySingle, setScrollToId]);
+    }, [redactions, pushHistory, applySingle, setScrollToId]);
 
     const handleBulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
         setScrollToId(null);
         const originals = ids.map(id => redactions.find(r => r.id === id)).filter(Boolean);
         try {
             const updates = await Promise.all(
-                ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, accessToken))
+                ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }))
             );
             applyUpdates(updates);
             toast.success("Suggestions type changed and accepted.");
             pushHistory(
                 async () => applyUpdates(await Promise.all(
-                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, accessToken))
+                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }))
                 )),
                 async () => applyUpdates(await Promise.all(
-                    ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }, accessToken))
+                    ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }))
                 ))
             );
         } catch (error) {
             toast.error("Failed to change suggestion types. Please try again.");
         }
-    }, [redactions, accessToken, pushHistory, applyUpdates, setScrollToId]);
+    }, [redactions, pushHistory, applyUpdates, setScrollToId]);
 
     const handleOpenRejectDialog = useCallback((redaction) => {
         setBulkRejectIds([]);
@@ -153,12 +150,12 @@ export function useRedactionActions({
             const capturedIds = [...bulkRejectIds];
             try {
                 const updatedRedactions = await bulkUpdateRedactions(
-                    documentId, capturedIds, false, reason, accessToken
+                    documentId, capturedIds, false, reason
                 );
                 applyUpdates(updatedRedactions);
                 pushHistory(
-                    async () => applyUpdates(await bulkUpdateRedactions(documentId, capturedIds, false, null, accessToken)),
-                    async () => applyUpdates(await bulkUpdateRedactions(documentId, capturedIds, false, reason, accessToken))
+                    async () => applyUpdates(await bulkUpdateRedactions(documentId, capturedIds, false, null)),
+                    async () => applyUpdates(await bulkUpdateRedactions(documentId, capturedIds, false, reason))
                 );
             } catch (error) {
                 toast.error("Failed to reject suggestions. Please try again.");
@@ -171,13 +168,12 @@ export function useRedactionActions({
             try {
                 const updatedRedaction = await updateRedaction(
                     redactionId,
-                    { is_accepted: false, justification: reason },
-                    accessToken
+                    { is_accepted: false, justification: reason }
                 );
                 applySingle(updatedRedaction);
                 pushHistory(
-                    async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null }, accessToken)),
-                    async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: reason }, accessToken))
+                    async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null })),
+                    async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: reason }))
                 );
             } catch (error) {
                 toast.error("Failed to reject suggestion. Please try again.");
@@ -186,7 +182,7 @@ export function useRedactionActions({
                 setRejectionTarget(null);
             }
         }
-    }, [bulkRejectIds, documentId, accessToken, pushHistory, applySingle, applyUpdates, setScrollToId, setRejectionDialogOpen, setRejectionTarget, setBulkRejectIds]);
+    }, [bulkRejectIds, documentId, pushHistory, applySingle, applyUpdates, setScrollToId, setRejectionDialogOpen, setRejectionTarget, setBulkRejectIds]);
 
     const handleSplitMerge = useCallback((mergeKey) => {
         setScrollToId(null);
