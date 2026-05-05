@@ -66,7 +66,7 @@ describe('<LoginComponent />', () => {
         });
 
         it('calls social sign-in with correct provider when button is clicked', () => {
-            cy.intercept('POST', '**/api/auth/sign-in/social', {
+            cy.intercept('POST', '**/api/auth/sign-in/oauth2', {
                 statusCode: 200,
                 body: { url: 'https://login.microsoftonline.com/...' },
             }).as('socialSignIn');
@@ -74,7 +74,7 @@ describe('<LoginComponent />', () => {
             cy.fullMount(<LoginComponent socialProviders={socialProviders} />);
             cy.contains('button', 'Sign in with Microsoft').click();
 
-            cy.wait('@socialSignIn').its('request.body').should('deep.include', { provider: 'microsoft' });
+            cy.wait('@socialSignIn').its('request.body').should('deep.include', { providerId: 'microsoft' });
         });
     });
 });
