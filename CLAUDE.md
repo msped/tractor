@@ -48,7 +48,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
 
 ### Tech Stack
 
-- **Frontend**: Next.js 15 (React 19), Material-UI v7, NextAuth v5 for auth
+- **Frontend**: Next.js 15 (React 19), Material-UI v7, better-auth for session management
 - **Backend**: Django 5.2, Django REST Framework, django-q2 for async tasks
 - **Database**: PostgreSQL 15
 - **NLP**: spaCy 3.8 with PyTorch backend, `en_core_web_lg` (built-in NER) + custom SpanCat model stored in `nlp_models/`
@@ -73,8 +73,9 @@ tractor/
 
 - Frontend services in `frontend/src/services/` call backend via `apiClient.js`
 - API base: `${NEXT_PUBLIC_API_HOST}/api`
-- Auth: JWT tokens passed in Authorization header, managed by NextAuth
-- 401 responses auto-redirect to login
+- Auth: Django JWT access token passed in `Authorization` header; managed by better-auth via `SessionContext`
+- Token is cached in `apiClient.js` via `setClientToken`; 401 responses trigger a token refresh then redirect to `/` on failure
+- Server-side requests read the session via `getSession()` from `@/auth` (wraps `authClient.getSession` with Next.js request headers)
 
 ### Key Endpoints
 
@@ -129,4 +130,7 @@ See `.env.example`. Key variables:
 - `SECRET_KEY`, `JWT_SIGNING_KEY` - Django secrets
 - `POSTGRES_*` - Database connection
 - `NEXT_PUBLIC_API_HOST` - Backend URL for frontend
-- `AUTH_MICROSOFT_ENTRA_ID_*` - Microsoft SSO config
+- `INTERNAL_API_HOST` - Backend URL for server-side Next.js requests (Docker network)
+- `BETTER_AUTH_SECRET` - better-auth signing secret
+- `BETTER_AUTH_URL` / `NEXT_PUBLIC_BETTER_AUTH_URL` - better-auth base URL (server / client)
+- `BETTER_AUTH_MICROSOFT_CLIENT_ID/SECRET/TENANT_ID` - Microsoft SSO config
