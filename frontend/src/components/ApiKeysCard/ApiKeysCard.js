@@ -21,16 +21,16 @@ import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { getApiKeys, createApiKey, revokeApiKey } from '@/services/apiKeyService';
 import toast from 'react-hot-toast';
 
 export const ApiKeysCard = () => {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const { data: keys, error, isLoading, mutate } = useSWR(
-        session?.access_token ? ['api-keys', session.access_token] : null,
-        ([, token]) => getApiKeys(token)
+        session?.user?.id ? ['api-keys'] : null,
+        () => getApiKeys()
     );
 
     const [description, setDescription] = useState('');
@@ -55,7 +55,7 @@ export const ApiKeysCard = () => {
         if (!description.trim()) return;
         setIsSubmitting(true);
         try {
-            const result = await createApiKey(description.trim(), session?.access_token, expiresAt || null);
+            const result = await createApiKey(description.trim(), expiresAt || null);
             setNewRawKey(result.key);
             setDescription('');
             setExpiresAt('');
@@ -73,7 +73,7 @@ export const ApiKeysCard = () => {
         setConfirmRevoke(null);
         setIsSubmitting(true);
         try {
-            await revokeApiKey(id, session?.access_token);
+            await revokeApiKey(id);
             toast.success('API key revoked.');
             await mutate();
         } catch (e) {

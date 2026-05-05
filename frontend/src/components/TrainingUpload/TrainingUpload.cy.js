@@ -1,7 +1,7 @@
 import React from 'react';
 import { TrainingUpload } from './TrainingUpload';
 
-const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+const mountOpts = { mockSession: { user: { id: '1', name: 'Test User', email: 'test@example.com' }, session: { token: 'fake-token', userId: '1' } } };
 
 describe('<TrainingUpload />', () => {
   beforeEach(() => {

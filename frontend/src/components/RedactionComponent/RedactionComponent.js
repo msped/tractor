@@ -20,7 +20,6 @@ import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
 import { useRedactionActions } from '@/hooks/useRedactionActions';
 import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
 import { useManualRedaction } from '@/hooks/useManualRedaction';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
 const REDACTION_TYPE_LABELS = {
@@ -30,13 +29,12 @@ const REDACTION_TYPE_LABELS = {
 };
 
 export const RedactionComponent = ({ document: currentDocument, initialRedactions }) => {
-    const { data: session } = useSession();
     const router = useRouter();
     const [redactions, setRedactions] = useState(initialRedactions || []);
 
     const { data: exemptionTemplates = [] } = useSWR(
-        session?.access_token ? ['exemptionTemplates', session.access_token] : null,
-        ([, token]) => getExemptionTemplates(token),
+        ['exemptionTemplates'],
+        () => getExemptionTemplates(),
         { dedupingInterval: 60000 }
     );
 
@@ -81,7 +79,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         handleResizeStart,
         handleMarkAsComplete,
         handleResubmit,
-    } = useDocumentControls({ accessToken: session?.access_token, undo, redo, clearHistory, currentDocument, router });
+    } = useDocumentControls({ undo, redo, clearHistory, currentDocument, router });
 
     const {
         handleAcceptSuggestion,
@@ -96,7 +94,6 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         handleRemoveFromMerge,
     } = useRedactionActions({
         documentId: currentDocument.id,
-        accessToken: session?.access_token,
         redactions,
         setRedactions,
         pushHistory,
@@ -116,7 +113,6 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     } = useRemoveRedaction({
         documentId: currentDocument.id,
         extractedText: currentDocument.extracted_text,
-        accessToken: session?.access_token,
         redactions,
         setRedactions,
         pushHistory,
@@ -133,7 +129,6 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     } = useManualRedaction({
         documentId: currentDocument.id,
         extractedText: currentDocument.extracted_text,
-        accessToken: session?.access_token,
         redactions,
         setRedactions,
         pushHistory,
@@ -161,8 +156,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                 text,
                 redactionType,
                 'ACCEPTED',
-                null,
-                session?.access_token
+                null
             );
             setRedactions(prev =>
                 prev.map(r =>
@@ -176,7 +170,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         } catch {
             toast.error('Failed to mark all in case. Please try again.');
         }
-    }, [markAllInCaseTarget, currentDocument.case, session?.access_token, setRedactions]);
+    }, [markAllInCaseTarget, currentDocument.case, setRedactions]);
 
     const handleMarkAllInCaseRejectConfirm = useCallback(async (_id, reason) => {
         const { text, redactionType } = markAllInCaseTarget;
@@ -189,8 +183,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                 text,
                 redactionType,
                 'REJECTED',
-                reason,
-                session?.access_token
+                reason
             );
             setRedactions(prev =>
                 prev.map(r =>
@@ -204,7 +197,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         } catch {
             toast.error('Failed to mark all in case. Please try again.');
         }
-    }, [markAllInCaseTarget, currentDocument.case, session?.access_token, setRedactions, setRejectionDialogOpen, setRejectionTarget]);
+    }, [markAllInCaseTarget, currentDocument.case, setRedactions, setRejectionDialogOpen, setRejectionTarget]);
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>

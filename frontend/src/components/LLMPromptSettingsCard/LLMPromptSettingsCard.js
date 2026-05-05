@@ -15,15 +15,15 @@ import {
     TextField,
     Typography,
 } from '@mui/material';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import { getLLMPromptSettings, updateLLMPromptSettings } from '@/services/trainingService';
 import toast from 'react-hot-toast';
 
 export const LLMPromptSettingsCard = () => {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const { data, isLoading, error } = useSWR(
-        session?.access_token ? ['llm-prompt-settings', session.access_token] : null,
-        ([, token]) => getLLMPromptSettings(token)
+        session?.user?.id ? ['llm-prompt-settings'] : null,
+        () => getLLMPromptSettings()
     );
 
     const [systemPrompt, setSystemPrompt] = useState('');
@@ -55,8 +55,7 @@ export const LLMPromptSettingsCard = () => {
         setIsSubmitting(true);
         try {
             await updateLLMPromptSettings(
-                { system_prompt: systemPrompt },
-                session?.access_token
+                { system_prompt: systemPrompt }
             );
             toast.success('Prompt settings saved.');
             setConfigureOpen(false);

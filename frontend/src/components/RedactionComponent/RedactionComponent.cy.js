@@ -2,7 +2,7 @@ import React from 'react';
 import { PathnameContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime';
 import { RedactionComponent } from './RedactionComponent';
 
-const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+const mountOpts = { mockSession: { user: { id: '1', name: 'Test User', email: 'test@example.com' }, session: { token: 'fake-token', userId: '1' } } };
 
 const mockDocument = {
     id: 'doc-1',

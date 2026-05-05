@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import {
     Box,
     Button,
@@ -64,7 +63,6 @@ const InfoItem = ({ label, children, value }) => (
 
 export const CaseInformation = ({ caseObject, onUpdate }) => {
     const router = useRouter();
-    const { data: session } = useSession();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [confirmDeleteDialogOpen, setConfirmDeleteDialogOpen] = useState(false);
     const [editableCase, setEditableCase] = useState(null);
@@ -89,10 +87,10 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
     };
 
     const handleUpdateCase = async () => {
-        if (!editableCase || !session) return;
+        if (!editableCase) return;
 
         try {
-            await updateCase(caseObject.id, editableCase, session?.access_token);
+            await updateCase(caseObject.id, editableCase);
             handleCloseEditDialog();
             toast.success('Case updated.');
             if (onUpdate) onUpdate(); else router.refresh();
@@ -102,10 +100,10 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
     };
 
     const handleDeleteCase = async () => {
-        if (!caseObject || !session) return;
+        if (!caseObject) return;
 
         try {
-            await deleteCase(caseObject.id, session?.access_token);
+            await deleteCase(caseObject.id);
             handleCloseEditDialog();
             router.push('/cases');
             toast.success('Case deleted.');

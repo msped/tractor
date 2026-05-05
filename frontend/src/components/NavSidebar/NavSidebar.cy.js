@@ -4,6 +4,7 @@ import { NavSidebar } from './NavSidebar';
 import { SidebarProvider, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED } from '@/contexts/SidebarContext';
 
 const mockUser = {
+    id: '1',
     name: 'John Doe',
     email: 'john.doe@example.com',
     image: null,
@@ -11,9 +12,8 @@ const mockUser = {
 
 const mountOpts = {
     mockSession: {
-        access_token: 'fake-token',
-        status: 'authenticated',
         user: mockUser,
+        session: { token: 'fake-token', userId: '1' },
     }
 };
 

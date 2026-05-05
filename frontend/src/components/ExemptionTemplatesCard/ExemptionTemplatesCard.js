@@ -20,7 +20,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloseIcon from '@mui/icons-material/Close';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import {
     createExemptionTemplate,
     deleteExemptionTemplate,
@@ -30,10 +30,10 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
 
 export const ExemptionTemplatesCard = () => {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const { data: templates, error, isLoading, mutate } = useSWR(
-        session?.access_token ? ['exemptions', session.access_token] : null,
-        ([, token]) => getExemptionTemplates(token)
+        session?.user?.id ? ['exemptions'] : null,
+        () => getExemptionTemplates()
     );
 
     const [newName, setNewName] = useState('');
@@ -48,8 +48,7 @@ export const ExemptionTemplatesCard = () => {
         setIsSubmitting(true);
         try {
             await createExemptionTemplate(
-                { name: newName.trim(), description: newDescription.trim() },
-                session?.access_token
+                { name: newName.trim(), description: newDescription.trim() }
             );
             toast.success('Exemption template added.');
             setNewName('');
@@ -68,7 +67,7 @@ export const ExemptionTemplatesCard = () => {
         setConfirmDelete(null);
         setIsSubmitting(true);
         try {
-            await deleteExemptionTemplate(id, session?.access_token);
+            await deleteExemptionTemplate(id);
             toast.success('Exemption template deleted.');
             await mutate();
         } catch (e) {

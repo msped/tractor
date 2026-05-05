@@ -24,7 +24,9 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import LogoutIcon from '@mui/icons-material/Logout';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
-import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { authClient } from '@/lib/auth-client';
+import { useSession } from '@/contexts/SessionContext';
 import { useSidebar, SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED } from '@/contexts/SidebarContext';
 import { useColorMode } from '@/contexts/ColorModeContext';
 
@@ -32,11 +34,14 @@ export { SIDEBAR_WIDTH_EXPANDED as SIDEBAR_WIDTH };
 
 export function NavSidebar() {
     const pathname = usePathname();
+    const router = useRouter();
     const { collapsed, toggle, width } = useSidebar();
-    const { data: session } = useSession();
+    const { session } = useSession();
     const { mode, toggleColorMode } = useColorMode();
 
-    const handleLogout = () => signOut({ callbackUrl: '/' });
+    const handleLogout = () => authClient.signOut({
+        fetchOptions: { onSuccess: () => router.push('/') },
+    });
 
     // Get user initials for avatar fallback
     const getUserInitials = (name) => {

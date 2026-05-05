@@ -2,22 +2,18 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, LinearProgress, Typography, Box } from '@mui/material';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { getTrainingStatus } from '@/services/trainingService';
 
 export const TrainingStatusBanner = ({ pollInterval = 10000 }) => {
-    const { data: session } = useSession();
     const router = useRouter();
     const [isRunning, setIsRunning] = useState(false);
     const wasRunningRef = useRef(false);
 
     useEffect(() => {
-        if (!session?.access_token) return;
-
         const checkStatus = async () => {
             try {
-                const { is_running } = await getTrainingStatus(session.access_token);
+                const { is_running } = await getTrainingStatus();
                 if (wasRunningRef.current && !is_running) {
                     wasRunningRef.current = false;
                     setIsRunning(false);
@@ -34,7 +30,7 @@ export const TrainingStatusBanner = ({ pollInterval = 10000 }) => {
         checkStatus();
         const intervalId = setInterval(checkStatus, pollInterval);
         return () => clearInterval(intervalId);
-    }, [session?.access_token, router, pollInterval]);
+    }, [router, pollInterval]);
 
     if (!isRunning) return null;
 

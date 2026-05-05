@@ -3,7 +3,7 @@ import { TrainingSettingsCard } from './TrainingSettingsCard';
 
 describe('<TrainingSettingsCard />', () => {
     beforeEach(() => {
-        cy.fullMount(<TrainingSettingsCard />, { mockSession: { access_token: 'fake-token'}});
+        cy.fullMount(<TrainingSettingsCard />, { mockSession: { user: { id: '1', name: 'Test User', email: 'test@example.com' }, session: { token: 'fake-token', userId: '1' } } });
     });
 
     it('should render the card content correctly', () => {
