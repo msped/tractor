@@ -1,5 +1,4 @@
 import React from 'react'
-import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { Box, Alert } from '@mui/material';
 import { CaseDetailClientPage } from '@/components/CaseDetailClientPage';
@@ -7,17 +6,12 @@ import { getCase } from '@/services/caseService';
 
 export default async function page({ params }) {
     const { caseId } = await params;
-    const session = await auth();
-
-    if (!session) {
-        redirect('/');
-    }
 
     let initialCaseData = null;
     let fetchError = null;
 
     try {
-        const caseResponse = await getCase(caseId, session.access_token);
+        const caseResponse = await getCase(caseId);
         initialCaseData = caseResponse;
     } catch (error) {
         if (error.response?.status === 401) {

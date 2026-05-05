@@ -5,7 +5,7 @@ import {
     Container,
     Grid,
 } from '@mui/material';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import { ApiKeysCard } from '@/components/ApiKeysCard';
 import { CustomRecognizersCard } from '@/components/CustomRecognizersCard';
 import { DocumentExportSettingsCard } from '@/components/DocumentExportSettingsCard';
@@ -13,7 +13,7 @@ import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
 
 export default function SettingsPage() {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const isAdmin = session?.user?.is_staff === true || session?.user?.is_superuser === true;
 
     return (

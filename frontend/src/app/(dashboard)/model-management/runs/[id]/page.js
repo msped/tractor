@@ -13,7 +13,6 @@ import {
     Chip,
 } from "@mui/material";
 import { getTrainingRunDetail } from '@/services/trainingService';
-import { auth } from "@/auth";
 import { DownloadTrainingDocButton } from "@/components/DownloadTrainingDocButton";
 
 function formatScore(score) {
@@ -31,11 +30,10 @@ function formatSource(source) {
 
 export default async function TrainingRunDetailPage({ params }) {
     const { id } = await params;
-    const session = await auth();
     let run = null, error = null;
 
     try {
-        run = await getTrainingRunDetail(id, session?.access_token);
+        run = await getTrainingRunDetail(id);
     } catch (e) {
         error = e.message;
     }
