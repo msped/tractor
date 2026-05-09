@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Document redaction application with ML-powered Named Entity Recognition",
   "private": true,
-  "license": "AGPL-3.0",
+  "license": "MPL-2.0",
   "author": "Matthew Edwards",
   "repository": {
     "type": "git",
