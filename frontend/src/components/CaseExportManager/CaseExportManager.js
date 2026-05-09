@@ -5,11 +5,9 @@ import { Box, Button, ButtonGroup, CircularProgress, Menu, MenuItem } from '@mui
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { createCaseExport, updateCase } from '@/services/caseService';
-import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
 export const CaseExportManager = ({ caseData, onUpdate }) => {
-    const { data: session } = useSession();
     const [isProcessing, setIsProcessing] = useState(false);
     const [lockMenuAnchorEl, setLockMenuAnchorEl] = useState(null);
     const prevExportStatusRef = useRef(caseData.export_status);
@@ -23,7 +21,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
     const handleGenerateExport = async () => {
         setIsProcessing(true);
         try {
-            await createCaseExport(caseData.id, session.access_token);
+            await createCaseExport(caseData.id);
             toast.success('Export generation started.', { id: 'export-toast' });
             // Trigger a re-fetch of the case data to get the 'PROCESSING' status
             if (onUpdate) onUpdate();
@@ -37,7 +35,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
         setLockMenuAnchorEl(null);
         const toastId = toast.loading('Updating case status...');
         try {
-            await updateCase(caseData.id, { status: newStatus }, session.access_token);
+            await updateCase(caseData.id, { status: newStatus });
             toast.success('Case status updated.', { id: toastId });
             if (onUpdate) onUpdate();
         } catch (error) {

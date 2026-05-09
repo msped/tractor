@@ -24,8 +24,8 @@ describe('<CaseExportManager />', () => {
 
     const mountOptions = {
         mockSession: {
-            access_token: 'fake-token',
-            status: 'authenticated',
+            user: { id: '1', name: 'Test User', email: 'test@example.com' },
+            session: { token: 'fake-token', userId: '1' },
         },
     };
 

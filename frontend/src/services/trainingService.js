@@ -1,14 +1,8 @@
 import apiClient from '@/api/apiClient';
 
-export const getModels = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const getModels = async () => {
     try {
-        const response = await apiClient.get(`/models`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get(`/models`);
         return response.data;
     } catch (error) {
         console.error("Failed to fetch models:", error.response?.data || error.message);
@@ -16,26 +10,18 @@ export const getModels = async (accessToken) => {
     }
 };
 
-export const setActiveModel = async (modelId, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const setActiveModel = async (modelId) => {
     try {
-        await apiClient.post(`/models/${modelId}/set-active`, {}, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        await apiClient.post(`/models/${modelId}/set-active`, {});
     } catch (error) {
         console.error("Failed to set active model:", error.response?.data || error.message);
         throw new Error("Failed to set active model.");
     }
 };
 
-export const deleteModel = async (modelId, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const deleteModel = async (modelId) => {
     try {
-        await apiClient.delete(`/models/${modelId}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        await apiClient.delete(`/models/${modelId}`);
     } catch (error) {
         console.error("Failed to delete model:", error.response?.data || error.message);
         const errorMessage = error.response?.data?.detail || "Failed to delete model.";
@@ -43,13 +29,9 @@ export const deleteModel = async (modelId, accessToken) => {
     }
 };
 
-export const getTrainingDocs = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const getTrainingDocs = async () => {
     try {
-        const response = await apiClient.get(`/training-docs`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.get(`/training-docs`);
         return response.data;
     } catch (error) {
         console.error("Failed to fetch training docs:", error.response?.data || error.message);
@@ -57,14 +39,9 @@ export const getTrainingDocs = async (accessToken) => {
     }
 };
 
-export const getTrainingSchedules = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const getTrainingSchedules = async () => {
     try {
-        const response = await apiClient.get(`/schedules`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
-        // Assuming there is only one schedule as per the request
+        const response = await apiClient.get(`/schedules`);
         return response.data.length > 0 ? response.data[0] : null;
     } catch (error) {
         console.error("Failed to fetch training schedules:", error.response?.data || error.message);
@@ -72,13 +49,9 @@ export const getTrainingSchedules = async (accessToken) => {
     }
 };
 
-export const createTrainingSchedule = async (scheduleData, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const createTrainingSchedule = async (scheduleData) => {
     try {
-        const response = await apiClient.post(`/schedules`, scheduleData, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.post(`/schedules`, scheduleData);
         return response.data;
     } catch (error) {
         console.error("Failed to create schedule:", error.response?.data || error.message);
@@ -86,26 +59,18 @@ export const createTrainingSchedule = async (scheduleData, accessToken) => {
     }
 };
 
-export const deleteTrainingSchedule = async (scheduleId, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const deleteTrainingSchedule = async (scheduleId) => {
     try {
-        await apiClient.delete(`/schedules/${scheduleId}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        await apiClient.delete(`/schedules/${scheduleId}`);
     } catch (error) {
         console.error("Failed to delete schedule:", error.response?.data || error.message);
         throw new Error("Failed to delete training schedule.");
     }
 };
 
-export const getTrainingRuns = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const getTrainingRuns = async () => {
     try {
-        const response = await apiClient.get(`/training-runs`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.get(`/training-runs`);
         return response.data;
     } catch (error) {
         console.error("Failed to fetch training runs:", error.response?.data || error.message);
@@ -113,13 +78,9 @@ export const getTrainingRuns = async (accessToken) => {
     }
 };
 
-export const getTrainingRunDetail = async (id, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const getTrainingRunDetail = async (id) => {
     try {
-        const response = await apiClient.get(`/training-runs/${id}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.get(`/training-runs/${id}`);
         return response.data;
     } catch (error) {
         console.error("Failed to fetch training run detail:", error.response?.data || error.message);
@@ -127,13 +88,9 @@ export const getTrainingRunDetail = async (id, accessToken) => {
     }
 };
 
-export const deleteTrainingDoc = async (docId, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const deleteTrainingDoc = async (docId) => {
     try {
-        await apiClient.delete(`/training-docs/${docId}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        await apiClient.delete(`/training-docs/${docId}`);
     } catch (error) {
         console.error("Failed to delete training doc:", error.response?.data || error.message);
         const errorMessage = error.response?.data?.detail || "Failed to delete document.";
@@ -141,19 +98,14 @@ export const deleteTrainingDoc = async (docId, accessToken) => {
     }
 };
 
-export const uploadTrainingDoc = async (file, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const uploadTrainingDoc = async (file) => {
     const formData = new FormData();
     formData.append('original_file', file);
     formData.append('name', file.name);
 
     try {
         await apiClient.post(`/training-docs`, formData, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'multipart/form-data',
-            },
+            headers: { 'Content-Type': 'multipart/form-data' },
         });
     } catch (error) {
         console.error("Failed to upload training doc:", error.response?.data || error.message);
@@ -162,26 +114,19 @@ export const uploadTrainingDoc = async (file, accessToken) => {
     }
 };
 
-export const getTrainingStatus = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
+export const getTrainingStatus = async () => {
     try {
-        const response = await apiClient.get(`/model-management/status`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
-        return response.data; // { is_running: boolean }
+        const response = await apiClient.get(`/model-management/status`);
+        return response.data;
     } catch (error) {
         console.error("Failed to fetch training status:", error.response?.data || error.message);
         throw new Error("Failed to fetch training status.");
     }
 };
 
-export const getLLMPromptSettings = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const getLLMPromptSettings = async () => {
     try {
-        const response = await apiClient.get(`/llm-prompt-settings`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.get(`/llm-prompt-settings`);
         return response.data;
     } catch (error) {
         console.error("Failed to fetch LLM prompt settings:", error.response?.data || error.message);
@@ -189,13 +134,9 @@ export const getLLMPromptSettings = async (accessToken) => {
     }
 };
 
-export const updateLLMPromptSettings = async (data, accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const updateLLMPromptSettings = async (data) => {
     try {
-        const response = await apiClient.patch(`/llm-prompt-settings`, data, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.patch(`/llm-prompt-settings`, data);
         return response.data;
     } catch (error) {
         console.error("Failed to update LLM prompt settings:", error.response?.data || error.message);
@@ -203,13 +144,9 @@ export const updateLLMPromptSettings = async (data, accessToken) => {
     }
 };
 
-export const runManualTraining = async (accessToken) => {
-    if (!accessToken) throw new Error("Not authenticated");
-
+export const runManualTraining = async () => {
     try {
-        const response = await apiClient.post(`/model-management/run-now`, {}, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-        });
+        const response = await apiClient.post(`/model-management/run-now`, {});
         return response.data;
     } catch (error) {
         console.error("Failed to start training:", error.response?.data || error.message);

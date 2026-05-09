@@ -11,15 +11,13 @@ import {
     createTrainingSchedule as realCreateTrainingSchedule,
     deleteTrainingSchedule as realDeleteTrainingSchedule
 } from '@/services/trainingService';
-import { useSession } from 'next-auth/react';
 import toast from 'react-hot-toast';
 
-export const ScheduledTrainingCard = ({ 
+export const ScheduledTrainingCard = ({
     schedule,
     createTrainingSchedule = realCreateTrainingSchedule,
-    deleteTrainingSchedule = realDeleteTrainingSchedule  
+    deleteTrainingSchedule = realDeleteTrainingSchedule
 }) => {
-    const { data: session } = useSession();
     const getTomorrowAt9AM = () => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -45,9 +43,7 @@ export const ScheduledTrainingCard = ({
                 kwargs: { source: "redactions" },
                 schedule_type: frequency, repeats: -1, // Repeat indefinitely
                 next_run: new Date(nextRun).toISOString()
-            },
-            session?.access_token
-        );
+            });
             toast.success("Training schedule created successfully.", { id: toastId });
         } catch (error) {
             toast.error(error.message, { id: toastId });
@@ -60,7 +56,7 @@ export const ScheduledTrainingCard = ({
         if (!schedule) return;
         const toastId = toast.loading("Deleting schedule...");
         try {
-            await deleteTrainingSchedule(schedule.id, session?.access_token);
+            await deleteTrainingSchedule(schedule.id);
             toast.success("Training schedule deleted.", { id: toastId });
         } catch (error) {
             toast.error(error.message, { id: toastId });

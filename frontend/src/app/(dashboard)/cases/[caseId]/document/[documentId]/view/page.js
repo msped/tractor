@@ -1,24 +1,17 @@
 import React from 'react';
-import { auth } from '@/auth';
-import { redirect } from 'next/navigation';
 import { DocumentViewComponent } from '@/components/DocumentViewComponent';
 import { Box, Alert } from '@mui/material';
 import { getDocument } from '@/services/documentService';
 
 export default async function page({ params }) {
     const { caseId, documentId } = await params;
-    const session = await auth();
-
-    if (!session) {
-        redirect('/');
-    }
 
     let documentData = null;
     let redactions = [];
     let fetchError = null;
 
     try {
-        documentData = await getDocument(documentId, session.access_token);
+        documentData = await getDocument(documentId);
         const allRedactions = documentData.redactions || [];
 
         // For the view page, we only care about redactions that have been confirmed.

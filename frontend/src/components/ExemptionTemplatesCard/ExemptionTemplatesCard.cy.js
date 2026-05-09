@@ -2,7 +2,7 @@ import React from 'react';
 import { SWRConfig } from 'swr';
 import { ExemptionTemplatesCard } from './ExemptionTemplatesCard';
 
-const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+const mountOpts = { mockSession: { user: { id: '1', name: 'Test User', email: 'test@example.com' }, session: { token: 'fake-token', userId: '1' } } };
 
 const TestWrapper = ({ children }) => (
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>

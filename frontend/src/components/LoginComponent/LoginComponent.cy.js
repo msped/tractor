@@ -1,95 +1,80 @@
 import React from 'react';
 import { LoginComponent } from './LoginComponent';
-import * as NextAuth from 'next-auth/react';
 
 describe('<LoginComponent />', () => {
-    beforeEach(() => {
-    cy.intercept('GET', '/api/auth/providers', { body: {} });
-  });
-
-
-  it('should render the login form correctly', () => {
-    cy.mount(<LoginComponent />);
-    cy.contains('h1', 'Tractor').should('be.visible');
-    cy.get('input[name="username"]').should('be.visible');
-    cy.get('input[name="password"]').should('be.visible');
-    cy.contains('button', 'Sign in').should('be.visible');
-    cy.contains('OR').should('not.exist');
-  });
-
-  it('should allow typing into username and password fields', () => {
-    cy.mount(<LoginComponent />);
-    cy.get('input[name="username"]').type('testuser').should('have.value', 'testuser');
-    cy.get('input[name="password"]').type('password123').should('have.value', 'password123');
-  });
-
-  context('Form Submission', () => {
-    const username = 'test.user';
-    const password = 'password123';
-
-    it('should call signIn with correct credentials on submission', () => {
-      // Stub signIn to resolve successfully
-      const signInStub = cy.stub(
-        require('next-auth/react'),
-        'signIn'
-      ).resolves({ ok: true, error: null }).as('signInStub');
-
-      cy.mount(<LoginComponent signIn={signInStub}/>);
-
-      cy.get('input[name="username"]').type(username);
-      cy.get('input[name="password"]').type(password);
-      cy.contains('button', 'Sign in').click();
-
-      cy.get('@signInStub').should('have.been.calledOnce');
-      cy.get('@signInStub').should('have.been.calledWith',
-        'credentials',
-        {
-          username,
-          password,
-          redirect: true,
-          callbackUrl: '/cases'
-        }
-      );
-      cy.contains('Login failed').should('not.exist');
+    it('renders the login form', () => {
+        cy.fullMount(<LoginComponent />);
+        cy.contains('h1', 'Tractor').should('be.visible');
+        cy.get('input[name="username"]').should('be.visible');
+        cy.get('input[name="password"]').should('be.visible');
+        cy.contains('button', 'Sign in').should('be.visible');
+        cy.contains('OR').should('not.exist');
     });
 
-    it('should display an error message on failed login', () => {
-      // Stub signIn to resolve with an error
-      const signInStub = cy.stub(NextAuth, 'signIn').resolves({ ok: false, error: 'Invalid credentials' }).as('signInStub');
-
-      cy.mount(<LoginComponent signIn={signInStub} />);
-
-      cy.get('input[name="username"]').type('wrong');
-      cy.get('input[name="password"]').type('user');
-      cy.contains('button', 'Sign in').click();
-
-      cy.contains('Login failed. Please check your credentials.').should('be.visible');
+    it('allows typing into username and password fields', () => {
+        cy.fullMount(<LoginComponent />);
+        cy.get('input[name="username"]').type('testuser').should('have.value', 'testuser');
+        cy.get('input[name="password"]').type('password123').should('have.value', 'password123');
     });
-  });
 
-  it('should display session expired message when sessionError is SessionExpired', () => {
-    cy.mount(<LoginComponent sessionError="SessionExpired" />);
-    cy.contains('Your session has expired, please log in again.').should('be.visible');
-  });
+    it('shows session expired message when sessionError is SessionExpired', () => {
+        cy.fullMount(<LoginComponent sessionError="SessionExpired" />);
+        cy.contains('Your session has expired, please log in again.').should('be.visible');
+    });
 
-  it('should render external provider buttons and trigger signIn', () => {
-    const providers = {
-      "microsoft-entra-id": {
-        id: "microsoft-entra-id",
-        name: "Microsoft",
-        type: "oauth",
-        signinUrl: "http://localhost:3000/api/auth/signin/microsoft-entra-id",
-        callbackUrl: "http://localhost:3000/api/auth/callback/microsoft-entra-id"
-      }
-    };
-    cy.intercept('GET', '/api/auth/providers', { body: providers }).as('getProviders');
-    const signInStub = cy.stub().resolves({ ok: true }).as('signInStub');
+    context('Credentials sign-in', () => {
+        const username = 'test.user';
+        const password = 'password123';
 
-    cy.mount(<LoginComponent signIn={signInStub} />);
-    cy.wait('@getProviders');
+        it('redirects to /cases on successful sign-in', () => {
+            cy.intercept('POST', '**/api/auth/sign-in/username', {
+                statusCode: 200,
+                body: { token: 'fake-token', user: { id: '1' } },
+            }).as('signIn');
 
-    cy.contains('OR').should('be.visible');
-    cy.contains('button', 'Sign in with Microsoft').should('be.visible').click();
-    cy.get('@signInStub').should('have.been.calledWith', 'microsoft-entra-id', { callbackUrl: '/cases' });
-  });
+            cy.fullMount(<LoginComponent />);
+            cy.get('input[name="username"]').type(username);
+            cy.get('input[name="password"]').type(password);
+            cy.contains('button', 'Sign in').click();
+
+            cy.wait('@signIn');
+            cy.get('@router:push').should('have.been.calledWith', '/cases');
+        });
+
+        it('shows an error on failed sign-in', () => {
+            cy.intercept('POST', '**/api/auth/sign-in/username', {
+                statusCode: 401,
+                body: { error: 'Invalid credentials' },
+            }).as('signIn');
+
+            cy.fullMount(<LoginComponent />);
+            cy.get('input[name="username"]').type('wrong');
+            cy.get('input[name="password"]').type('user');
+            cy.contains('button', 'Sign in').click();
+
+            cy.contains('Login failed. Please check your credentials.').should('be.visible');
+        });
+    });
+
+    context('Social providers', () => {
+        const socialProviders = [{ id: 'microsoft', name: 'Microsoft' }];
+
+        it('renders social provider buttons when socialProviders prop is given', () => {
+            cy.fullMount(<LoginComponent socialProviders={socialProviders} />);
+            cy.contains('OR').should('be.visible');
+            cy.contains('button', 'Sign in with Microsoft').should('be.visible');
+        });
+
+        it('calls social sign-in with correct provider when button is clicked', () => {
+            cy.intercept('POST', '**/api/auth/sign-in/oauth2', {
+                statusCode: 200,
+                body: { url: 'https://login.microsoftonline.com/...' },
+            }).as('socialSignIn');
+
+            cy.fullMount(<LoginComponent socialProviders={socialProviders} />);
+            cy.contains('button', 'Sign in with Microsoft').click();
+
+            cy.wait('@socialSignIn').its('request.body').should('deep.include', { providerId: 'microsoft' });
+        });
+    });
 });

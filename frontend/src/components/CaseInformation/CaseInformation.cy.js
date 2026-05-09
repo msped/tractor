@@ -91,7 +91,6 @@ describe('<CaseInformation />', () => {
             cy.get('@updateCase').should('have.been.calledWith',
                 `/cases/${mockCaseOpen.id}`,
                 Cypress.sinon.match.has('case_reference', 'CASE-001-UPDATED'),
-                Cypress.sinon.match.object
             );
 
             cy.contains('Case updated.').should('be.visible');
@@ -126,7 +125,6 @@ describe('<CaseInformation />', () => {
 
             cy.get('@deleteCase').should('have.been.calledWith',
                 `/cases/${mockCaseOpen.id}`,
-                Cypress.sinon.match.object
             );
 
             cy.contains('Case deleted.').should('be.visible');

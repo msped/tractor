@@ -34,7 +34,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import toast from 'react-hot-toast';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import {
@@ -63,7 +63,7 @@ const emptyForm = () => ({
 });
 
 // --- Regex tester (debounced) ---
-const RegexTester = ({ pattern, accessToken }) => {
+const RegexTester = ({ pattern }) => {
     const [sampleText, setSampleText] = useState('');
     const [result, setResult] = useState(null);
     const timerRef = useRef(null);
@@ -71,12 +71,12 @@ const RegexTester = ({ pattern, accessToken }) => {
     const run = useCallback(async (pat, text) => {
         if (!pat || !text) { setResult(null); return; }
         try {
-            const res = await validateRegex(pat, text, accessToken);
+            const res = await validateRegex(pat, text);
             setResult(res);
         } catch {
             setResult({ valid: false, error: 'Network error — could not validate pattern.' });
         }
-    }, [accessToken]);
+    }, []);
 
     useEffect(() => {
         if (timerRef.current) clearTimeout(timerRef.current);
@@ -133,7 +133,7 @@ const RegexTester = ({ pattern, accessToken }) => {
 };
 
 // --- Add / Edit form ---
-const RecognizerForm = ({ initial, onSave, onCancel, accessToken }) => {
+const RecognizerForm = ({ initial, onSave, onCancel }) => {
     const [form, setForm] = useState(initial || emptyForm());
     const [submitting, setSubmitting] = useState(false);
 
@@ -275,7 +275,7 @@ const RecognizerForm = ({ initial, onSave, onCancel, accessToken }) => {
                     <Button size="small" startIcon={<AddIcon />} onClick={addPatternRow} sx={{ mt: 1 }}>
                         Add pattern
                     </Button>
-                    {testPattern && <RegexTester pattern={testPattern} accessToken={accessToken} />}
+                    {testPattern && <RegexTester pattern={testPattern} />}
                 </Box>
             )}
 
@@ -323,12 +323,11 @@ const RecognizerForm = ({ initial, onSave, onCancel, accessToken }) => {
 
 // --- Main card ---
 export const CustomRecognizersCard = () => {
-    const { data: session } = useSession();
-    const token = session?.access_token;
+    const { session } = useSession();
 
     const { data: recognizers, error, isLoading, mutate } = useSWR(
-        token ? ['custom-recognizers', token] : null,
-        ([, t]) => getCustomRecognizers(t)
+        session?.user?.id ? ['custom-recognizers'] : null,
+        () => getCustomRecognizers()
     );
 
     const [manageOpen, setManageOpen] = useState(false);
@@ -351,10 +350,10 @@ export const CustomRecognizersCard = () => {
     const handleSave = async (payload) => {
         try {
             if (editTarget) {
-                await updateCustomRecognizer(editTarget.id, payload, token);
+                await updateCustomRecognizer(editTarget.id, payload);
                 toast.success('Recognizer updated.');
             } else {
-                await createCustomRecognizer(payload, token);
+                await createCustomRecognizer(payload);
                 toast.success('Recognizer created.');
             }
             await mutate();
@@ -367,7 +366,7 @@ export const CustomRecognizersCard = () => {
     const handleToggle = async (rec) => {
         setToggling(rec.id);
         try {
-            await updateCustomRecognizer(rec.id, { is_active: !rec.is_active }, token);
+            await updateCustomRecognizer(rec.id, { is_active: !rec.is_active });
             await mutate();
         } catch (e) {
             toast.error('Failed to toggle recognizer.');
@@ -380,7 +379,7 @@ export const CustomRecognizersCard = () => {
         const id = confirmDelete.id;
         setConfirmDelete(null);
         try {
-            await deleteCustomRecognizer(id, token);
+            await deleteCustomRecognizer(id);
             toast.success('Recognizer deleted.');
             await mutate();
         } catch (e) {
@@ -520,7 +519,6 @@ export const CustomRecognizersCard = () => {
                             initial={formInitial}
                             onSave={handleSave}
                             onCancel={closeForm}
-                            accessToken={token}
                         />
                     </Box>
                 </DialogContent>

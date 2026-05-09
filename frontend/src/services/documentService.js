@@ -1,13 +1,8 @@
 import apiClient from '@/api/apiClient';
 
-export const getDocument = async (docId, accessToken) => {
-
+export const getDocument = async (docId) => {
     try {
-        const response = await apiClient.get(`/cases/documents/${docId}`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get(`/cases/documents/${docId}`);
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -18,13 +13,9 @@ export const getDocument = async (docId, accessToken) => {
     }
 };
 
-export const getDocumentForReview = async (caseId, docId, accessToken) => {
+export const getDocumentForReview = async (caseId, docId) => {
     try {
-        const response = await apiClient.get(`/cases/${caseId}/document/${docId}/review`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get(`/cases/${caseId}/document/${docId}/review`);
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -35,13 +26,9 @@ export const getDocumentForReview = async (caseId, docId, accessToken) => {
     }
 };
 
-export const resubmitDocument = async (docId, accessToken) => {
+export const resubmitDocument = async (docId) => {
     try {
-        const response = await apiClient.post(`/cases/documents/${docId}/resubmit`, {}, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.post(`/cases/documents/${docId}/resubmit`, {});
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -52,13 +39,9 @@ export const resubmitDocument = async (docId, accessToken) => {
     }
 }
 
-export const cancelProcessing = async (docId, accessToken) => {
+export const cancelProcessing = async (docId) => {
     try {
-        const response = await apiClient.post(`/cases/documents/${docId}/cancel`, {}, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.post(`/cases/documents/${docId}/cancel`, {});
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -69,13 +52,10 @@ export const cancelProcessing = async (docId, accessToken) => {
     }
 }
 
-export const uploadDocuments = async (caseId, formData, accessToken) => {
+export const uploadDocuments = async (caseId, formData) => {
     try {
         const response = await apiClient.post(`/cases/${caseId}/documents`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-                'Authorization': `Bearer ${accessToken}`,
-            },
+            headers: { 'Content-Type': 'multipart/form-data' },
         });
         return response.data;
     } catch (error) {
@@ -87,13 +67,9 @@ export const uploadDocuments = async (caseId, formData, accessToken) => {
     }
 }
 
-export const deleteDocument = async (docId, accessToken) => {
+export const deleteDocument = async (docId) => {
     try {
-        const response = await apiClient.delete(`/cases/documents/${docId}`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.delete(`/cases/documents/${docId}`);
         return response.status === 204;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -104,15 +80,10 @@ export const deleteDocument = async (docId, accessToken) => {
     }
 }
 
-export const markAsComplete = async (docId, accessToken) => {
-
+export const markAsComplete = async (docId) => {
     try {
         const response = await apiClient.patch(`cases/documents/${docId}`, {
             new_status: 'COMPLETED'
-        }, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
         });
         return response.data;
     } catch (error) {

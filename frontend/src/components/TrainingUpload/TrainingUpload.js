@@ -5,12 +5,10 @@ import { useRouter } from 'next/navigation';
 import { Box, Button, Typography, Paper } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { uploadTrainingDoc, runManualTraining } from '@/services/trainingService';
-import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast';
 
 export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
     const router = useRouter();
-    const { data: session } = useSession();
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef(null);
 
@@ -29,7 +27,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
         }
 
         const toastId = toast.loading(`Uploading ${docxFiles.length} document(s)...`);
-        const uploadPromises = docxFiles.map(file => uploadTrainingDoc(file, session?.access_token));
+        const uploadPromises = docxFiles.map(file => uploadTrainingDoc(file));
 
         try {
             await Promise.all(uploadPromises);
@@ -56,7 +54,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
     const handleRunTraining = async () => {
         const toastId = toast.loading("Starting training process...");
         try {
-            const response = await runManualTraining(session?.access_token);
+            const response = await runManualTraining();
             toast.success(`Training started on ${response.documents} documents.`, { id: toastId });
             router.push('/model-management');
         } catch (error) {

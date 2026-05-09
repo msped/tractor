@@ -20,7 +20,6 @@ import {
     InputAdornment,
     Tooltip
 } from '@mui/material';
-import { useSession } from 'next-auth/react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 
@@ -38,7 +37,6 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
     const [pendingDeleteDoc, setPendingDeleteDoc] = useState(null);
     const [isDeletingDoc, setIsDeletingDoc] = useState(false);
     const fileInputRef = useRef(null);
-    const { data: session } = useSession();
 
     const handleOpenDialog = () => setDialogOpen(true);
     const handleCloseDialog = () => {
@@ -107,7 +105,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         setIsDeletingDoc(true);
 
         try {
-            await deleteDocument(docId, session?.access_token);
+            await deleteDocument(docId);
             setPendingDeleteDoc(null);
             toast.success('Document deleted.');
             if (onUpdate) await onUpdate();
@@ -122,7 +120,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         if (!caseId) return;
 
         try {
-            await resubmitDocument(docId, session?.access_token);
+            await resubmitDocument(docId);
             toast.success('Document resubmitted for processing.');
             if (onUpdate) await onUpdate();
         } catch (error) {
@@ -134,7 +132,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         if (!caseId) return;
 
         try {
-            await cancelProcessing(docId, session?.access_token);
+            await cancelProcessing(docId);
             toast.success('Document processing cancelled.');
             if (onUpdate) await onUpdate();
         } catch (error) {
@@ -153,7 +151,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         });
 
         try {
-            await uploadDocuments(caseId, formData, session?.access_token);
+            await uploadDocuments(caseId, formData);
             handleCloseDialog();
             toast.success('Documents uploaded successfully.');
             if (onUpdate) await onUpdate();

@@ -32,14 +32,20 @@ import GlobalStyles from '@mui/material/GlobalStyles';
 import { SWRConfig } from 'swr';
 import { Toaster } from 'react-hot-toast';
 import theme from '@/theme';
-import { SessionProvider } from 'next-auth/react';
-
+import { SessionContext, SessionProvider } from '@/contexts/SessionContext';
 const noAnimations = (
     <GlobalStyles styles={{ '*, *::before, *::after': { transitionDuration: '1ms !important', animationDuration: '1ms !important' } }} />
 );
 
 Cypress.Commands.add('fullMount', (component, options = {}) => {
     const { mockSession } = options;
+    const hasMockSession = 'mockSession' in options;
+
+    cy.intercept('GET', '**/api/auth/get-session', {
+        statusCode: 200,
+        body: mockSession ?? null,
+    }).as('getSession');
+
     const router = {
         route: '/',
         pathname: '/',
@@ -57,18 +63,25 @@ Cypress.Commands.add('fullMount', (component, options = {}) => {
     };
 
     return mount(
-        <SWRConfig value={{ dedupingInterval: 0, provider: () => new Map() }}>
-        <SessionProvider session={mockSession}>
+        <SWRConfig value={{ dedupingInterval: 0, provider: () => new Map(), revalidateOnFocus: false, revalidateOnReconnect: false }}>
         <AppRouterCacheProvider>
             <ThemeProvider theme={theme}>
                 {noAnimations}
                 <AppRouterContext.Provider value={router}>
-                    {component}
-                    <Toaster />
+                    {hasMockSession ? (
+                        <SessionContext.Provider value={{ session: mockSession ?? null, isPending: false }}>
+                            {component}
+                            <Toaster />
+                        </SessionContext.Provider>
+                    ) : (
+                        <SessionProvider>
+                            {component}
+                            <Toaster />
+                        </SessionProvider>
+                    )}
                 </AppRouterContext.Provider>
             </ThemeProvider>
         </AppRouterCacheProvider>
-        </SessionProvider>
         </SWRConfig>,
         options
     );

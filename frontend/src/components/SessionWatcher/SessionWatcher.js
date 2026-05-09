@@ -1,26 +1,15 @@
 "use client";
 import { useEffect } from "react";
-import { useSession, signOut as realSignOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useSession } from "@/contexts/SessionContext";
 
-const CHECK_INTERVAL = 5 * 60 * 1000;
-
-export function SessionWatcher({ signOut = realSignOut, checkInterval = CHECK_INTERVAL }) {
-    const { data: session, status, update } = useSession();
+export function SessionWatcher() {
     const router = useRouter();
+    const { session, isPending } = useSession();
 
     useEffect(() => {
-        const interval = setInterval(update, checkInterval);
-        return () => clearInterval(interval);
-    }, [update, checkInterval]);
-
-    useEffect(() => {
-        if (status === "unauthenticated" || session?.error === "RefreshTokenError") {
-            signOut({ redirect: false })
-                .then(() => { router.push("/?error=SessionExpired"); })
-                .catch(err => { console.error("signOut failed during session expiry:", err); });
-        }
-    }, [session?.error, status, router, signOut]);
+        if (!isPending && !session) router.push("/");
+    }, [session, isPending, router]);
 
     return null;
 }

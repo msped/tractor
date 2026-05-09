@@ -11,7 +11,7 @@ describe('<DocumentListItem />', () => {
         status: 'Ready for Review',
     };
 
-    const mountOpts = { mockSession: { access_token: 'fake-token', status: 'authenticated' } };
+    const mountOpts = { mockSession: { user: { id: '1', name: 'Test User', email: 'test@example.com' }, session: { token: 'fake-token', userId: '1' } } };
 
     it('renders document details correctly', () => {
         cy.fullMount(

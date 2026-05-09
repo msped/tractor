@@ -1,16 +1,10 @@
 import apiClient from '@/api/apiClient';
 
-export const createRedaction = async (documentId, createData, accessToken) => {
-
+export const createRedaction = async (documentId, createData) => {
     try {
         const response = await apiClient.post(
             `cases/document/${documentId}/redaction`,
             createData,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
         );
         return response.data
     } catch (error) {
@@ -22,17 +16,11 @@ export const createRedaction = async (documentId, createData, accessToken) => {
     }
 };
 
-export const updateRedaction = async (redactionId, updateData, accessToken) => {
-
+export const updateRedaction = async (redactionId, updateData) => {
     try {
         const response = await apiClient.patch(
             `cases/document/redaction/${redactionId}`,
             updateData,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
         );
         return response.data
     } catch (error) {
@@ -44,19 +32,12 @@ export const updateRedaction = async (redactionId, updateData, accessToken) => {
     }
 };
 
-export const deleteRedaction = async (redactionId, accessToken) => {
-
+export const deleteRedaction = async (redactionId) => {
     try {
         const response = await apiClient.delete(
             `cases/document/redaction/${redactionId}`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
         );
         return response.status === 204;
-
     } catch (error) {
         if (error.response && error.response.data) {
             throw new Error(`Failed to delete redaction: ${error.response.data.detail || 'Unknown error'}`);
@@ -66,14 +47,13 @@ export const deleteRedaction = async (redactionId, accessToken) => {
     }
 };
 
-export const bulkMarkByText = async (caseId, text, redactionType, markStatus, rejectionReason, accessToken) => {
+export const bulkMarkByText = async (caseId, text, redactionType, markStatus, rejectionReason) => {
     try {
         const body = { text, redaction_type: redactionType, status: markStatus };
         if (rejectionReason) body.rejection_reason = rejectionReason;
         const response = await apiClient.post(
             `cases/${caseId}/redactions/bulk-by-text/`,
             body,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
         );
         return response.data;
     } catch (error) {
@@ -84,16 +64,11 @@ export const bulkMarkByText = async (caseId, text, redactionType, markStatus, re
     }
 };
 
-export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification, accessToken) => {
+export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification) => {
     try {
         const response = await apiClient.patch(
             `cases/document/${documentId}/redactions/bulk/`,
             { ids, is_accepted: isAccepted, justification: justification ?? null },
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
         );
         return response.data;
     } catch (error) {
@@ -105,17 +80,11 @@ export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justific
     }
 };
 
-export const updateRedactionContext = async (redactionId, contextData, accessToken) => {
-
+export const updateRedactionContext = async (redactionId, contextData) => {
     try {
         const response = await apiClient.post(
             `cases/document/redaction/${redactionId}/context`,
             contextData,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
         );
         return response.data;
     } catch (error) {
@@ -127,12 +96,9 @@ export const updateRedactionContext = async (redactionId, contextData, accessTok
     }
 };
 
-export const getExemptionTemplates = async (accessToken) => {
+export const getExemptionTemplates = async () => {
     try {
-        const response = await apiClient.get(
-            'cases/exemptions',
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
+        const response = await apiClient.get('cases/exemptions');
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -143,13 +109,9 @@ export const getExemptionTemplates = async (accessToken) => {
     }
 };
 
-export const createExemptionTemplate = async (data, accessToken) => {
+export const createExemptionTemplate = async (data) => {
     try {
-        const response = await apiClient.post(
-            'cases/exemptions',
-            data,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
+        const response = await apiClient.post('cases/exemptions', data);
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -161,12 +123,9 @@ export const createExemptionTemplate = async (data, accessToken) => {
     }
 };
 
-export const deleteExemptionTemplate = async (templateId, accessToken) => {
+export const deleteExemptionTemplate = async (templateId) => {
     try {
-        await apiClient.delete(
-            `cases/exemptions/${templateId}`,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
+        await apiClient.delete(`cases/exemptions/${templateId}`);
         return true;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -177,19 +136,12 @@ export const deleteExemptionTemplate = async (templateId, accessToken) => {
     }
 };
 
-export const deleteRedactionContext = async (redactionId, accessToken) => {
-
+export const deleteRedactionContext = async (redactionId) => {
     try {
         const response = await apiClient.delete(
             `cases/document/redaction/${redactionId}/context`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            }
         );
         return response.status === 204;
-
     } catch (error) {
         if (error.response && error.response.data) {
             throw new Error(`Failed to delete redaction context: ${error.response.data.detail || 'Unknown error'}`);

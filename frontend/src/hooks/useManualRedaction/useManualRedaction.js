@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 export function useManualRedaction({
     documentId,
     extractedText,
-    accessToken,
     redactions,
     setRedactions,
     pushHistory,
@@ -58,7 +57,7 @@ export function useManualRedaction({
                 let currentCreatedIds = [];
                 try {
                     applyUpdates(await Promise.all(
-                        overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true }, accessToken))
+                        overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true }))
                     ));
                 } catch (error) {
                     handleCloseManualRedactionPopover();
@@ -94,7 +93,7 @@ export function useManualRedaction({
                             redaction_type: redactionType,
                             is_suggestion: false,
                             is_accepted: true,
-                        }, accessToken))
+                        }))
                     );
                     setRedactions(prev => [...prev, ...created]);
                     return created.map(r => r.id);
@@ -111,15 +110,15 @@ export function useManualRedaction({
                 pushHistory(
                     async () => {
                         // Delete gap-filled redactions, then revert the updated overlapping ones
-                        await Promise.all(currentCreatedIds.map(id => deleteRedaction(id, accessToken)));
+                        await Promise.all(currentCreatedIds.map(id => deleteRedaction(id)));
                         setRedactions(prev => prev.filter(r => !currentCreatedIds.includes(r.id)));
                         applyUpdates(await Promise.all(
-                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted }, accessToken))
+                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted }))
                         ));
                     },
                     async () => {
                         applyUpdates(await Promise.all(
-                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true }, accessToken))
+                            originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true }))
                         ));
                         if (gaps.length > 0) currentCreatedIds = await fillGaps(gaps);
                     }
@@ -140,16 +139,16 @@ export function useManualRedaction({
             const originalOverlapping = overlapping.map(r => ({ id: r.id, redaction_type: r.redaction_type, is_accepted: r.is_accepted, is_suggestion: r.is_suggestion }));
             try {
                 applyUpdates(await Promise.all(
-                    overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, accessToken))
+                    overlapping.map(r => updateRedaction(r.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }))
                 ));
                 handleCloseManualRedactionPopover();
                 toast.success("Redaction classification updated.");
                 pushHistory(
                     async () => applyUpdates(await Promise.all(
-                        originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }, accessToken))
+                        originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }))
                     )),
                     async () => applyUpdates(await Promise.all(
-                        originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }, accessToken))
+                        originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: redactionType, is_accepted: true, is_suggestion: false }))
                     ))
                 );
             } catch (error) {
@@ -168,18 +167,18 @@ export function useManualRedaction({
         };
         let currentCreatedId = null;
         try {
-            const createdRedaction = await createRedaction(documentId, newRedaction, accessToken);
+            const createdRedaction = await createRedaction(documentId, newRedaction);
             currentCreatedId = createdRedaction.id;
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
             toast.success("Redaction created successfully.");
             pushHistory(
                 async () => {
-                    await deleteRedaction(currentCreatedId, accessToken);
+                    await deleteRedaction(currentCreatedId);
                     setRedactions(prev => prev.filter(r => r.id !== currentCreatedId));
                 },
                 async () => {
-                    const reCreated = await createRedaction(documentId, newRedaction, accessToken);
+                    const reCreated = await createRedaction(documentId, newRedaction);
                     currentCreatedId = reCreated.id;
                     setRedactions(prev => [...prev, reCreated]);
                 }
@@ -188,7 +187,7 @@ export function useManualRedaction({
             handleCloseManualRedactionPopover();
             toast.error("Failed to create redaction. Please try again.");
         }
-    }, [newSelection, documentId, extractedText, handleCloseManualRedactionPopover, accessToken, redactions, pushHistory, applyUpdates, setRedactions]);
+    }, [newSelection, documentId, extractedText, handleCloseManualRedactionPopover, redactions, pushHistory, applyUpdates, setRedactions]);
 
     const handleTextSelect = useCallback((selection, rect) => {
         if (activeHighlightType === 'REMOVE') return;

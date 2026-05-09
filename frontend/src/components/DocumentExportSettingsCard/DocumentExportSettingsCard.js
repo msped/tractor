@@ -21,15 +21,15 @@ import {
     TextField,
     Typography,
 } from '@mui/material';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import { getExportSettings, updateExportSettings } from '@/services/caseService';
 import toast from 'react-hot-toast';
 
 export const DocumentExportSettingsCard = () => {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const { data, isLoading, error } = useSWR(
-        session?.access_token ? ['export-settings', session.access_token] : null,
-        ([, token]) => getExportSettings(token)
+        session?.user?.id ? ['export-settings'] : null,
+        () => getExportSettings()
     );
 
     const [headerText, setHeaderText] = useState('');
@@ -69,17 +69,14 @@ export const DocumentExportSettingsCard = () => {
     const handleSave = async () => {
         setIsSubmitting(true);
         try {
-            await updateExportSettings(
-                {
-                    header_text: headerText,
-                    footer_text: footerText,
-                    watermark_text: watermarkText,
-                    watermark_include_case_ref: watermarkIncludeCaseRef,
-                    page_numbers_enabled: pageNumbersEnabled,
-                    font_family: fontFamily,
-                },
-                session?.access_token
-            );
+            await updateExportSettings({
+                header_text: headerText,
+                footer_text: footerText,
+                watermark_text: watermarkText,
+                watermark_include_case_ref: watermarkIncludeCaseRef,
+                page_numbers_enabled: pageNumbersEnabled,
+                font_family: fontFamily,
+            });
             toast.success('Export settings saved.');
             setConfigureOpen(false);
         } catch (e) {

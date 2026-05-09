@@ -3,7 +3,7 @@
 import React from 'react';
 import { Container, Stack, Box, CircularProgress, Button } from '@mui/material';
 import useSWR from 'swr';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import toast from 'react-hot-toast';
 import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -14,13 +14,13 @@ import { CaseExportManager } from '@/components/CaseExportManager';
 import { getCase } from '@/services/caseService';
 
 export const CaseDetailClientPage = ({ initialCaseData }) => {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const caseId = initialCaseData.id;
 
     // Use SWR for data fetching and automatic revalidation
     const { data: caseData, mutate } = useSWR(
-        session ? [`/cases/${caseId}`, session.access_token] : null,
-        ([url, token]) => getCase(caseId, token),
+        session?.user?.id ? [`/cases/${caseId}`] : null,
+        () => getCase(caseId),
         {
             fallbackData: initialCaseData,
             refreshInterval: (data) => (data?.export_status === 'PROCESSING' ? 5000 : 0),

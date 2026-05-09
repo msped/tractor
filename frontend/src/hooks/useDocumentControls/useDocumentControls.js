@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 
 const FONT_SIZE_STEPS = [0.75, 0.85, 1, 1.15, 1.3, 1.5];
 
-export function useDocumentControls({ accessToken, undo, redo, clearHistory, currentDocument, router }) {
+export function useDocumentControls({ undo, redo, clearHistory, currentDocument, router }) {
     const [isLoading, setIsLoading] = useState(false);
     const [isResubmitting, setIsResubmitting] = useState(false);
     const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
@@ -82,7 +82,7 @@ export function useDocumentControls({ accessToken, undo, redo, clearHistory, cur
     const handleMarkAsComplete = useCallback(async () => {
         setIsLoading(true);
         try {
-            const updatedDocument = await markAsComplete(currentDocument.id, accessToken);
+            const updatedDocument = await markAsComplete(currentDocument.id);
             console.log(updatedDocument);
             clearHistory();
             toast.success("Document is ready for disclosure.");
@@ -92,12 +92,12 @@ export function useDocumentControls({ accessToken, undo, redo, clearHistory, cur
         } finally {
             setIsLoading(false);
         }
-    }, [currentDocument.id, currentDocument.case, accessToken, router, clearHistory]);
+    }, [currentDocument.id, currentDocument.case, router, clearHistory]);
 
     const handleResubmit = useCallback(async () => {
         setIsResubmitting(true);
         try {
-            await resubmitDocument(currentDocument.id, accessToken);
+            await resubmitDocument(currentDocument.id);
             clearHistory();
             toast.success("Document resubmitted for processing.");
             router.push(`/cases/${currentDocument.case}`);
@@ -107,7 +107,7 @@ export function useDocumentControls({ accessToken, undo, redo, clearHistory, cur
             setIsResubmitting(false);
             setResubmitDialogOpen(false);
         }
-    }, [currentDocument.id, currentDocument.case, accessToken, router, clearHistory]);
+    }, [currentDocument.id, currentDocument.case, router, clearHistory]);
 
     return {
         isLoading,

@@ -1,45 +1,33 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { signIn as RealSignIn, getProviders } from "next-auth/react"
+import React, { useState } from "react";
 import { Box, Button, TextField, Typography, Paper, Divider } from "@mui/material";
+import { authClient } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
 
-export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
+export const LoginComponent = ({ sessionError, socialProviders = [] }) => {
+    const router = useRouter();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState(
         sessionError === "SessionExpired" ? "Your session has expired, please log in again." : ""
     );
-    const [providers, setProviders] = useState(null);
-
-    useEffect(() => {
-        const fetchProviders = async () => {
-            try {
-                const res = await getProviders();
-                setProviders(res);
-            } catch {
-                setError("Failed to load login options. Please refresh the page.");
-            }
-        };
-        fetchProviders();
-    }, []);
+    const [loading, setLoading] = useState(false);
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setError("");
-        const result = await signIn("credentials", {
-            username,
-            password,
-            redirect: true,
-            callbackUrl: "/cases"
+        setLoading(true);
+        const result = await authClient.$fetch("/sign-in/username", {
+            method: "POST",
+            body: { username, password },
         });
-        if (result && result.error) {
+        if (result.error) {
             setError("Login failed. Please check your credentials.");
+            setLoading(false);
+        } else {
+            router.push("/cases");
         }
     };
-
-    const otherProviders = providers
-        ? Object.values(providers).filter((provider) => provider.id !== "credentials")
-        : [];
 
     return (
         <Box
@@ -92,19 +80,23 @@ export const LoginComponent = ({ signIn = RealSignIn, sessionError }) => {
                         variant="contained"
                         color="primary"
                         fullWidth
+                        loading={loading}
                         sx={{ mt: 2 }}
                     >
                         Sign in
                     </Button>
-                    {otherProviders.length > 0 && (
+                    {socialProviders.length > 0 && (
                         <>
                             <Divider sx={{ my: 2 }}>OR</Divider>
-                            {otherProviders.map((provider) => (
+                            {socialProviders.map((provider) => (
                                 <Button
                                     key={provider.id}
                                     variant="outlined"
                                     fullWidth
-                                    onClick={() => signIn(provider.id, { callbackUrl: "/cases" })}
+                                    onClick={() => authClient.signIn.oauth2({
+                                        providerId: provider.id,
+                                        callbackURL: "/cases",
+                                    })}
                                     sx={{ mt: 1 }}
                                 >
                                     Sign in with {provider.name}

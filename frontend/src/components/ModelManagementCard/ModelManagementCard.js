@@ -19,7 +19,7 @@ import {
     IconButton,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/contexts/SessionContext";
 import { getModels, setActiveModel, deleteModel } from '@/services/trainingService';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
@@ -32,10 +32,10 @@ const formatScore = (score) => {
 };
 
 export const ModelManagementCard = () => {
-    const { data: session } = useSession();
+    const { session } = useSession();
     const { data: models, error, isLoading, mutate } = useSWR(
-        session?.access_token ? ['models', session.access_token] : null,
-        ([key, token]) => getModels(token)
+        session?.user?.id ? ['models'] : null,
+        () => getModels()
     );
     const [isSubmitting, setIsSubmitting] = useState(null);
     const [confirmDeleteModel, setConfirmDeleteModel] = useState(null);
@@ -44,8 +44,7 @@ export const ModelManagementCard = () => {
     const handleSetActive = async (modelId) => {
         setIsSubmitting(modelId);
         try {
-            // Pass the access token to the service function
-            await setActiveModel(modelId, session?.access_token);
+            await setActiveModel(modelId);
             toast.success('Model activated successfully!');
             await mutate();
         } catch (e) {
@@ -60,7 +59,7 @@ export const ModelManagementCard = () => {
         setConfirmDeleteModel(null);
         setIsSubmitting(modelId);
         try {
-            await deleteModel(modelId, session?.access_token);
+            await deleteModel(modelId);
             toast.success('Model deleted successfully.');
             await mutate();
         } catch (e) {
@@ -125,7 +124,7 @@ export const ModelManagementCard = () => {
                                                     <Button
                                                         variant="contained"
                                                         onClick={() => handleSetActive(model.id)}
-                                                        disabled={model.is_active || isSubmitting !== null || !session?.access_token}
+                                                        disabled={model.is_active || isSubmitting !== null}
                                                         size="small"
                                                     >
                                                         {isSubmitting === model.id ? <CircularProgress color="inherit" size={20} /> : 'Set Active'}
@@ -134,7 +133,7 @@ export const ModelManagementCard = () => {
                                                         aria-label="delete model"
                                                         color="error"
                                                         onClick={() => setConfirmDeleteModel(model)}
-                                                        disabled={isSubmitting !== null || !session?.access_token}
+                                                        disabled={isSubmitting !== null}
                                                         size="small"
                                                     >
                                                         <DeleteIcon />

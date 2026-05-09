@@ -1,12 +1,8 @@
 import apiClient from '@/api/apiClient';
 
-export const createCase = async (caseData, accessToken) => {
+export const createCase = async (caseData) => {
     try {
-        const response = await apiClient.post(`/cases`, caseData, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.post(`/cases`, caseData);
         return response.data;
     } catch (error) {
         console.error("Failed to create case:", error.response?.data || error.message);
@@ -14,14 +10,9 @@ export const createCase = async (caseData, accessToken) => {
     }
 };
 
-export const getCase = async (caseId, accessToken) => {
-
+export const getCase = async (caseId) => {
     try {
-        const response = await apiClient.get(`/cases/${caseId}`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get(`/cases/${caseId}`);
         return response.data;
     } catch (error) {
         console.error("Failed to get case:", error.response?.data || error.message);
@@ -29,13 +20,9 @@ export const getCase = async (caseId, accessToken) => {
     }
 };
 
-export const updateCase = async (caseId, updateData, accessToken) => {
+export const updateCase = async (caseId, updateData) => {
     try {
-        const response = await apiClient.patch(`/cases/${caseId}`, updateData, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.patch(`/cases/${caseId}`, updateData);
         return response.data;
     } catch (error) {
         console.error("Failed to update case:", error.response?.data || error.message);
@@ -43,13 +30,9 @@ export const updateCase = async (caseId, updateData, accessToken) => {
     }
 }
 
-export const deleteCase = async (caseId, accessToken) => {
+export const deleteCase = async (caseId) => {
     try {
-        const response = await apiClient.delete(`/cases/${caseId}`, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.delete(`/cases/${caseId}`);
         return response.data;
     } catch (error) {
         console.error("Failed to delete case:", error.response?.data || error.message);
@@ -57,13 +40,9 @@ export const deleteCase = async (caseId, accessToken) => {
     }
 }
 
-export const getCases = async (accessToken) => {
+export const getCases = async () => {
     try {
-        const response = await apiClient.get('/cases', {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get('/cases');
         return response.data;
     } catch (error) {
         if (error.response && error.response.data) {
@@ -74,13 +53,9 @@ export const getCases = async (accessToken) => {
     }
 };
 
-export const getExportSettings = async (accessToken) => {
+export const getExportSettings = async () => {
     try {
-        const response = await apiClient.get('/cases/settings/export', {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.get('/cases/settings/export');
         return response.data;
     } catch (error) {
         console.error("Failed to get export settings:", error.response?.data || error.message);
@@ -88,13 +63,9 @@ export const getExportSettings = async (accessToken) => {
     }
 };
 
-export const updateExportSettings = async (data, accessToken) => {
+export const updateExportSettings = async (data) => {
     try {
-        const response = await apiClient.patch('/cases/settings/export', data, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.patch('/cases/settings/export', data);
         return response.data;
     } catch (error) {
         console.error("Failed to update export settings:", error.response?.data || error.message);
@@ -102,13 +73,9 @@ export const updateExportSettings = async (data, accessToken) => {
     }
 };
 
-export const createCaseExport = async (caseId, accessToken) => {
+export const createCaseExport = async (caseId) => {
     try {
-        const response = await apiClient.post(`/cases/${caseId}/export`, {}, {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-            },
-        });
+        const response = await apiClient.post(`/cases/${caseId}/export`, {});
         return response.data;
     } catch (error) {
         console.error("Failed to create export:", error.response?.data || error.message);

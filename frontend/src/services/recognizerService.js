@@ -2,20 +2,18 @@ import apiClient from '@/api/apiClient';
 
 const BASE = 'model-management/custom-recognizers';
 
-const headers = (token) => ({ Authorization: `Bearer ${token}` });
-
-export const getCustomRecognizers = async (accessToken) => {
+export const getCustomRecognizers = async () => {
     try {
-        const response = await apiClient.get(BASE, { headers: headers(accessToken) });
+        const response = await apiClient.get(BASE);
         return response.data;
     } catch (error) {
         throw new Error('Failed to load custom recognizers.');
     }
 };
 
-export const createCustomRecognizer = async (data, accessToken) => {
+export const createCustomRecognizer = async (data) => {
     try {
-        const response = await apiClient.post(BASE, data, { headers: headers(accessToken) });
+        const response = await apiClient.post(BASE, data);
         return response.data;
     } catch (error) {
         const detail = error.response?.data?.name?.[0]
@@ -26,9 +24,9 @@ export const createCustomRecognizer = async (data, accessToken) => {
     }
 };
 
-export const updateCustomRecognizer = async (id, data, accessToken) => {
+export const updateCustomRecognizer = async (id, data) => {
     try {
-        const response = await apiClient.patch(`${BASE}/${id}`, data, { headers: headers(accessToken) });
+        const response = await apiClient.patch(`${BASE}/${id}`, data);
         return response.data;
     } catch (error) {
         const detail = error.response?.data?.non_field_errors?.[0]
@@ -38,21 +36,20 @@ export const updateCustomRecognizer = async (id, data, accessToken) => {
     }
 };
 
-export const deleteCustomRecognizer = async (id, accessToken) => {
+export const deleteCustomRecognizer = async (id) => {
     try {
-        await apiClient.delete(`${BASE}/${id}`, { headers: headers(accessToken) });
+        await apiClient.delete(`${BASE}/${id}`);
         return true;
     } catch (error) {
         throw new Error('Failed to delete recognizer.');
     }
 };
 
-export const validateRegex = async (pattern, sampleText, accessToken) => {
+export const validateRegex = async (pattern, sampleText) => {
     try {
         const response = await apiClient.post(
             'model-management/regex/validate',
             { pattern, sample_text: sampleText },
-            { headers: headers(accessToken) }
         );
         return response.data;
     } catch (error) {

@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 export function useRemoveRedaction({
     documentId,
     extractedText,
-    accessToken,
     redactions,
     setRedactions,
     pushHistory,
@@ -18,18 +17,17 @@ export function useRemoveRedaction({
     // Internal helper: perform the remove API call + state update without pushing history.
     const _removeRedactionById = useCallback(async (redactionToRemove) => {
         if (!redactionToRemove.is_suggestion) {
-            await deleteRedaction(redactionToRemove.id, accessToken);
+            await deleteRedaction(redactionToRemove.id);
             setRedactions(prev => prev.filter(r => r.id !== redactionToRemove.id));
             toast.success("Redaction deleted.");
         } else {
             applySingle(await updateRedaction(
                 redactionToRemove.id,
-                { is_accepted: false, justification: null },
-                accessToken
+                { is_accepted: false, justification: null }
             ));
             toast.success("Suggestion reverted to pending.");
         }
-    }, [accessToken, applySingle, setRedactions]);
+    }, [applySingle, setRedactions]);
 
     const handleRemoveRedaction = useCallback(async (redactionId) => {
         const snap = redactions.find(r => r.id === redactionId);
@@ -49,26 +47,26 @@ export function useRemoveRedaction({
                             redaction_type: snap.redaction_type,
                             is_suggestion: false,
                             is_accepted: true,
-                        }, accessToken);
+                        });
                         currentId = created.id;
                         setRedactions(prev => [...prev, created]);
                     },
                     async () => {
-                        await deleteRedaction(currentId, accessToken);
+                        await deleteRedaction(currentId);
                         setRedactions(prev => prev.filter(r => r.id !== currentId));
                     }
                 );
             } else {
                 // AI suggestion reverted to pending — undo restores prior state
                 pushHistory(
-                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, accessToken)),
-                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }, accessToken))
+                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification })),
+                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }))
                 );
             }
         } catch (error) {
             toast.error("Failed to remove redaction. Please try again.");
         }
-    }, [redactions, accessToken, pushHistory, _removeRedactionById, documentId, applySingle, setRedactions]);
+    }, [redactions, pushHistory, _removeRedactionById, documentId, applySingle, setRedactions]);
 
     // When Remove tool is active and text is selected, trim/remove the overlapping accepted redaction(s).
     const handleRemoveSelect = useCallback(async (selection) => {
@@ -97,26 +95,26 @@ export function useRemoveRedaction({
 
                 if (fullyContained) {
                     if (!r.is_suggestion) {
-                        await deleteRedaction(r.id, accessToken);
+                        await deleteRedaction(r.id);
                         setRedactions(prev => prev.filter(x => x.id !== r.id));
                     } else {
-                        applySingle(await updateRedaction(r.id, { is_accepted: false, justification: null }, accessToken));
+                        applySingle(await updateRedaction(r.id, { is_accepted: false, justification: null }));
                     }
                 } else if (trimEnd) {
                     applySingle(await updateRedaction(r.id, {
                         end_char: selStart,
                         text: extractedText.substring(r.start_char, selStart),
-                    }, accessToken));
+                    }));
                 } else if (trimStart) {
                     applySingle(await updateRedaction(r.id, {
                         start_char: selEnd,
                         text: extractedText.substring(selEnd, r.end_char),
-                    }, accessToken));
+                    }));
                 } else if (splitMiddle) {
                     applySingle(await updateRedaction(r.id, {
                         end_char: selStart,
                         text: extractedText.substring(r.start_char, selStart),
-                    }, accessToken));
+                    }));
                     const createdSecond = await createRedaction(documentId, {
                         text: extractedText.substring(selEnd, r.end_char),
                         start_char: selEnd,
@@ -126,7 +124,7 @@ export function useRemoveRedaction({
                         is_suggestion: r.is_suggestion,
                         is_accepted: r.is_accepted,
                         justification: r.justification,
-                    }, accessToken);
+                    });
                     setRedactions(prev => [...prev, createdSecond]);
                     splitCreatedId = createdSecond.id;
                 }
@@ -149,17 +147,17 @@ export function useRemoveRedaction({
                                 text: snap.text, start_char: snap.start_char, end_char: snap.end_char,
                                 document: documentId, redaction_type: snap.redaction_type,
                                 is_suggestion: false, is_accepted: true,
-                            }, accessToken);
+                            });
                             setRedactions(prev => [...prev, created]);
                         } else {
-                            applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, accessToken));
+                            applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }));
                         }
                     } else {
                         applySingle(await updateRedaction(snap.id, {
                             start_char: snap.start_char, end_char: snap.end_char, text: snap.text,
-                        }, accessToken));
+                        }));
                         if (splitMiddle && splitCreatedId) {
-                            await deleteRedaction(splitCreatedId, accessToken);
+                            await deleteRedaction(splitCreatedId);
                             setRedactions(prev => prev.filter(r => r.id !== splitCreatedId));
                             splitCreatedId = null;
                         }
@@ -176,37 +174,37 @@ export function useRemoveRedaction({
 
                     if (fullyContained) {
                         if (!snap.is_suggestion) {
-                            await deleteRedaction(snap.id, accessToken);
+                            await deleteRedaction(snap.id);
                             setRedactions(prev => prev.filter(r => r.id !== snap.id));
                         } else {
-                            applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }, accessToken));
+                            applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }));
                         }
                     } else if (trimEnd) {
                         applySingle(await updateRedaction(snap.id, {
                             end_char: selStart, text: extractedText.substring(snap.start_char, selStart),
-                        }, accessToken));
+                        }));
                     } else if (trimStart) {
                         applySingle(await updateRedaction(snap.id, {
                             start_char: selEnd, text: extractedText.substring(selEnd, snap.end_char),
-                        }, accessToken));
+                        }));
                     } else if (splitMiddle) {
                         applySingle(await updateRedaction(snap.id, {
                             end_char: selStart, text: extractedText.substring(snap.start_char, selStart),
-                        }, accessToken));
+                        }));
                         const created = await createRedaction(documentId, {
                             text: extractedText.substring(selEnd, snap.end_char),
                             start_char: selEnd, end_char: snap.end_char,
                             document: documentId, redaction_type: snap.redaction_type,
                             is_suggestion: snap.is_suggestion, is_accepted: snap.is_accepted,
                             justification: snap.justification,
-                        }, accessToken);
+                        });
                         setRedactions(prev => [...prev, created]);
                         splitCreatedId = created.id;
                     }
                 }
             }
         );
-    }, [redactions, pushHistory, accessToken, documentId, extractedText, applySingle, setRedactions]);
+    }, [redactions, pushHistory, documentId, extractedText, applySingle, setRedactions]);
 
     // When the REMOVE tool is active and a highlight is clicked in the document,
     // find all IDs in the same merge group and remove them as a single undo step.
@@ -246,10 +244,10 @@ export function useRemoveRedaction({
                             redaction_type: snap.redaction_type,
                             is_suggestion: false,
                             is_accepted: true,
-                        }, accessToken);
+                        });
                         setRedactions(prev => [...prev, created]);
                     } else {
-                        const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification }, accessToken);
+                        const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification });
                         setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
                     }
                 }
@@ -258,7 +256,7 @@ export function useRemoveRedaction({
                 await Promise.all(snapshots.map(snap => _removeRedactionById(snap)));
             }
         );
-    }, [displaySections, redactions, pushHistory, _removeRedactionById, documentId, accessToken, setRedactions]);
+    }, [displaySections, redactions, pushHistory, _removeRedactionById, documentId, setRedactions]);
 
     return {
         handleRemoveRedaction,
