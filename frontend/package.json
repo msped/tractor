@@ -51,6 +51,9 @@
     "react-hot-toast": "2.5.2",
     "swr": "2.3.4"
   },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "devDependencies": {
     "@babel/preset-react": "7.28.5",
     "@cypress/code-coverage": "4.0.3",
