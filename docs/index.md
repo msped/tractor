@@ -22,4 +22,4 @@ Tractor is a document redaction application with ML-powered Named Entity Recogni
 
 ## License
 
-Tractor is licensed under the [AGPL-3.0 License](https://github.com/msped/tractor/blob/main/LICENSE).
+Tractor is licensed under the [MPL 2.0 Licence](https://github.com/msped/tractor/blob/main/LICENSE).
