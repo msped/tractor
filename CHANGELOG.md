@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] - 2026-05-09
+
 ### Security
+
 - XSS prevention: table HTML in DocumentViewer now sanitised with DOMPurify before rendering
 - JWT session callback no longer exposes `refresh_token` to client-side React components — only `access_token`, `user`, and `error` are returned
 - ExemptionTemplate create/update/delete now restricted to admin users (`IsAdminUser`)
@@ -15,10 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SECRET_KEY` and `JWT_SIGNING_KEY` now raise a `ValueError` at startup if not set, preventing Django from starting with `None` signing keys
 
 ### Changed
+
+- Licence changed from AGPL v3 to Mozilla Public License 2.0
+- Authentication migrated from NextAuth to better-auth for improved session management
 - Minimum training data threshold raised from 25 to 75 examples before a SpanCat training run will proceed
 - `OLLAMA_CHUNK_SIZE` and `OLLAMA_CHUNK_OVERLAP` are now loaded from environment variables (previously only worked as Django settings overrides)
 
 ### Documentation
+
 - CONTRIBUTING.md setup commands updated to use `uv` instead of `pip`/`venv`
 - `docs/dev/setup.md` now includes the `python manage.py download_model` step required for first-time bare-metal setup
 - `docs/dev/deployment.md` worker warning made more prominent; optional env var defaults clarified; Gemma model guidance updated
@@ -36,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-04-19
 
 ### Added
+
 - **Four-model NLP pipeline**: Gemma (via Ollama) added as a fourth extraction stage, performing contextual document analysis using a locally-hosted LLM. Results labelled `source=LLM` and shown with an **AI (Contextual)** badge in the review sidebar. Controlled by `OLLAMA_ENABLED` — fully optional
 - **GPU acceleration**: GLiNER and SpanCat models now automatically use CUDA (NVIDIA) or MPS (Apple Silicon) via `_get_device()` in `training/loader.py`. NVIDIA GPU passthrough for the Ollama container supported via `docker-compose.gpu.yml`
 - **Document chunking for Ollama**: Large documents automatically split into overlapping chunks before Gemma processing, with character offset correction before results are merged (`OLLAMA_CHUNK_SIZE` / `OLLAMA_CHUNK_OVERLAP`)
@@ -46,10 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dark/light mode toggle stored in context
 
 ### Changed
+
 - Training section renamed to **Model Management** in the UI and API (`/api/model-management/`)
 - Training documents are removed from the list when their associated training run is deleted
 
 ### Fixed
+
 - Gemma extraction character offsets corrected for chunked documents (#102, #103)
 
 ---
@@ -57,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2026-04-10
 
 ### Added
+
 - **Three-model hybrid NER pipeline**: SpanCat (trained, highest priority) + GLiNER (zero-shot THIRD_PARTY) + Presidio (pattern-based THIRD_PARTY PII and OPERATIONAL refs). Replaces previous SpanCat + `en_core_web_lg` approach. Results deduplicated with priority SpanCat > GLiNER > Presidio
 - GLiNER zero-shot model for THIRD_PARTY PII detection (names, orgs, locations, DOB, addresses) — works without training data
 - Presidio with custom UK pattern recognisers: postcodes, NI numbers, NHS numbers, crime references, collar numbers
@@ -89,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ruff linter integration
 
 ### Changed
+
 - Migrated Python dependency management from `pip`/`requirements.txt` to `uv`/`pyproject.toml`
 - Upgraded Python from 3.10 to 3.13
 - Dockerfile and CI updated for `uv` and Python 3.13
@@ -98,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed unused `ocrmac` dependency
 
 ### Fixed
+
 - Training documents reset to unprocessed when their associated training run is deleted
 - Merged table cells no longer rendered as duplicated content
 - Scroll behaviour when navigating merged redaction split/remove items
@@ -114,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2025-01-07
 
 ### Added
+
 - Document upload and text extraction (PDF, Word)
 - Named Entity Recognition using spaCy for automatic redaction suggestions
 - Accept/reject workflow for redactions
@@ -129,6 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WCAG 2.2 AA accessibility compliance (partial)
 
 ### Security
+
 - Django CSRF protection enabled
 - XSS prevention via template auto-escaping
 - SQL injection prevention via ORM
