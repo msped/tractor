@@ -1,12 +1,11 @@
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor
 
 from docx import Document
 from docx.oxml.ns import qn
 from pypdf import PdfReader
 
-from .loader import GLiNERModelManager, SpanCatModelManager
+from .pipeline import build_default_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -42,20 +41,6 @@ def _expand_prefix_symbols(entities, text):
             ent["start_char"] = start - 1
             ent["text"] = text[ent["start_char"] : ent["end_char"]]
     return entities
-
-
-def _deduplicate_entities(primary_entities, secondary_entities):
-    """Merge two entity lists, keeping primary entities and dropping overlapping secondary ones."""
-    combined = list(primary_entities)
-    for sec_ent in secondary_entities:
-        overlaps = any(
-            sec_ent["start_char"] < pri_ent["end_char"]
-            and sec_ent["end_char"] > pri_ent["start_char"]
-            for pri_ent in primary_entities
-        )
-        if not overlaps:
-            combined.append(sec_ent)
-    return combined
 
 
 def _table_has_borders(table):
@@ -386,74 +371,19 @@ def _extract_text_from_pdf(path):
         return ""
 
 
-def _run_extractors(
-    gliner_model, spancat_nlp, ner_text, data_subject_name, data_subject_dob
-):
-    """Run all four NLP extractors concurrently and return their results.
-
-    GLiNER, SpanCat, and Presidio exceptions propagate (document enters FAILED).
-    Gemma failures are non-fatal: extract_with_gemma catches its own exceptions
-    internally; an unexpected raise is also caught here so Ollama unavailability
-    never blocks the other results.
-    """
-    # Lazy imports — keep GLiNER/pandas away from module load time
-    from .extractors.gemma_extractor import extract_with_gemma
-    from .extractors.gliner_extractor import extract_with_gliner
-    from .extractors.presidio_extractor import (
-        extract_operational_with_presidio,
-        extract_with_presidio,
-    )
-    from .extractors.spancat_extractor import extract_with_spancat
-
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        fut_gliner = executor.submit(
-            extract_with_gliner, gliner_model, ner_text
-        )
-        fut_presidio_tp = executor.submit(extract_with_presidio, ner_text)
-        fut_presidio_op = executor.submit(
-            extract_operational_with_presidio, ner_text
-        )
-        fut_spancat = (
-            executor.submit(extract_with_spancat, spancat_nlp, ner_text)
-            if spancat_nlp
-            else None
-        )
-        fut_gemma = executor.submit(
-            extract_with_gemma, ner_text, data_subject_name, data_subject_dob
-        )
-
-        gliner_results = fut_gliner.result()
-        presidio_tp = fut_presidio_tp.result()
-        presidio_op = fut_presidio_op.result()
-        spancat_results = fut_spancat.result() if fut_spancat else []
-        try:
-            gemma_results = fut_gemma.result()
-        except Exception as exc:
-            logger.warning("Gemma extractor raised unexpectedly: %s", exc)
-            gemma_results = []
-
-    return (
-        gliner_results,
-        presidio_tp,
-        presidio_op,
-        spancat_results,
-        gemma_results,
-    )
-
-
 def extract_entities_from_text(
-    path, data_subject_name=None, data_subject_dob=None
+    path, data_subject_name=None, data_subject_dob=None, *, pipeline=None
 ):
-    """Run the full NLP pipeline (GLiNER → SpanCat → Presidio → Gemma) on a document file.
+    """Run the full NLP pipeline (SpanCat → GLiNER → Presidio → Gemma) on a document file.
+
+    Pass a custom ExtractionPipeline via ``pipeline`` to override the default
+    (useful in tests — no model manager mocking required).
 
     Returns:
         Tuple of (extracted_text, entity_suggestions, tables, spacy_model_entry).
     """
-    gliner_model = GLiNERModelManager.get_instance().get_model()
-    if not gliner_model:
-        raise ValueError("No GLiNER model available.")
-
-    spancat_nlp = SpanCatModelManager.get_instance().get_model()
+    if pipeline is None:
+        pipeline = build_default_pipeline(data_subject_name, data_subject_dob)
 
     # Try structure extraction for DOCX files first
     structure_result = extract_document_structure(path)
@@ -474,24 +404,7 @@ def extract_entities_from_text(
         if not ner_text.strip():
             return "", [], [], None
 
-    (
-        gliner_results,
-        presidio_tp,
-        presidio_op,
-        spancat_results,
-        gemma_results,
-    ) = _run_extractors(
-        gliner_model,
-        spancat_nlp,
-        ner_text,
-        data_subject_name,
-        data_subject_dob,
-    )
-
-    # SpanCat > GLiNER > Presidio > Gemma
-    combined = _deduplicate_entities(spancat_results, gliner_results)
-    combined = _deduplicate_entities(combined, presidio_tp + presidio_op)
-    combined = _deduplicate_entities(combined, gemma_results)
+    combined = pipeline.run(ner_text)
     combined = _expand_prefix_symbols(combined, ner_text)
 
     return ner_text, combined, tables, structure
