@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -13,13 +13,7 @@ import { ResubmitDialog } from '@/components/ResubmitDialog';
 import { getExemptionTemplates } from '@/services/redactionService';
 import useSWR from 'swr';
 import { DocumentViewer } from '@/components/DocumentViewer';
-import { useUndoHistory } from '@/hooks/useUndoHistory';
-import { useDocumentControls } from '@/hooks/useDocumentControls';
-import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
-import { useRedactionActions } from '@/hooks/useRedactionActions';
-import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
-import { useManualRedaction } from '@/hooks/useManualRedaction';
-import { useMarkAllInCase } from '@/hooks/useMarkAllInCase';
+import { useRedactionState } from '@/hooks/useRedactionState';
 import { useRouter } from 'next/navigation';
 
 const REDACTION_TYPE_LABELS = {
@@ -30,7 +24,6 @@ const REDACTION_TYPE_LABELS = {
 
 export const RedactionComponent = ({ document: currentDocument, initialRedactions }) => {
     const router = useRouter();
-    const [redactions, setRedactions] = useState(initialRedactions || []);
 
     const { data: exemptionTemplates = [] } = useSWR(
         ['exemptionTemplates'],
@@ -38,29 +31,41 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         { dedupingInterval: 60000 }
     );
 
-    // State for rejection dialog (single and bulk)
-    const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
-    const [rejectionTarget, setRejectionTarget] = useState(null);
-    const [bulkRejectIds, setBulkRejectIds] = useState([]);
-
-    // Undo/redo history
-    const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
-
     const {
+        redactions,
         displaySections,
-        setSplitMerges,
-        setIsolatedIds,
+        pendingCount,
         hoveredSuggestionId,
         scrollToId,
-        setScrollToId,
         handleSuggestionMouseEnter,
         handleSuggestionMouseLeave,
         handleHighlightClick,
         handleRemoveScrollId,
         handleCardClick,
-    } = useRedactionDisplay({ redactions });
-
-    const {
+        manualRedactionAnchor,
+        pendingRedaction,
+        handleTextSelect,
+        handleCreateManualRedaction,
+        handleCloseManualRedactionPopover,
+        handleOnContextSave,
+        handleRemoveRedaction,
+        handleRemoveSelect,
+        handleUnhighlightClick,
+        handleAcceptSuggestion,
+        handleBulkAccept,
+        handleRejectAsDisclosable,
+        handleChangeTypeAndAccept,
+        handleBulkChangeTypeAndAccept,
+        handleOpenRejectDialog,
+        handleOpenBulkRejectDialog,
+        handleRejectConfirm,
+        handleSplitMerge,
+        handleRemoveFromMerge,
+        markAllInCaseTarget,
+        setMarkAllInCaseTarget,
+        handleMarkAllInCase,
+        handleMarkAllInCaseAcceptConfirm,
+        handleMarkAllInCaseRejectConfirm,
         isLoading,
         isResubmitting,
         resubmitDialogOpen,
@@ -76,82 +81,14 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         handleResizeStart,
         handleMarkAsComplete,
         handleResubmit,
-    } = useDocumentControls({ undo, redo, clearHistory, currentDocument, router });
-
-    const {
-        handleAcceptSuggestion,
-        handleBulkAccept,
-        handleRejectAsDisclosable,
-        handleChangeTypeAndAccept,
-        handleBulkChangeTypeAndAccept,
-        handleOpenRejectDialog,
-        handleOpenBulkRejectDialog,
-        handleRejectConfirm,
-        handleSplitMerge,
-        handleRemoveFromMerge,
-    } = useRedactionActions({
-        documentId: currentDocument.id,
-        redactions,
-        setRedactions,
-        pushHistory,
-        setSplitMerges,
-        setIsolatedIds,
-        setScrollToId,
-        bulkRejectIds,
-        setBulkRejectIds,
-        setRejectionDialogOpen,
-        setRejectionTarget,
-    });
-
-    const {
-        handleRemoveRedaction,
-        handleRemoveSelect,
-        handleUnhighlightClick,
-    } = useRemoveRedaction({
-        documentId: currentDocument.id,
-        extractedText: currentDocument.extracted_text,
-        redactions,
-        setRedactions,
-        pushHistory,
-        displaySections,
-    });
-
-    const {
-        manualRedactionAnchor,
-        pendingRedaction,
-        handleTextSelect,
-        handleCreateManualRedaction,
-        handleCloseManualRedactionPopover,
-        handleOnContextSave,
-    } = useManualRedaction({
-        documentId: currentDocument.id,
-        extractedText: currentDocument.extracted_text,
-        redactions,
-        setRedactions,
-        pushHistory,
-        activeHighlightType,
-    });
-
-    const {
-        markAllInCaseTarget,
-        setMarkAllInCaseTarget,
-        handleMarkAllInCase,
-        handleMarkAllInCaseAcceptConfirm,
-        handleMarkAllInCaseRejectConfirm,
-    } = useMarkAllInCase({
-        caseId: currentDocument.case,
-        setRedactions,
-        openRejectDialog: ({ id, text }) => {
-            setRejectionTarget({ id, text });
-            setRejectionDialogOpen(true);
-        },
-        closeRejectDialog: () => {
-            setRejectionDialogOpen(false);
-            setRejectionTarget(null);
-        },
-    });
-
-    const pendingCount = displaySections.pending.total;
+        undo,
+        redo,
+        canUndo,
+        canRedo,
+        rejectionDialogOpen,
+        rejectionTarget,
+        handleCloseRejectionDialog,
+    } = useRedactionState({ document: currentDocument, initialRedactions, router });
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
@@ -297,12 +234,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
             {rejectionTarget && (
                 <RejectReasonDialog
                     open={rejectionDialogOpen}
-                    onClose={() => {
-                        setRejectionDialogOpen(false);
-                        setRejectionTarget(null);
-                        setBulkRejectIds([]);
-                        setMarkAllInCaseTarget(null);
-                    }}
+                    onClose={handleCloseRejectionDialog}
                     onSubmit={markAllInCaseTarget?.action === 'reject' ? handleMarkAllInCaseRejectConfirm : handleRejectConfirm}
                     redaction={rejectionTarget}
                 />
