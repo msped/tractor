@@ -213,17 +213,15 @@ def _apply_existing_case_decisions(document):
         )
 
         if accepted_count == total:
-            target_qs.update(is_accepted=True)
+            target_qs.accept()
         elif rejected_count == total:
-            # Use the most common rejection justification
             top = (
                 existing_decided.values("justification")
                 .annotate(n=Count("justification"))
                 .order_by("-n")
                 .first()
             )
-            justification = top["justification"] if top else ""
-            target_qs.update(justification=justification)
+            target_qs.reject(top["justification"] if top else "")
 
 
 def find_and_flag_matching_text_in_case(redaction_id):

@@ -403,10 +403,8 @@ class BulkByTextRedactionView(APIView):
 
         with transaction.atomic():
             if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:
-                count = pending_qs.update(is_accepted=True)
+                count = pending_qs.accept()
             else:
-                count = pending_qs.update(
-                    justification=data.get("rejection_reason", "")
-                )
+                count = pending_qs.reject(data.get("rejection_reason", ""))
 
         return Response({"updated": count}, status=status.HTTP_200_OK)

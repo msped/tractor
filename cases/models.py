@@ -222,6 +222,18 @@ class RedactionQuerySet(models.QuerySet):
             & (Q(justification__isnull=True) | Q(justification=""))
         )
 
+    def accept(self):
+        """Mark all redactions in the queryset as accepted."""
+        return self.update(is_accepted=True)
+
+    def reject(self, justification=""):
+        """Mark all redactions in the queryset as rejected with the given justification."""
+        return self.update(is_accepted=False, justification=justification)
+
+    def reset(self):
+        """Return all redactions in the queryset to pending (no decision)."""
+        return self.update(is_accepted=False, justification=None)
+
 
 class Redaction(models.Model):
     """
