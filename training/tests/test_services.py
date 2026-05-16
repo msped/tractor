@@ -6,15 +6,16 @@ from django.test import TestCase
 from docx import Document as DocxDocument
 from lxml import etree
 
-from ..pipeline import ExtractionPipeline, _deduplicate_entities
-from ..services import (
-    _expand_prefix_symbols,
+from ..extraction import (
+    DocumentStructure,
     _extract_text_from_pdf,
     _table_has_borders,
+    extract_document,
     extract_document_structure,
-    extract_entities_from_text,
     extract_table_with_styling,
 )
+from ..pipeline import ExtractionPipeline, _deduplicate_entities
+from ..services import _expand_prefix_symbols, extract_entities_from_text
 from .base import NetworkBlockerMixin
 
 
@@ -1277,5 +1278,160 @@ class ExtractionPipelineTests(NetworkBlockerMixin, TestCase):
                 )
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0]["text"], "Jane Smith")
+        finally:
+            os.remove(path)
+
+
+class DocumentStructureTests(NetworkBlockerMixin, TestCase):
+    """Tests for DocumentStructure.check_invariant() and extract_document()."""
+
+    def _make_structure(
+        self, full_text, elements=None, tables=None, is_structured=True
+    ):
+        return DocumentStructure(
+            full_text=full_text,
+            elements=elements or [],
+            tables=tables or [],
+            is_structured=is_structured,
+        )
+
+    def test_check_invariant_passes_for_valid_structure(self):
+        full_text = "Hello world"
+        ds = self._make_structure(
+            full_text,
+            elements=[
+                {
+                    "type": "paragraph",
+                    "text": "Hello world",
+                    "start": 0,
+                    "end": 11,
+                }
+            ],
+        )
+        self.assertEqual(ds.check_invariant(), [])
+
+    def test_check_invariant_detects_element_mismatch(self):
+        full_text = "Hello world"
+        ds = self._make_structure(
+            full_text,
+            elements=[
+                {
+                    "type": "paragraph",
+                    "text": "wrong text",
+                    "start": 0,
+                    "end": 11,
+                }
+            ],
+        )
+        violations = ds.check_invariant()
+        self.assertEqual(len(violations), 1)
+        self.assertIn("paragraph", violations[0])
+
+    def test_check_invariant_skips_table_elements(self):
+        full_text = "Cell A\tCell B"
+        ds = self._make_structure(
+            full_text,
+            elements=[{"type": "table", "table_id": 0, "start": 0, "end": 13}],
+        )
+        self.assertEqual(ds.check_invariant(), [])
+
+    def test_check_invariant_detects_cell_mismatch(self):
+        full_text = "Cell A\tCell B"
+        ds = self._make_structure(
+            full_text,
+            tables=[
+                {
+                    "cells": [
+                        {
+                            "row": 0,
+                            "col": 0,
+                            "text": "wrong",
+                            "start": 0,
+                            "end": 6,
+                            "isMergedContinuation": False,
+                        }
+                    ]
+                }
+            ],
+        )
+        violations = ds.check_invariant()
+        self.assertEqual(len(violations), 1)
+        self.assertIn("[0,0]", violations[0])
+
+    def test_check_invariant_skips_continuation_cells(self):
+        full_text = "Cell A"
+        ds = self._make_structure(
+            full_text,
+            tables=[
+                {
+                    "cells": [
+                        {
+                            "row": 0,
+                            "col": 0,
+                            "text": "Cell A",
+                            "start": 0,
+                            "end": 6,
+                            "isMergedContinuation": False,
+                        },
+                        {
+                            "row": 0,
+                            "col": 1,
+                            "text": "Cell A",
+                            "start": 0,
+                            "end": 0,
+                            "isMergedContinuation": True,
+                        },
+                    ]
+                }
+            ],
+        )
+        self.assertEqual(ds.check_invariant(), [])
+
+    def test_extract_document_docx_returns_structured(self):
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            path = f.name
+        try:
+            doc = DocxDocument()
+            doc.add_paragraph("First line")
+            doc.add_paragraph("Second line")
+            doc.save(path)
+
+            ds = extract_document(path)
+
+            self.assertTrue(ds.is_structured)
+            self.assertIsNotNone(ds.elements)
+            self.assertIn("First line", ds.full_text)
+            self.assertIn("Second line", ds.full_text)
+            self.assertEqual(ds.check_invariant(), [])
+        finally:
+            os.remove(path)
+
+    def test_extract_document_docx_with_table_invariant_holds(self):
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            path = f.name
+        try:
+            doc = DocxDocument()
+            table = doc.add_table(rows=2, cols=2)
+            table.cell(0, 0).text = "A1"
+            table.cell(0, 1).text = "B1"
+            table.cell(1, 0).text = "A2"
+            table.cell(1, 1).text = "B2"
+            doc.save(path)
+
+            ds = extract_document(path)
+
+            self.assertTrue(ds.is_structured)
+            self.assertEqual(ds.check_invariant(), [], ds.check_invariant())
+        finally:
+            os.remove(path)
+
+    def test_extract_document_pdf_returns_unstructured(self):
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            path = f.name
+        try:
+            ds = extract_document(path)
+            self.assertFalse(ds.is_structured)
+            self.assertIsNone(ds.elements)
+            self.assertEqual(ds.tables, [])
         finally:
             os.remove(path)
