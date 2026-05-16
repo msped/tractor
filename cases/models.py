@@ -104,7 +104,7 @@ class Case(models.Model):
         Returns the task_id.
         """
         self.export_status = self.ExportStatus.PROCESSING
-        task_id = async_task("cases.services.export_case_documents", self.id)
+        task_id = async_task("cases.tasks.export_case_documents", self.id)
         self.export_task_id = task_id
         self.save(update_fields=["export_status", "export_task_id"])
         return task_id

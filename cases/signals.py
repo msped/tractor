@@ -12,7 +12,7 @@ def document_post_save(sender, instance, created, **kwargs):
     """
     if created and instance.status == Document.Status.PROCESSING:
         task_id = async_task(
-            "cases.services.process_document_and_create_redactions",
+            "cases.tasks.process_document_and_create_redactions",
             instance.id,
         )
         Document.objects.filter(pk=instance.pk).update(
@@ -27,16 +27,15 @@ def redaction_post_save(sender, instance, created, **kwargs):
     task to find that same text in all other documents in the case.
     """
     if instance.redaction_type == Redaction.RedactionType.DS_INFORMATION:
-        print("redaction: ", created, instance.redaction_type)
         if created:
             async_task(
-                "cases.services.find_and_flag_matching_text_in_case",
+                "cases.tasks.find_and_flag_matching_text_in_case",
                 instance.id,
             )
         else:
             update_fields = kwargs.get("update_fields") or set()
             if "redaction_type" in update_fields:
                 async_task(
-                    "cases.services.find_and_flag_matching_text_in_case",
+                    "cases.tasks.find_and_flag_matching_text_in_case",
                     instance.id,
                 )

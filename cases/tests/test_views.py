@@ -86,7 +86,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.data["task_id"], "test-task-id")
 
         mock_async_task.assert_called_once_with(
-            "cases.services.export_case_documents", self.case.id
+            "cases.tasks.export_case_documents", self.case.id
         )
         self.case.refresh_from_db()
         self.assertEqual(self.case.export_status, Case.ExportStatus.PROCESSING)
@@ -398,7 +398,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.refresh_from_db()
         self.assertEqual(self.document.status, Document.Status.PROCESSING)
         mock_async_task.assert_called_once_with(
-            "cases.services.process_document_and_create_redactions",
+            "cases.tasks.process_document_and_create_redactions",
             self.document.id,
         )
 
@@ -417,7 +417,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.refresh_from_db()
         self.assertEqual(self.document.status, Document.Status.PROCESSING)
         mock_async_task.assert_called_once_with(
-            "cases.services.process_document_and_create_redactions",
+            "cases.tasks.process_document_and_create_redactions",
             self.document.id,
         )
 
@@ -544,7 +544,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.document.refresh_from_db()
         self.assertEqual(self.document.status, Document.Status.PROCESSING)
         mock_async_task.assert_called_once_with(
-            "cases.services.process_document_and_create_redactions",
+            "cases.tasks.process_document_and_create_redactions",
             self.document.id,
         )
 

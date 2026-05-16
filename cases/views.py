@@ -235,7 +235,7 @@ class DocumentResubmitView(APIView):
             document.status = Document.Status.PROCESSING
             document.save(update_fields=["status"])
             async_task(
-                "cases.services.process_document_and_create_redactions",
+                "cases.tasks.process_document_and_create_redactions",
                 document.id,
             )
             return Response(status=status.HTTP_200_OK)
