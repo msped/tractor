@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -10,9 +10,8 @@ import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { ResubmitDialog } from '@/components/ResubmitDialog';
-import { bulkMarkByText, getExemptionTemplates } from '@/services/redactionService';
+import { getExemptionTemplates } from '@/services/redactionService';
 import useSWR from 'swr';
-import toast from 'react-hot-toast';
 import { DocumentViewer } from '@/components/DocumentViewer';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useDocumentControls } from '@/hooks/useDocumentControls';
@@ -20,6 +19,7 @@ import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
 import { useRedactionActions } from '@/hooks/useRedactionActions';
 import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
 import { useManualRedaction } from '@/hooks/useManualRedaction';
+import { useMarkAllInCase } from '@/hooks/useMarkAllInCase';
 import { useRouter } from 'next/navigation';
 
 const REDACTION_TYPE_LABELS = {
@@ -42,9 +42,6 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
     const [rejectionTarget, setRejectionTarget] = useState(null);
     const [bulkRejectIds, setBulkRejectIds] = useState([]);
-
-    // State for mark-all-in-case
-    const [markAllInCaseTarget, setMarkAllInCaseTarget] = useState(null); // {text, redactionType, action}
 
     // Undo/redo history
     const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
@@ -135,69 +132,26 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         activeHighlightType,
     });
 
-    const pendingCount = displaySections.pending.total;
-
-    const handleMarkAllInCase = useCallback(({ text, redactionType, action }) => {
-        if (action === 'accept') {
-            setMarkAllInCaseTarget({ text, redactionType, action });
-        } else {
-            setMarkAllInCaseTarget({ text, redactionType, action });
-            setRejectionTarget({ id: null, text });
+    const {
+        markAllInCaseTarget,
+        setMarkAllInCaseTarget,
+        handleMarkAllInCase,
+        handleMarkAllInCaseAcceptConfirm,
+        handleMarkAllInCaseRejectConfirm,
+    } = useMarkAllInCase({
+        caseId: currentDocument.case,
+        setRedactions,
+        openRejectDialog: ({ id, text }) => {
+            setRejectionTarget({ id, text });
             setRejectionDialogOpen(true);
-        }
-    }, [setRejectionTarget, setRejectionDialogOpen]);
+        },
+        closeRejectDialog: () => {
+            setRejectionDialogOpen(false);
+            setRejectionTarget(null);
+        },
+    });
 
-    const handleMarkAllInCaseAcceptConfirm = useCallback(async () => {
-        const { text, redactionType } = markAllInCaseTarget;
-        setMarkAllInCaseTarget(null);
-        try {
-            const { updated } = await bulkMarkByText(
-                currentDocument.case,
-                text,
-                redactionType,
-                'ACCEPTED',
-                null
-            );
-            setRedactions(prev =>
-                prev.map(r =>
-                    r.is_suggestion && !r.is_accepted && !r.justification &&
-                    r.text === text && r.redaction_type === redactionType
-                        ? { ...r, is_accepted: true }
-                        : r
-                )
-            );
-            toast.success(`Accepted ${updated} redaction${updated !== 1 ? 's' : ''} across this case.`);
-        } catch {
-            toast.error('Failed to mark all in case. Please try again.');
-        }
-    }, [markAllInCaseTarget, currentDocument.case, setRedactions]);
-
-    const handleMarkAllInCaseRejectConfirm = useCallback(async (_id, reason) => {
-        const { text, redactionType } = markAllInCaseTarget;
-        setRejectionDialogOpen(false);
-        setRejectionTarget(null);
-        setMarkAllInCaseTarget(null);
-        try {
-            const { updated } = await bulkMarkByText(
-                currentDocument.case,
-                text,
-                redactionType,
-                'REJECTED',
-                reason
-            );
-            setRedactions(prev =>
-                prev.map(r =>
-                    r.is_suggestion && !r.is_accepted && !r.justification &&
-                    r.text === text && r.redaction_type === redactionType
-                        ? { ...r, justification: reason }
-                        : r
-                )
-            );
-            toast.success(`Rejected ${updated} redaction${updated !== 1 ? 's' : ''} across this case.`);
-        } catch {
-            toast.error('Failed to mark all in case. Please try again.');
-        }
-    }, [markAllInCaseTarget, currentDocument.case, setRedactions, setRejectionDialogOpen, setRejectionTarget]);
+    const pendingCount = displaySections.pending.total;
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
