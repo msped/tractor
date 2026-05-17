@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Document.start_processing()` method to transition a document into processing state and dispatch the async task
+
+### Changed
+
+- `training/services.py` split into `training/extraction.py` (document structure extraction and `DocumentStructure` dataclass) and `training/pipeline.py` (`ExtractionPipeline` and `build_default_pipeline`)
+- `GLiNERModelManager` and `SpanCatModelManager` now inherit from `_ModelManagerBase`, giving each subclass independent singleton state and eliminating shared class-level `_instance`/`_lock`
+- Task routing for the `cases` app centralised in `cases/tasks.py`; unhandled exceptions during document processing now log the traceback and mark the document `ERROR` rather than propagating silently
+- Frontend services now use a shared `extractApiError` utility for consistent API error handling
+- `RedactionComponent` state logic extracted into `useRedactionState` hook; mark-all-in-case logic extracted into `useMarkAllInCase` hook
+
+---
+
+## [0.5.1] - 2026-05-09
+
+### Changed
+
+- Bumped Python dependencies: Django 5.2.12 → 5.2.14, lxml 5.4.0 → 6.1.0, Pillow 12.1.1 → 12.2.0, pypdf 6.9.2 → 6.10.2, python-dotenv 1.1.0 → 1.2.2
+- Bumped JS dependencies: fast-uri 3.1.0 → 3.1.2, postcss 8.4.31 → 8.5.14 (also added as a direct override to resolve transitive version conflict)
+
 ---
 
 ## [0.5.0] - 2026-05-09
