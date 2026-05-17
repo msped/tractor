@@ -26,7 +26,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     const router = useRouter();
 
     const { data: exemptionTemplates = [] } = useSWR(
-        ['exemptionTemplates'],
+        ['exemptions'],
         () => getExemptionTemplates(),
         { dedupingInterval: 60000 }
     );
