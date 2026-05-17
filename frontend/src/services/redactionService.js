@@ -1,4 +1,5 @@
 import apiClient from '@/api/apiClient';
+import { extractApiError } from '@/api/apiError';
 
 export const createRedaction = async (documentId, createData) => {
     try {
@@ -6,13 +7,9 @@ export const createRedaction = async (documentId, createData) => {
             `cases/document/${documentId}/redaction`,
             createData,
         );
-        return response.data
+        return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to create redaction: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to create redaction. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to create redaction. Please try again.'));
     }
 };
 
@@ -22,13 +19,9 @@ export const updateRedaction = async (redactionId, updateData) => {
             `cases/document/redaction/${redactionId}`,
             updateData,
         );
-        return response.data
+        return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to update redaction: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to update redaction. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to update redaction. Please try again.'));
     }
 };
 
@@ -39,11 +32,7 @@ export const deleteRedaction = async (redactionId) => {
         );
         return response.status === 204;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to delete redaction: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to delete redaction. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to delete redaction. Please try again.'));
     }
 };
 
@@ -57,10 +46,7 @@ export const bulkMarkByText = async (caseId, text, redactionType, markStatus, re
         );
         return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to bulk mark redactions: ${error.response.data.detail || 'Unknown error'}`);
-        }
-        throw new Error('Failed to bulk mark redactions. Please try again.');
+        throw new Error(extractApiError(error, 'Failed to bulk mark redactions. Please try again.'));
     }
 };
 
@@ -72,11 +58,7 @@ export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justific
         );
         return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to bulk update redactions: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to bulk update redactions. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to bulk update redactions. Please try again.'));
     }
 };
 
@@ -88,11 +70,7 @@ export const updateRedactionContext = async (redactionId, contextData) => {
         );
         return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to update redaction context: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to update redaction context. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to update redaction context. Please try again.'));
     }
 };
 
@@ -101,11 +79,7 @@ export const getExemptionTemplates = async () => {
         const response = await apiClient.get('cases/exemptions');
         return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to load exemption templates: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to load exemption templates. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to load exemption templates. Please try again.'));
     }
 };
 
@@ -114,12 +88,7 @@ export const createExemptionTemplate = async (data) => {
         const response = await apiClient.post('cases/exemptions', data);
         return response.data;
     } catch (error) {
-        if (error.response && error.response.data) {
-            const detail = error.response.data.name?.[0] || error.response.data.detail || 'Unknown error';
-            throw new Error(`Failed to create exemption template: ${detail}`);
-        } else {
-            throw new Error('Failed to create exemption template. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to create exemption template. Please try again.'));
     }
 };
 
@@ -128,11 +97,7 @@ export const deleteExemptionTemplate = async (templateId) => {
         await apiClient.delete(`cases/exemptions/${templateId}`);
         return true;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to delete exemption template: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to delete exemption template. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to delete exemption template. Please try again.'));
     }
 };
 
@@ -143,10 +108,6 @@ export const deleteRedactionContext = async (redactionId) => {
         );
         return response.status === 204;
     } catch (error) {
-        if (error.response && error.response.data) {
-            throw new Error(`Failed to delete redaction context: ${error.response.data.detail || 'Unknown error'}`);
-        } else {
-            throw new Error('Failed to delete redaction context. Please try again.');
-        }
+        throw new Error(extractApiError(error, 'Failed to delete redaction context. Please try again.'));
     }
 };

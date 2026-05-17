@@ -219,11 +219,11 @@ Q_CLUSTER = {
     "orm": "default",
     "schedule": {
         "delete_old_cases_daily": {
-            "func": "cases.services.delete_cases_past_retention_date",
+            "func": "cases.tasks.delete_cases_past_retention_date",
             "schedule_type": "D",
         },
         "delete_original_files_daily": {
-            "func": "cases.services.delete_original_files_past_threshold",
+            "func": "cases.tasks.delete_original_files_past_threshold",
             "schedule_type": "D",
         },
     },

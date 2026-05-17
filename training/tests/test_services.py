@@ -6,15 +6,16 @@ from django.test import TestCase
 from docx import Document as DocxDocument
 from lxml import etree
 
-from ..services import (
-    _deduplicate_entities,
-    _expand_prefix_symbols,
+from ..extraction import (
+    DocumentStructure,
     _extract_text_from_pdf,
     _table_has_borders,
+    extract_document,
     extract_document_structure,
-    extract_entities_from_text,
     extract_table_with_styling,
 )
+from ..pipeline import ExtractionPipeline, _deduplicate_entities
+from ..services import _expand_prefix_symbols, extract_entities_from_text
 from .base import NetworkBlockerMixin
 
 
@@ -37,8 +38,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_from_text_success(
         self,
         mock_gliner_mgr,
@@ -109,8 +110,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.extractors.spancat_extractor.extract_with_spancat")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_with_spancat(
         self,
         mock_gliner_mgr,
@@ -170,8 +171,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_spancat_none_skips_spancat_extractor(
         self,
         mock_gliner_mgr,
@@ -202,8 +203,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
             _, results, _, _ = extract_entities_from_text(self.file_path)
             mock_spancat.assert_not_called()
 
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_no_model_found(
         self, mock_manager, mock_spancat_mgr
     ):
@@ -223,8 +224,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_no_text_in_document(
         self,
         mock_manager,
@@ -259,8 +260,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_deduplicates_overlapping(
         self,
         mock_manager,
@@ -314,8 +315,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_non_gemma_extractor_exception_propagates(
         self,
         mock_gliner_mgr,
@@ -347,8 +348,8 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_gemma_exception_does_not_block_other_results(
         self,
         mock_gliner_mgr,
@@ -379,12 +380,14 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         mock_presidio_op.return_value = []
         mock_gemma.side_effect = RuntimeError("Ollama crashed")
 
-        with self.assertLogs("training.services", level="WARNING") as cm:
+        with self.assertLogs("training.pipeline", level="WARNING") as cm:
             _, results, _, _ = extract_entities_from_text(self.file_path)
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["text"], "John Doe")
-        self.assertTrue(any("Gemma" in line for line in cm.output))
+        self.assertTrue(
+            any("Non-fatal extractor" in line for line in cm.output)
+        )
 
 
 def _make_tbl_xml(
@@ -604,6 +607,24 @@ class DeduplicateEntitiesTests(NetworkBlockerMixin, TestCase):
         ]
         self.assertEqual(len(_deduplicate_entities([], secondary)), 1)
 
+    def test_secondary_entities_deduplicated_against_each_other(self):
+        """Two mutually-overlapping secondary entities: first wins, second dropped."""
+        long_span = {
+            "text": "John Smith",
+            "label": "THIRD_PARTY",
+            "start_char": 0,
+            "end_char": 10,
+        }
+        short_span = {
+            "text": "John",
+            "label": "THIRD_PARTY",
+            "start_char": 0,
+            "end_char": 4,
+        }
+        result = _deduplicate_entities([], [long_span, short_span])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "John Smith")
+
 
 class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
     def test_hash_prefix_expands_start_char(self):
@@ -690,8 +711,8 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_docx_path(
         self,
         mock_gliner_mgr,
@@ -737,8 +758,8 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(returned_structure, structure)
 
     @patch("training.services.extract_document_structure")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_extract_entities_docx_empty_text_returns_empty(
         self, mock_gliner_mgr, mock_spancat_mgr, mock_doc_struct
     ):
@@ -1045,8 +1066,8 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_data_subject_forwarded_to_gemma(
         self,
         mock_gliner_mgr,
@@ -1086,8 +1107,8 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_non_overlapping_gemma_results_included(
         self,
         mock_gliner_mgr,
@@ -1140,8 +1161,8 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
     )
     @patch("training.extractors.presidio_extractor.extract_with_presidio")
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
-    @patch("training.services.SpanCatModelManager")
-    @patch("training.services.GLiNERModelManager")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
     def test_gemma_results_overlapping_ner_are_dropped(
         self,
         mock_gliner_mgr,
@@ -1185,3 +1206,250 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["text"], "John Doe")
+
+
+class ExtractionPipelineTests(NetworkBlockerMixin, TestCase):
+    """Tests for ExtractionPipeline that use stub stages — no model mocking required."""
+
+    def _make_entity(self, text, start, end, label="THIRD_PARTY"):
+        return {
+            "text": text,
+            "label": label,
+            "start_char": start,
+            "end_char": end,
+        }
+
+    def _stage(self, entities):
+        return lambda text: list(entities)
+
+    def _broken_stage(self, exc=None):
+        def stage(text):
+            raise (exc or RuntimeError("extractor failed"))
+
+        return stage
+
+    def test_single_stage_returns_all_entities(self):
+        entity = self._make_entity("John Doe", 0, 8)
+        pipeline = ExtractionPipeline(stages=[self._stage([entity])])
+        result = pipeline.run("John Doe attended.")
+        self.assertEqual(result, [entity])
+
+    def test_earlier_stage_wins_on_overlap(self):
+        """Stage 0 (higher priority) keeps its entity; stage 1's overlapping entity is dropped."""
+        high = self._make_entity("John Doe", 0, 8)
+        low = self._make_entity("John", 0, 4)
+        pipeline = ExtractionPipeline(
+            stages=[self._stage([high]), self._stage([low])]
+        )
+        result = pipeline.run("John Doe attended.")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "John Doe")
+
+    def test_non_overlapping_entities_from_all_stages_kept(self):
+        e1 = self._make_entity("John Doe", 0, 8)
+        e2 = self._make_entity("London", 20, 26)
+        e3 = self._make_entity("PC Smith", 30, 38, label="OPERATIONAL")
+        pipeline = ExtractionPipeline(
+            stages=[self._stage([e1]), self._stage([e2]), self._stage([e3])]
+        )
+        result = pipeline.run("John Doe went to London. PC Smith arrived.")
+        self.assertEqual(len(result), 3)
+
+    def test_priority_order_spancat_gliner_presidio(self):
+        """Verify SpanCat > GLiNER > Presidio ordering with overlapping spans."""
+        spancat = self._make_entity("John Doe Smith", 0, 14)
+        gliner = self._make_entity(
+            "John Doe", 0, 8
+        )  # overlaps spancat → dropped
+        presidio = self._make_entity(
+            "Smith", 9, 14
+        )  # overlaps spancat → dropped
+        pipeline = ExtractionPipeline(
+            stages=[
+                self._stage([spancat]),
+                self._stage([gliner]),
+                self._stage([presidio]),
+            ]
+        )
+        result = pipeline.run("John Doe Smith attended.")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "John Doe Smith")
+
+    def test_fatal_stage_exception_propagates(self):
+        pipeline = ExtractionPipeline(
+            stages=[self._stage([]), self._broken_stage(RuntimeError("fatal"))]
+        )
+        with self.assertRaises(RuntimeError, msg="fatal"):
+            pipeline.run("some text")
+
+    def test_pipeline_injectable_into_extract_entities_from_text(self):
+        """extract_entities_from_text accepts a pre-built pipeline — no model manager needed."""
+        entity = self._make_entity("Jane Smith", 6, 16)
+        pipeline = ExtractionPipeline(stages=[self._stage([entity])])
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            path = f.name
+        try:
+            with patch("training.services._extract_text_from_pdf") as mock_pdf:
+                mock_pdf.return_value = "Hello Jane Smith goodbye."
+                _, results, _, _ = extract_entities_from_text(
+                    path, pipeline=pipeline
+                )
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0]["text"], "Jane Smith")
+        finally:
+            os.remove(path)
+
+
+class DocumentStructureTests(NetworkBlockerMixin, TestCase):
+    """Tests for DocumentStructure.check_invariant() and extract_document()."""
+
+    def _make_structure(
+        self, full_text, elements=None, tables=None, is_structured=True
+    ):
+        return DocumentStructure(
+            full_text=full_text,
+            elements=elements or [],
+            tables=tables or [],
+            is_structured=is_structured,
+        )
+
+    def test_check_invariant_passes_for_valid_structure(self):
+        full_text = "Hello world"
+        ds = self._make_structure(
+            full_text,
+            elements=[
+                {
+                    "type": "paragraph",
+                    "text": "Hello world",
+                    "start": 0,
+                    "end": 11,
+                }
+            ],
+        )
+        self.assertEqual(ds.check_invariant(), [])
+
+    def test_check_invariant_detects_element_mismatch(self):
+        full_text = "Hello world"
+        ds = self._make_structure(
+            full_text,
+            elements=[
+                {
+                    "type": "paragraph",
+                    "text": "wrong text",
+                    "start": 0,
+                    "end": 11,
+                }
+            ],
+        )
+        violations = ds.check_invariant()
+        self.assertEqual(len(violations), 1)
+        self.assertIn("paragraph", violations[0])
+
+    def test_check_invariant_skips_table_elements(self):
+        full_text = "Cell A\tCell B"
+        ds = self._make_structure(
+            full_text,
+            elements=[{"type": "table", "table_id": 0, "start": 0, "end": 13}],
+        )
+        self.assertEqual(ds.check_invariant(), [])
+
+    def test_check_invariant_detects_cell_mismatch(self):
+        full_text = "Cell A\tCell B"
+        ds = self._make_structure(
+            full_text,
+            tables=[
+                {
+                    "cells": [
+                        {
+                            "row": 0,
+                            "col": 0,
+                            "text": "wrong",
+                            "start": 0,
+                            "end": 6,
+                            "isMergedContinuation": False,
+                        }
+                    ]
+                }
+            ],
+        )
+        violations = ds.check_invariant()
+        self.assertEqual(len(violations), 1)
+        self.assertIn("[0,0]", violations[0])
+
+    def test_check_invariant_skips_continuation_cells(self):
+        full_text = "Cell A"
+        ds = self._make_structure(
+            full_text,
+            tables=[
+                {
+                    "cells": [
+                        {
+                            "row": 0,
+                            "col": 0,
+                            "text": "Cell A",
+                            "start": 0,
+                            "end": 6,
+                            "isMergedContinuation": False,
+                        },
+                        {
+                            "row": 0,
+                            "col": 1,
+                            "text": "Cell A",
+                            "start": 0,
+                            "end": 0,
+                            "isMergedContinuation": True,
+                        },
+                    ]
+                }
+            ],
+        )
+        self.assertEqual(ds.check_invariant(), [])
+
+    def test_extract_document_docx_returns_structured(self):
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            path = f.name
+        try:
+            doc = DocxDocument()
+            doc.add_paragraph("First line")
+            doc.add_paragraph("Second line")
+            doc.save(path)
+
+            ds = extract_document(path)
+
+            self.assertTrue(ds.is_structured)
+            self.assertIsNotNone(ds.elements)
+            self.assertIn("First line", ds.full_text)
+            self.assertIn("Second line", ds.full_text)
+            self.assertEqual(ds.check_invariant(), [])
+        finally:
+            os.remove(path)
+
+    def test_extract_document_docx_with_table_invariant_holds(self):
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            path = f.name
+        try:
+            doc = DocxDocument()
+            table = doc.add_table(rows=2, cols=2)
+            table.cell(0, 0).text = "A1"
+            table.cell(0, 1).text = "B1"
+            table.cell(1, 0).text = "A2"
+            table.cell(1, 1).text = "B2"
+            doc.save(path)
+
+            ds = extract_document(path)
+
+            self.assertTrue(ds.is_structured)
+            self.assertEqual(ds.check_invariant(), [], ds.check_invariant())
+        finally:
+            os.remove(path)
+
+    def test_extract_document_pdf_returns_unstructured(self):
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            path = f.name
+        try:
+            ds = extract_document(path)
+            self.assertFalse(ds.is_structured)
+            self.assertIsNone(ds.elements)
+            self.assertEqual(ds.tables, [])
+        finally:
+            os.remove(path)

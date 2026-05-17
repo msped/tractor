@@ -23,8 +23,10 @@ _OPERATIONAL_ENTITIES = [
 ]
 
 
-def _load_custom_recognizers(entity_type, engine, Pattern, PatternRecognizer):
+def _load_custom_recognizers(entity_type, engine):
     """Register active custom recognizers of *entity_type* into *engine*. Returns extra entity names."""
+    from presidio_analyzer import Pattern, PatternRecognizer
+
     from training.models import CustomRecognizer
 
     extra_entities = []
@@ -49,32 +51,13 @@ def _load_custom_recognizers(entity_type, engine, Pattern, PatternRecognizer):
     return extra_entities
 
 
-def _build_analyzer():
-    """Build a Presidio AnalyzerEngine configured with UK PII pattern recognisers."""
-    from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
+def _build_engine(base_recognizers, entity_type):
+    """Return an (AnalyzerEngine, custom_entity_names) tuple.
 
-    uk_postcode_pattern = Pattern(
-        name="uk_postcode",
-        regex=r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b",
-        score=0.85,
-    )
-    uk_ni_pattern = Pattern(
-        name="uk_ni_number",
-        regex=r"\b(?!BG|GB|NK|KN|NT|TN|ZZ)[A-CEGHJ-PR-TW-Z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b",
-        score=0.85,
-    )
-
-    postcode_recognizer = PatternRecognizer(
-        supported_entity="UK_POSTCODE",
-        patterns=[uk_postcode_pattern],
-    )
-    ni_recognizer = PatternRecognizer(
-        supported_entity="UK_NI_NUMBER",
-        patterns=[uk_ni_pattern],
-    )
-
-    # Use en_core_web_sm (tiny model) instead of the default en_core_web_lg.
-    # We only need Presidio for pattern-based PII — no NLP context needed.
+    *base_recognizers* are registered first; active DB custom recognizers of
+    *entity_type* are then appended.
+    """
+    from presidio_analyzer import AnalyzerEngine
     from presidio_analyzer.nlp_engine import NlpEngineProvider
 
     nlp_config = {
@@ -84,69 +67,79 @@ def _build_analyzer():
     nlp_engine = NlpEngineProvider(
         nlp_configuration=nlp_config
     ).create_engine()
-
     engine = AnalyzerEngine(nlp_engine=nlp_engine)
-    engine.registry.add_recognizer(postcode_recognizer)
-    engine.registry.add_recognizer(ni_recognizer)
+
+    for recognizer in base_recognizers:
+        engine.registry.add_recognizer(recognizer)
+
+    custom_entities = _load_custom_recognizers(entity_type, engine)
+    return engine, custom_entities
+
+
+def _build_analyzer():
+    """Build a Presidio AnalyzerEngine configured with UK PII pattern recognisers."""
+    from presidio_analyzer import Pattern, PatternRecognizer
 
     from training.models import CustomRecognizer
 
-    custom_entities = _load_custom_recognizers(
+    return _build_engine(
+        [
+            PatternRecognizer(
+                supported_entity="UK_POSTCODE",
+                patterns=[
+                    Pattern(
+                        name="uk_postcode",
+                        regex=r"\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b",
+                        score=0.85,
+                    )
+                ],
+            ),
+            PatternRecognizer(
+                supported_entity="UK_NI_NUMBER",
+                patterns=[
+                    Pattern(
+                        name="uk_ni_number",
+                        regex=r"\b(?!BG|GB|NK|KN|NT|TN|ZZ)[A-CEGHJ-PR-TW-Z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b",
+                        score=0.85,
+                    )
+                ],
+            ),
+        ],
         CustomRecognizer.EntityType.THIRD_PARTY,
-        engine,
-        Pattern,
-        PatternRecognizer,
     )
-    return engine, custom_entities
 
 
 def _build_operational_analyzer():
-    """Build a Presidio AnalyzerEngine configured with operational reference recognisers (crime refs, collar numbers)."""
-    from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
-
-    crime_ref_pattern = Pattern(
-        name="uk_crime_ref",
-        regex=r"\b\d{2}/\d{4,6}/\d{2}\b",
-        score=0.9,
-    )
-    collar_number_pattern = Pattern(
-        name="uk_collar_number",
-        regex=r"\b(?:PC|DC|DS|DI|DCI|DCS|PS|CI|PCSO)\s*\d{3,6}\b",
-        score=0.9,
-    )
-
-    crime_ref_recognizer = PatternRecognizer(
-        supported_entity="UK_CRIME_REF",
-        patterns=[crime_ref_pattern],
-    )
-    collar_number_recognizer = PatternRecognizer(
-        supported_entity="UK_COLLAR_NUMBER",
-        patterns=[collar_number_pattern],
-    )
-
-    from presidio_analyzer.nlp_engine import NlpEngineProvider
-
-    nlp_config = {
-        "nlp_engine_name": "spacy",
-        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
-    }
-    nlp_engine = NlpEngineProvider(
-        nlp_configuration=nlp_config
-    ).create_engine()
-
-    engine = AnalyzerEngine(nlp_engine=nlp_engine)
-    engine.registry.add_recognizer(crime_ref_recognizer)
-    engine.registry.add_recognizer(collar_number_recognizer)
+    """Build a Presidio AnalyzerEngine configured with operational reference recognisers."""
+    from presidio_analyzer import Pattern, PatternRecognizer
 
     from training.models import CustomRecognizer
 
-    custom_entities = _load_custom_recognizers(
+    return _build_engine(
+        [
+            PatternRecognizer(
+                supported_entity="UK_CRIME_REF",
+                patterns=[
+                    Pattern(
+                        name="uk_crime_ref",
+                        regex=r"\b\d{2}/\d{4,6}/\d{2}\b",
+                        score=0.9,
+                    )
+                ],
+            ),
+            PatternRecognizer(
+                supported_entity="UK_COLLAR_NUMBER",
+                patterns=[
+                    Pattern(
+                        name="uk_collar_number",
+                        regex=r"\b(?:PC|DC|DS|DI|DCI|DCS|PS|CI|PCSO)\s*\d{3,6}\b",
+                        score=0.9,
+                    )
+                ],
+            ),
+        ],
         CustomRecognizer.EntityType.OPERATIONAL,
-        engine,
-        Pattern,
-        PatternRecognizer,
     )
-    return engine, custom_entities
 
 
 # Singletons are (engine, custom_entity_names) tuples; None when not yet built.

@@ -13,8 +13,6 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Count, Prefetch, Q
 from django.utils import timezone
-from weasyprint import CSS, HTML
-from weasyprint.text.fonts import FontConfiguration
 
 from training.loader import (
     DEFAULT_GLINER_MODEL,
@@ -159,7 +157,10 @@ def process_document_and_create_redactions(document_id):
                 )
             )
         Redaction.objects.bulk_create(redactions_to_create)
-        _apply_existing_case_decisions(document)
+
+    # Run case-decision propagation in its own transaction so a failure here
+    # does not roll back the committed redactions above.
+    _apply_existing_case_decisions(document)
 
     document.status = Document.Status.READY_FOR_REVIEW
     document.save(update_fields=["status"])
@@ -213,17 +214,15 @@ def _apply_existing_case_decisions(document):
         )
 
         if accepted_count == total:
-            target_qs.update(is_accepted=True)
+            target_qs.accept()
         elif rejected_count == total:
-            # Use the most common rejection justification
             top = (
                 existing_decided.values("justification")
                 .annotate(n=Count("justification"))
                 .order_by("-n")
                 .first()
             )
-            justification = top["justification"] if top else ""
-            target_qs.update(justification=justification)
+            target_qs.reject(top["justification"] if top else "")
 
 
 def find_and_flag_matching_text_in_case(redaction_id):
@@ -567,24 +566,21 @@ def _build_export_css(settings, case_reference=""):
     )
 
 
-def _generate_pdf_from_document(
+def _build_document_html(
     document, mode="disclosure", export_settings=None, case_reference=""
 ):
-    """Render a Document to a PDF bytes object with all accepted redactions applied.
-
-    Args:
-        document: The Document instance to render.
-        mode: 'disclosure' blacks out redacted text; 'redacted' highlights it.
+    """Assemble the HTML and CSS strings for a document export.
 
     Returns:
-        PDF bytes, or None if the document has no extracted text.
+        (html_string, css_string) tuple, or (None, None) if the document has
+        no extracted text.
     """
     if export_settings is None:
         export_settings = DocumentExportSettings.get()
 
     text = document.extracted_text
     if not text:
-        return None
+        return None, None
 
     prefetched = getattr(document, "accepted_redactions_prefetched", None)
     if prefetched is not None:
@@ -665,6 +661,21 @@ def _generate_pdf_from_document(
     """
 
     css_string = _build_export_css(export_settings, case_reference)
+    return html_string, css_string
+
+
+def _generate_pdf_from_document(
+    document, mode="disclosure", export_settings=None, case_reference=""
+):
+    """Render a Document to PDF bytes. Returns None if the document has no text."""
+    from weasyprint import CSS, HTML
+    from weasyprint.text.fonts import FontConfiguration
+
+    html_string, css_string = _build_document_html(
+        document, mode, export_settings, case_reference
+    )
+    if html_string is None:
+        return None
 
     font_config = FontConfiguration()
     return HTML(string=html_string).write_pdf(

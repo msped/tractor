@@ -82,8 +82,7 @@ export function useDocumentControls({ undo, redo, clearHistory, currentDocument,
     const handleMarkAsComplete = useCallback(async () => {
         setIsLoading(true);
         try {
-            const updatedDocument = await markAsComplete(currentDocument.id);
-            console.log(updatedDocument);
+            await markAsComplete(currentDocument.id);
             clearHistory();
             toast.success("Document is ready for disclosure.");
             router.push(`/cases/${currentDocument.case}`);

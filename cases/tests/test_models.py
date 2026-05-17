@@ -139,7 +139,7 @@ class CaseModelTests(NetworkBlockerMixin, TestCase):
 
         self.assertEqual(task_id, "model-test-task-id")
         mock_async_task.assert_called_once_with(
-            "cases.services.export_case_documents", case.id
+            "cases.tasks.export_case_documents", case.id
         )
         self.assertEqual(case.export_status, Case.ExportStatus.PROCESSING)
         self.assertEqual(case.export_task_id, "model-test-task-id")
@@ -258,6 +258,89 @@ class RedactionModelTests(NetworkBlockerMixin, TestCase):
             source=Redaction.Source.LLM,
         )
         self.assertEqual(redaction.source, Redaction.Source.LLM)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="202540", data_subject_name="QS Decision Test"
+        )
+        file = SimpleUploadedFile("qs.txt", b"content")
+        self.document = Document.objects.create(
+            case=self.case, original_file=file
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **kwargs):
+        defaults = {
+            "document": self.document,
+            "start_char": 0,
+            "end_char": 4,
+            "text": "test",
+            "redaction_type": Redaction.RedactionType.THIRD_PARTY_PII,
+        }
+        defaults.update(kwargs)
+        return Redaction.objects.create(**defaults)
+
+    def test_accept_sets_is_accepted_true(self):
+        r = self._make_redaction()
+        Redaction.objects.filter(pk=r.pk).accept()
+        r.refresh_from_db()
+        self.assertTrue(r.is_accepted)
+
+    def test_reject_sets_is_accepted_false_and_justification(self):
+        r = self._make_redaction(is_accepted=True)
+        Redaction.objects.filter(pk=r.pk).reject("S.40 - Personal Information")
+        r.refresh_from_db()
+        self.assertFalse(r.is_accepted)
+        self.assertEqual(r.justification, "S.40 - Personal Information")
+
+    def test_reject_with_empty_string_sets_justification_but_stays_pending(
+        self,
+    ):
+        """An empty justification satisfies the field write but doesn't count as decided."""
+        r = self._make_redaction()
+        Redaction.objects.filter(pk=r.pk).reject("")
+        r.refresh_from_db()
+        self.assertFalse(r.is_accepted)
+        self.assertEqual(r.justification, "")
+        self.assertIn(r, Redaction.objects.pending())
+
+    def test_reset_clears_both_fields(self):
+        r = self._make_redaction(is_accepted=True, justification="old reason")
+        Redaction.objects.filter(pk=r.pk).reset()
+        r.refresh_from_db()
+        self.assertFalse(r.is_accepted)
+        self.assertIsNone(r.justification)
+        self.assertIn(r, Redaction.objects.pending())
+
+    def test_accept_moves_out_of_pending(self):
+        r = self._make_redaction()
+        self.assertIn(r, Redaction.objects.pending())
+        Redaction.objects.filter(pk=r.pk).accept()
+        self.assertNotIn(r, Redaction.objects.pending())
+        self.assertIn(r, Redaction.objects.decided())
+
+    def test_reject_moves_into_decided(self):
+        r = self._make_redaction()
+        self.assertIn(r, Redaction.objects.pending())
+        Redaction.objects.filter(pk=r.pk).reject("reason")
+        self.assertNotIn(r, Redaction.objects.pending())
+        self.assertIn(r, Redaction.objects.decided())
+
+    def test_accept_returns_count(self):
+        self._make_redaction()
+        self._make_redaction(start_char=5, end_char=9)
+        count = Redaction.objects.all().accept()
+        self.assertEqual(count, 2)
+
+    def test_reject_returns_count(self):
+        self._make_redaction()
+        count = Redaction.objects.all().reject("reason")
+        self.assertEqual(count, 1)
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)

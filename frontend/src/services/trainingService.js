@@ -1,12 +1,12 @@
 import apiClient from '@/api/apiClient';
+import { extractApiError } from '@/api/apiError';
 
 export const getModels = async () => {
     try {
         const response = await apiClient.get(`/models`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch models:", error.response?.data || error.message);
-        throw new Error("Failed to fetch models. You may not have permission to view this page.");
+        throw new Error(extractApiError(error, 'Failed to fetch models. Please try again.'));
     }
 };
 
@@ -14,8 +14,7 @@ export const setActiveModel = async (modelId) => {
     try {
         await apiClient.post(`/models/${modelId}/set-active`, {});
     } catch (error) {
-        console.error("Failed to set active model:", error.response?.data || error.message);
-        throw new Error("Failed to set active model.");
+        throw new Error(extractApiError(error, 'Failed to set active model. Please try again.'));
     }
 };
 
@@ -23,9 +22,7 @@ export const deleteModel = async (modelId) => {
     try {
         await apiClient.delete(`/models/${modelId}`);
     } catch (error) {
-        console.error("Failed to delete model:", error.response?.data || error.message);
-        const errorMessage = error.response?.data?.detail || "Failed to delete model.";
-        throw new Error(errorMessage);
+        throw new Error(extractApiError(error, 'Failed to delete model. Please try again.'));
     }
 };
 
@@ -34,8 +31,7 @@ export const getTrainingDocs = async () => {
         const response = await apiClient.get(`/training-docs`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch training docs:", error.response?.data || error.message);
-        throw new Error("Failed to fetch training documents.");
+        throw new Error(extractApiError(error, 'Failed to fetch training documents. Please try again.'));
     }
 };
 
@@ -44,8 +40,7 @@ export const getTrainingSchedules = async () => {
         const response = await apiClient.get(`/schedules`);
         return response.data.length > 0 ? response.data[0] : null;
     } catch (error) {
-        console.error("Failed to fetch training schedules:", error.response?.data || error.message);
-        throw new Error("Failed to fetch training schedules.");
+        throw new Error(extractApiError(error, 'Failed to fetch training schedules. Please try again.'));
     }
 };
 
@@ -54,8 +49,7 @@ export const createTrainingSchedule = async (scheduleData) => {
         const response = await apiClient.post(`/schedules`, scheduleData);
         return response.data;
     } catch (error) {
-        console.error("Failed to create schedule:", error.response?.data || error.message);
-        throw new Error("Failed to create training schedule.");
+        throw new Error(extractApiError(error, 'Failed to create training schedule. Please try again.'));
     }
 };
 
@@ -63,8 +57,7 @@ export const deleteTrainingSchedule = async (scheduleId) => {
     try {
         await apiClient.delete(`/schedules/${scheduleId}`);
     } catch (error) {
-        console.error("Failed to delete schedule:", error.response?.data || error.message);
-        throw new Error("Failed to delete training schedule.");
+        throw new Error(extractApiError(error, 'Failed to delete training schedule. Please try again.'));
     }
 };
 
@@ -73,8 +66,7 @@ export const getTrainingRuns = async () => {
         const response = await apiClient.get(`/training-runs`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch training runs:", error.response?.data || error.message);
-        throw new Error("Failed to fetch training runs.");
+        throw new Error(extractApiError(error, 'Failed to fetch training runs. Please try again.'));
     }
 };
 
@@ -83,8 +75,7 @@ export const getTrainingRunDetail = async (id) => {
         const response = await apiClient.get(`/training-runs/${id}`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch training run detail:", error.response?.data || error.message);
-        throw new Error("Failed to fetch training run details.");
+        throw new Error(extractApiError(error, 'Failed to fetch training run details. Please try again.'));
     }
 };
 
@@ -92,9 +83,7 @@ export const deleteTrainingDoc = async (docId) => {
     try {
         await apiClient.delete(`/training-docs/${docId}`);
     } catch (error) {
-        console.error("Failed to delete training doc:", error.response?.data || error.message);
-        const errorMessage = error.response?.data?.detail || "Failed to delete document.";
-        throw new Error(errorMessage);
+        throw new Error(extractApiError(error, 'Failed to delete document. Please try again.'));
     }
 };
 
@@ -108,9 +97,7 @@ export const uploadTrainingDoc = async (file) => {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
     } catch (error) {
-        console.error("Failed to upload training doc:", error.response?.data || error.message);
-        const errorMessage = error.response?.data?.detail || "Failed to upload document.";
-        throw new Error(errorMessage);
+        throw new Error(extractApiError(error, 'Failed to upload document. Please try again.'));
     }
 };
 
@@ -119,8 +106,7 @@ export const getTrainingStatus = async () => {
         const response = await apiClient.get(`/model-management/status`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch training status:", error.response?.data || error.message);
-        throw new Error("Failed to fetch training status.");
+        throw new Error(extractApiError(error, 'Failed to fetch training status. Please try again.'));
     }
 };
 
@@ -129,8 +115,7 @@ export const getLLMPromptSettings = async () => {
         const response = await apiClient.get(`/llm-prompt-settings`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch LLM prompt settings:", error.response?.data || error.message);
-        throw new Error("Failed to fetch LLM prompt settings.");
+        throw new Error(extractApiError(error, 'Failed to fetch LLM prompt settings. Please try again.'));
     }
 };
 
@@ -139,8 +124,7 @@ export const updateLLMPromptSettings = async (data) => {
         const response = await apiClient.patch(`/llm-prompt-settings`, data);
         return response.data;
     } catch (error) {
-        console.error("Failed to update LLM prompt settings:", error.response?.data || error.message);
-        throw new Error("Failed to update LLM prompt settings.");
+        throw new Error(extractApiError(error, 'Failed to update LLM prompt settings. Please try again.'));
     }
 };
 
@@ -149,8 +133,6 @@ export const runManualTraining = async () => {
         const response = await apiClient.post(`/model-management/run-now`, {});
         return response.data;
     } catch (error) {
-        console.error("Failed to start training:", error.response?.data || error.message);
-        const errorMessage = error.response?.data?.detail || "Failed to start training process.";
-        throw new Error(errorMessage);
+        throw new Error(extractApiError(error, 'Failed to start training process. Please try again.'));
     }
 };

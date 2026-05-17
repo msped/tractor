@@ -7,6 +7,7 @@ from ..loader import (
     GLiNERModelManager,
     SpanCatModelManager,
     _get_device,
+    _ModelManagerBase,
 )
 from ..models import Model
 from .base import NetworkBlockerMixin
@@ -176,3 +177,29 @@ class SpanCatModelManagerTests(NetworkBlockerMixin, TestCase):
         self.assertIsNone(manager.model_name)
         self.assertIsNone(manager.model_entry)
         mock_load.assert_not_called()
+
+    @patch("training.loader._load_spancat_model")
+    def test_db_failure_at_init_degrades_gracefully(self, mock_load):
+        """A DB error during startup leaves model=None instead of crashing."""
+        Model.objects.create(
+            name="spancat_v1", path="/path/to/spancat_v1", is_active=True
+        )
+        mock_load.side_effect = RuntimeError("simulated load failure")
+
+        with self.assertLogs("training.loader", level="WARNING") as cm:
+            manager = SpanCatModelManager.get_instance()
+
+        self.assertIsNone(manager.model)
+        self.assertTrue(
+            any(
+                "SpanCat model could not be loaded" in line
+                for line in cm.output
+            )
+        )
+
+
+class ModelManagerBaseTests(TestCase):
+    def test_subclasses_have_independent_instances_and_locks(self):
+        """Each subclass gets its own _instance and _lock via __init_subclass__."""
+        self.assertIsNot(GLiNERModelManager._lock, SpanCatModelManager._lock)
+        self.assertIsNot(GLiNERModelManager._lock, _ModelManagerBase._lock)

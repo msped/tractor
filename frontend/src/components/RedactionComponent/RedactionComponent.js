@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -10,16 +10,10 @@ import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { ResubmitDialog } from '@/components/ResubmitDialog';
-import { bulkMarkByText, getExemptionTemplates } from '@/services/redactionService';
+import { getExemptionTemplates } from '@/services/redactionService';
 import useSWR from 'swr';
-import toast from 'react-hot-toast';
 import { DocumentViewer } from '@/components/DocumentViewer';
-import { useUndoHistory } from '@/hooks/useUndoHistory';
-import { useDocumentControls } from '@/hooks/useDocumentControls';
-import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
-import { useRedactionActions } from '@/hooks/useRedactionActions';
-import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
-import { useManualRedaction } from '@/hooks/useManualRedaction';
+import { useRedactionState, getDocumentViewerProps, getRedactionSidebarProps } from '@/hooks/useRedactionState';
 import { useRouter } from 'next/navigation';
 
 const REDACTION_TYPE_LABELS = {
@@ -30,174 +24,15 @@ const REDACTION_TYPE_LABELS = {
 
 export const RedactionComponent = ({ document: currentDocument, initialRedactions }) => {
     const router = useRouter();
-    const [redactions, setRedactions] = useState(initialRedactions || []);
 
     const { data: exemptionTemplates = [] } = useSWR(
-        ['exemptionTemplates'],
+        ['exemptions'],
         () => getExemptionTemplates(),
         { dedupingInterval: 60000 }
     );
 
-    // State for rejection dialog (single and bulk)
-    const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
-    const [rejectionTarget, setRejectionTarget] = useState(null);
-    const [bulkRejectIds, setBulkRejectIds] = useState([]);
-
-    // State for mark-all-in-case
-    const [markAllInCaseTarget, setMarkAllInCaseTarget] = useState(null); // {text, redactionType, action}
-
-    // Undo/redo history
-    const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
-
-    const {
-        displaySections,
-        setSplitMerges,
-        setIsolatedIds,
-        hoveredSuggestionId,
-        scrollToId,
-        setScrollToId,
-        handleSuggestionMouseEnter,
-        handleSuggestionMouseLeave,
-        handleHighlightClick,
-        handleRemoveScrollId,
-        handleCardClick,
-    } = useRedactionDisplay({ redactions });
-
-    const {
-        isLoading,
-        isResubmitting,
-        resubmitDialogOpen,
-        setResubmitDialogOpen,
-        baseFontSize,
-        canIncreaseFont,
-        canDecreaseFont,
-        sidebarWidth,
-        activeHighlightType,
-        handleToggleHighlightTool,
-        handleFontDecrease,
-        handleFontIncrease,
-        handleResizeStart,
-        handleMarkAsComplete,
-        handleResubmit,
-    } = useDocumentControls({ undo, redo, clearHistory, currentDocument, router });
-
-    const {
-        handleAcceptSuggestion,
-        handleBulkAccept,
-        handleRejectAsDisclosable,
-        handleChangeTypeAndAccept,
-        handleBulkChangeTypeAndAccept,
-        handleOpenRejectDialog,
-        handleOpenBulkRejectDialog,
-        handleRejectConfirm,
-        handleSplitMerge,
-        handleRemoveFromMerge,
-    } = useRedactionActions({
-        documentId: currentDocument.id,
-        redactions,
-        setRedactions,
-        pushHistory,
-        setSplitMerges,
-        setIsolatedIds,
-        setScrollToId,
-        bulkRejectIds,
-        setBulkRejectIds,
-        setRejectionDialogOpen,
-        setRejectionTarget,
-    });
-
-    const {
-        handleRemoveRedaction,
-        handleRemoveSelect,
-        handleUnhighlightClick,
-    } = useRemoveRedaction({
-        documentId: currentDocument.id,
-        extractedText: currentDocument.extracted_text,
-        redactions,
-        setRedactions,
-        pushHistory,
-        displaySections,
-    });
-
-    const {
-        manualRedactionAnchor,
-        pendingRedaction,
-        handleTextSelect,
-        handleCreateManualRedaction,
-        handleCloseManualRedactionPopover,
-        handleOnContextSave,
-    } = useManualRedaction({
-        documentId: currentDocument.id,
-        extractedText: currentDocument.extracted_text,
-        redactions,
-        setRedactions,
-        pushHistory,
-        activeHighlightType,
-    });
-
-    const pendingCount = displaySections.pending.total;
-
-    const handleMarkAllInCase = useCallback(({ text, redactionType, action }) => {
-        if (action === 'accept') {
-            setMarkAllInCaseTarget({ text, redactionType, action });
-        } else {
-            setMarkAllInCaseTarget({ text, redactionType, action });
-            setRejectionTarget({ id: null, text });
-            setRejectionDialogOpen(true);
-        }
-    }, [setRejectionTarget, setRejectionDialogOpen]);
-
-    const handleMarkAllInCaseAcceptConfirm = useCallback(async () => {
-        const { text, redactionType } = markAllInCaseTarget;
-        setMarkAllInCaseTarget(null);
-        try {
-            const { updated } = await bulkMarkByText(
-                currentDocument.case,
-                text,
-                redactionType,
-                'ACCEPTED',
-                null
-            );
-            setRedactions(prev =>
-                prev.map(r =>
-                    r.is_suggestion && !r.is_accepted && !r.justification &&
-                    r.text === text && r.redaction_type === redactionType
-                        ? { ...r, is_accepted: true }
-                        : r
-                )
-            );
-            toast.success(`Accepted ${updated} redaction${updated !== 1 ? 's' : ''} across this case.`);
-        } catch {
-            toast.error('Failed to mark all in case. Please try again.');
-        }
-    }, [markAllInCaseTarget, currentDocument.case, setRedactions]);
-
-    const handleMarkAllInCaseRejectConfirm = useCallback(async (_id, reason) => {
-        const { text, redactionType } = markAllInCaseTarget;
-        setRejectionDialogOpen(false);
-        setRejectionTarget(null);
-        setMarkAllInCaseTarget(null);
-        try {
-            const { updated } = await bulkMarkByText(
-                currentDocument.case,
-                text,
-                redactionType,
-                'REJECTED',
-                reason
-            );
-            setRedactions(prev =>
-                prev.map(r =>
-                    r.is_suggestion && !r.is_accepted && !r.justification &&
-                    r.text === text && r.redaction_type === redactionType
-                        ? { ...r, justification: reason }
-                        : r
-                )
-            );
-            toast.success(`Rejected ${updated} redaction${updated !== 1 ? 's' : ''} across this case.`);
-        } catch {
-            toast.error('Failed to mark all in case. Please try again.');
-        }
-    }, [markAllInCaseTarget, currentDocument.case, setRedactions, setRejectionDialogOpen, setRejectionTarget]);
+    const store = useRedactionState({ document: currentDocument, initialRedactions, router });
+    const { layout, document: docState, markAllInCase, rejectionDialog } = store;
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
@@ -216,8 +51,8 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                             <span>
                                 <IconButton
                                     aria-label="Decrease font size"
-                                    onClick={handleFontDecrease}
-                                    disabled={!canDecreaseFont}
+                                    onClick={layout.onFontDecrease}
+                                    disabled={!layout.canDecreaseFont}
                                     size="small"
                                     sx={{ fontSize: '0.85rem', fontWeight: 'bold' }}
                                 >
@@ -229,8 +64,8 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                             <span>
                                 <IconButton
                                     aria-label="Increase font size"
-                                    onClick={handleFontIncrease}
-                                    disabled={!canIncreaseFont}
+                                    onClick={layout.onFontIncrease}
+                                    disabled={!layout.canIncreaseFont}
                                     size="small"
                                     sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}
                                 >
@@ -244,22 +79,22 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                                     <IconButton
                                         aria-label="Resubmit for processing"
                                         color="warning"
-                                        onClick={() => setResubmitDialogOpen(true)}
-                                        disabled={isResubmitting}
+                                        onClick={() => docState.setResubmitDialogOpen(true)}
+                                        disabled={docState.isResubmitting}
                                     >
                                         <RefreshIcon />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip title={pendingCount > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                                <Tooltip title={store.pendingCount > 0 ? "You must resolve all AI suggestions before completing." : ""}>
                                     <span>
                                         <Button
                                             variant="contained"
                                             color="info"
-                                            disabled={pendingCount > 0 || isLoading}
-                                            onClick={handleMarkAsComplete}
+                                            disabled={store.pendingCount > 0 || docState.isLoading}
+                                            onClick={docState.onMarkAsComplete}
                                             sx={{ minWidth: 180 }}
                                         >
-                                            {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
+                                            {docState.isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
                                         </Button>
                                     </span>
                                 </Tooltip>
@@ -275,26 +110,12 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                         )}
                     </Box>
                 </Box>
-                <DocumentViewer
-                    text={currentDocument?.extracted_text}
-                    tables={currentDocument?.extracted_tables}
-                    structure={currentDocument?.extracted_structure}
-                    redactions={redactions}
-                    pendingRedaction={pendingRedaction}
-                    hoveredSuggestionId={hoveredSuggestionId}
-                    onTextSelect={handleTextSelect}
-                    onRemoveSelect={handleRemoveSelect}
-                    onHighlightClick={handleHighlightClick}
-                    onUnhighlightClick={handleUnhighlightClick}
-                    reviewComplete={pendingCount === 0}
-                    baseFontSize={baseFontSize}
-                    activeHighlightType={activeHighlightType}
-                />
+                <DocumentViewer {...getDocumentViewerProps(store, currentDocument)} />
             </Container>
 
             <Box
                 data-testid="resize-handle"
-                onMouseDown={handleResizeStart}
+                onMouseDown={layout.onResizeStart}
                 sx={{
                     width: '6px',
                     cursor: 'col-resize',
@@ -303,78 +124,49 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                     flexShrink: 0,
                 }}
             />
-            <Box sx={{ width: sidebarWidth, flexShrink: 0 }}>
-                <RedactionSidebar
-                    redactions={displaySections}
-                    exemptionTemplates={exemptionTemplates}
-                    onAccept={handleAcceptSuggestion}
-                    onReject={handleOpenRejectDialog}
-                    onRemove={handleRemoveRedaction}
-                    onChangeTypeAndAccept={handleChangeTypeAndAccept}
-                    onBulkChangeTypeAndAccept={handleBulkChangeTypeAndAccept}
-                    onBulkAccept={handleBulkAccept}
-                    onBulkReject={handleOpenBulkRejectDialog}
-                    onRejectAsDisclosable={handleRejectAsDisclosable}
-                    onMarkAllInCase={handleMarkAllInCase}
-                    onSplitMerge={handleSplitMerge}
-                    onRemoveFromMerge={handleRemoveFromMerge}
-                    onSuggestionMouseEnter={handleSuggestionMouseEnter}
-                    onSuggestionMouseLeave={handleSuggestionMouseLeave}
-                    scrollToId={scrollToId}
-                    removeScrollId={handleRemoveScrollId}
-                    onContextSave={handleOnContextSave}
-                    onCardClick={handleCardClick}
-                    activeHighlightType={activeHighlightType}
-                    onToggleHighlightTool={handleToggleHighlightTool}
-                    documentCompleted={currentDocument.status === 'Completed'}
-                    onUndo={undo}
-                    onRedo={redo}
-                    canUndo={canUndo}
-                    canRedo={canRedo}
-                />
+            <Box sx={{ width: layout.sidebarWidth, flexShrink: 0 }}>
+                <RedactionSidebar {...getRedactionSidebarProps(store, {
+                    exemptionTemplates,
+                    documentCompleted: currentDocument.status === 'Completed',
+                })} />
             </Box>
 
             <ManualRedactionPopover
-                anchorEl={manualRedactionAnchor}
-                onClose={handleCloseManualRedactionPopover}
-                onRedact={handleCreateManualRedaction}
+                anchorEl={store.manual.anchor}
+                onClose={store.manual.onClose}
+                onRedact={store.manual.onCreate}
             />
 
-            {rejectionTarget && (
+            {rejectionDialog.target && (
                 <RejectReasonDialog
-                    open={rejectionDialogOpen}
-                    onClose={() => {
-                        setRejectionDialogOpen(false);
-                        setRejectionTarget(null);
-                        setBulkRejectIds([]);
-                        setMarkAllInCaseTarget(null);
-                    }}
-                    onSubmit={markAllInCaseTarget?.action === 'reject' ? handleMarkAllInCaseRejectConfirm : handleRejectConfirm}
-                    redaction={rejectionTarget}
+                    open={rejectionDialog.open}
+                    onClose={rejectionDialog.onClose}
+                    onSubmit={rejectionDialog.onSubmit}
+                    redaction={rejectionDialog.target}
                 />
             )}
 
-            {markAllInCaseTarget?.action === 'accept' && (
-                <Dialog open onClose={() => setMarkAllInCaseTarget(null)}>
+            {markAllInCase.target?.action === 'accept' && (
+                <Dialog open onClose={() => markAllInCase.setTarget(null)}>
                     <DialogTitle>Accept all in case</DialogTitle>
                     <DialogContent>
                         <DialogContentText>
-                            Accept all pending <strong>{REDACTION_TYPE_LABELS[markAllInCaseTarget.redactionType] || markAllInCaseTarget.redactionType}</strong> redactions
-                            for <em>&ldquo;{markAllInCaseTarget.text}&rdquo;</em> across every document in this case?
+                            Accept all pending <strong>{REDACTION_TYPE_LABELS[markAllInCase.target.redactionType] || markAllInCase.target.redactionType}</strong> redactions
+                            for <em>&ldquo;{markAllInCase.target.text}&rdquo;</em> across every document in this case?
                         </DialogContentText>
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={() => setMarkAllInCaseTarget(null)}>Cancel</Button>
-                        <Button variant="contained" color="success" onClick={handleMarkAllInCaseAcceptConfirm}>Accept all</Button>
+                        <Button onClick={() => markAllInCase.setTarget(null)}>Cancel</Button>
+                        <Button variant="contained" color="success" onClick={markAllInCase.onAcceptConfirm}>Accept all</Button>
                     </DialogActions>
                 </Dialog>
             )}
 
             <ResubmitDialog
-                open={resubmitDialogOpen}
-                onClose={() => setResubmitDialogOpen(false)}
-                onConfirm={handleResubmit}
-                isConfirming={isResubmitting}
+                open={docState.resubmitDialogOpen}
+                onClose={() => docState.setResubmitDialogOpen(false)}
+                onConfirm={docState.onResubmit}
+                isConfirming={docState.isResubmitting}
             />
         </Box>
     );

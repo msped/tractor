@@ -104,7 +104,7 @@ class Case(models.Model):
         Returns the task_id.
         """
         self.export_status = self.ExportStatus.PROCESSING
-        task_id = async_task("cases.services.export_case_documents", self.id)
+        task_id = async_task("cases.tasks.export_case_documents", self.id)
         self.export_task_id = task_id
         self.save(update_fields=["export_status", "export_task_id"])
         return task_id
@@ -198,6 +198,22 @@ class Document(models.Model):
                 self.file_type = self.filename.split(".")[-1].upper()
         super().save(*args, **kwargs)
 
+    def start_processing(self):
+        """
+        Transition this document to PROCESSING, enqueue the NLP task, and
+        persist the task ID.  Both initial upload (via signal) and resubmit
+        (via view) use this method — it is the single place that knows the
+        task routing string.  Returns the task_id.
+        """
+        task_id = async_task(
+            "cases.tasks.process_document_and_create_redactions", self.id
+        )
+        Document.objects.filter(pk=self.pk).update(
+            status=self.Status.PROCESSING,
+            processing_task_id=task_id,
+        )
+        return task_id
+
     def __str__(self):
         return f"{self.filename} (Case: {self.case.case_reference})"
 
@@ -221,6 +237,18 @@ class RedactionQuerySet(models.QuerySet):
             Q(is_accepted=False)
             & (Q(justification__isnull=True) | Q(justification=""))
         )
+
+    def accept(self):
+        """Mark all redactions in the queryset as accepted."""
+        return self.update(is_accepted=True)
+
+    def reject(self, justification=""):
+        """Mark all redactions in the queryset as rejected with the given justification."""
+        return self.update(is_accepted=False, justification=justification)
+
+    def reset(self):
+        """Return all redactions in the queryset to pending (no decision)."""
+        return self.update(is_accepted=False, justification=None)
 
 
 class Redaction(models.Model):
