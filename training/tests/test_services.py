@@ -607,6 +607,24 @@ class DeduplicateEntitiesTests(NetworkBlockerMixin, TestCase):
         ]
         self.assertEqual(len(_deduplicate_entities([], secondary)), 1)
 
+    def test_secondary_entities_deduplicated_against_each_other(self):
+        """Two mutually-overlapping secondary entities: first wins, second dropped."""
+        long_span = {
+            "text": "John Smith",
+            "label": "THIRD_PARTY",
+            "start_char": 0,
+            "end_char": 10,
+        }
+        short_span = {
+            "text": "John",
+            "label": "THIRD_PARTY",
+            "start_char": 0,
+            "end_char": 4,
+        }
+        result = _deduplicate_entities([], [long_span, short_span])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "John Smith")
+
 
 class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
     def test_hash_prefix_expands_start_char(self):

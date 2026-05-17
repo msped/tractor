@@ -10,9 +10,9 @@ def _deduplicate_entities(primary_entities, secondary_entities):
     combined = list(primary_entities)
     for sec_ent in secondary_entities:
         overlaps = any(
-            sec_ent["start_char"] < pri_ent["end_char"]
-            and sec_ent["end_char"] > pri_ent["start_char"]
-            for pri_ent in primary_entities
+            sec_ent["start_char"] < ent["end_char"]
+            and sec_ent["end_char"] > ent["start_char"]
+            for ent in combined
         )
         if not overlaps:
             combined.append(sec_ent)
