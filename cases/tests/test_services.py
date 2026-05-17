@@ -1,4 +1,3 @@
-import io
 import os
 import shutil
 import tempfile
@@ -12,7 +11,6 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from pypdf import PdfReader
 
 from training.models import Model as SpacyModel
 from training.tests.base import NetworkBlockerMixin
@@ -26,6 +24,7 @@ from ..models import (
 )
 from ..services import (
     _apply_existing_case_decisions,
+    _build_document_html,
     _build_export_css,
     _generate_pdf_from_document,
     _matches_data_subject,
@@ -320,8 +319,8 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         doc2.refresh_from_db()
         self.assertEqual(doc2.status, Document.Status.READY_FOR_REVIEW)
 
-    def test_generate_pdf_from_document(self):
-        """Test the internal PDF generation function."""
+    def test_build_document_html_contains_redaction_span(self):
+        """Accepted redacted text produces a redaction span in both modes."""
         self.document.extracted_text = "This is some text with PII to redact."
         self.document.save()
         Redaction.objects.create(
@@ -333,25 +332,20 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        # Test disclosure mode (black box)
-        pdf_content_disclosure = _generate_pdf_from_document(
+        html_disclosure, _ = _build_document_html(
             self.document, mode="disclosure"
         )
-        self.assertIsNotNone(pdf_content_disclosure)
-        self.assertIsInstance(pdf_content_disclosure, bytes)
-        # A simple check to see if the PDF content seems valid
-        self.assertTrue(pdf_content_disclosure.startswith(b"%PDF-"))
+        self.assertIsNotNone(html_disclosure)
+        self.assertIn('class="redaction', html_disclosure)
 
-        # Test redacted mode (color highlight)
-        pdf_content_redacted = _generate_pdf_from_document(
+        html_redacted, _ = _build_document_html(
             self.document, mode="redacted"
         )
-        self.assertIsNotNone(pdf_content_redacted)
-        self.assertIsInstance(pdf_content_redacted, bytes)
-        self.assertTrue(pdf_content_redacted.startswith(b"%PDF-"))
+        self.assertIsNotNone(html_redacted)
+        self.assertIn('class="redaction', html_redacted)
 
-    def test_generate_pdf_disclosure_excludes_ds_information(self):
-        """DS_INFORMATION redactions must not be blacked out in the disclosure PDF."""
+    def test_build_document_html_disclosure_excludes_ds_information(self):
+        """DS_INFORMATION spans must not receive redaction markup in disclosure mode."""
         self.document.extracted_text = (
             "John Doe attended the event on 01/01/1990."
         )
@@ -365,16 +359,13 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        pdf_content = _generate_pdf_from_document(
-            self.document, mode="disclosure"
-        )
-        self.assertIsNotNone(pdf_content)
+        html, _ = _build_document_html(self.document, mode="disclosure")
+        self.assertIsNotNone(html)
+        self.assertIn("John Doe", html)
+        self.assertNotIn('class="redaction', html)
 
-        page_text = PdfReader(io.BytesIO(pdf_content)).pages[0].extract_text()
-        self.assertIn("John Doe", page_text)
-
-    def test_generate_pdf_redacted_includes_ds_information(self):
-        """DS_INFORMATION redactions should still be highlighted in the redacted (review) PDF."""
+    def test_build_document_html_redacted_includes_ds_information(self):
+        """DS_INFORMATION spans should still be marked up in redacted (review) mode."""
         self.document.extracted_text = "John Doe attended the event."
         self.document.save()
         Redaction.objects.create(
@@ -386,16 +377,12 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        pdf_content = _generate_pdf_from_document(
-            self.document, mode="redacted"
-        )
-        self.assertIsNotNone(pdf_content)
-        self.assertTrue(pdf_content.startswith(b"%PDF-"))
+        html, _ = _build_document_html(self.document, mode="redacted")
+        self.assertIsNotNone(html)
+        self.assertIn('class="redaction', html)
 
-    def test_generate_pdf_with_redaction_context(self):
-        """
-        Test that redaction context text appears in the final disclosure PDF.
-        """
+    def test_build_document_html_includes_redaction_context(self):
+        """Redaction context text must appear in the disclosure HTML."""
         self.document.extracted_text = "The secret ingredient is PII."
         self.document.save()
         redaction = Redaction.objects.create(
@@ -409,24 +396,12 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         context_text = "a type of cheese"
         RedactionContext.objects.create(redaction=redaction, text=context_text)
 
-        pdf_content = _generate_pdf_from_document(
-            self.document, mode="disclosure"
-        )
+        html, _ = _build_document_html(self.document, mode="disclosure")
+        self.assertIsNotNone(html)
+        self.assertIn(context_text, html)
 
-        self.assertIsNotNone(pdf_content)
-        self.assertTrue(pdf_content.startswith(b"%PDF-"))
-
-        bytes_content = io.BytesIO(pdf_content)
-        pdf = PdfReader(bytes_content)
-        page_text = pdf.pages[0].extract_text()
-        self.assertIn(context_text, page_text)
-
-    def test_generate_pdf_redacts_hash_prefix_not_in_stored_span(self):
-        """
-        A '#' immediately before a stored redaction span should be redacted in the PDF
-        even if the span itself does not include it (handles documents processed before
-        the extraction-layer fix).
-        """
+    def test_build_document_html_redacts_hash_prefix_not_in_stored_span(self):
+        """A '#' immediately before a stored span should be included in the redaction markup."""
         self.document.extracted_text = "Crime ref #42/12345/24 was recorded."
         self.document.save()
         # Stored span starts at 11 (the '4'), not 10 (the '#')
@@ -439,40 +414,35 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             is_accepted=True,
         )
 
-        pdf_content = _generate_pdf_from_document(
-            self.document, mode="disclosure"
-        )
-        self.assertIsNotNone(pdf_content)
-        bytes_content = io.BytesIO(pdf_content)
-        pdf = PdfReader(bytes_content)
-        page_text = pdf.pages[0].extract_text()
-        # The '#' and the crime ref should both be absent from the extracted text
-        self.assertNotIn("#42/12345/24", page_text)
-        self.assertNotIn("#", page_text)
+        html, _ = _build_document_html(self.document, mode="disclosure")
+        self.assertIsNotNone(html)
+        # The crime ref text should not appear outside a redaction span
+        self.assertNotIn(">42/12345/24<", html)
+        self.assertNotIn(">#42/12345/24<", html)
 
-    def test_generate_pdf_no_text(self):
-        """Test PDF generation for a document with no extracted text."""
+    def test_build_document_html_no_text_returns_none(self):
+        """Returns (None, None) when the document has no extracted text."""
         self.document.extracted_text = ""
         self.document.save()
-        pdf_content = _generate_pdf_from_document(self.document)
-        self.assertIsNone(pdf_content)
+        html, css = _build_document_html(self.document)
+        self.assertIsNone(html)
+        self.assertIsNone(css)
 
-    def test_generate_pdf_with_custom_font(self):
-        """Test that PDF generation works with a non-default font family."""
+    def test_build_document_html_custom_font_in_css(self):
+        """A non-default font family should appear in the body style."""
         self.document.extracted_text = "Some text for font testing."
         self.document.save()
-        settings = DocumentExportSettings.get()
-        settings.font_family = (
+        export_settings = DocumentExportSettings.get()
+        export_settings.font_family = (
             DocumentExportSettings.FontFamily.TIMES_NEW_ROMAN
         )
-        settings.save()
+        export_settings.save()
 
-        pdf_content = _generate_pdf_from_document(
-            self.document, mode="disclosure"
+        html, _ = _build_document_html(
+            self.document, mode="disclosure", export_settings=export_settings
         )
-        self.assertIsNotNone(pdf_content)
-        self.assertIsInstance(pdf_content, bytes)
-        self.assertTrue(pdf_content.startswith(b"%PDF-"))
+        self.assertIsNotNone(html)
+        self.assertIn("Times New Roman", html)
 
     @patch("cases.services._generate_pdf_from_document")
     def test_export_case_documents(self, mock_generate_pdf):
