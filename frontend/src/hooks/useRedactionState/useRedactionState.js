@@ -131,70 +131,145 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         setMarkAllInCaseTarget(null);
     }, [setMarkAllInCaseTarget]);
 
+    // Routes to the correct handler based on what triggered the rejection dialog.
+    const handleRejectDialogSubmit = useCallback((id, reason) => {
+        if (markAllInCaseTarget?.action === 'reject') {
+            return handleMarkAllInCaseRejectConfirm(id, reason);
+        }
+        return handleRejectConfirm(id, reason);
+    }, [markAllInCaseTarget, handleMarkAllInCaseRejectConfirm, handleRejectConfirm]);
+
     return {
         redactions,
         displaySections,
         pendingCount: displaySections.pending.total,
 
-        hoveredSuggestionId,
-        scrollToId,
-        handleSuggestionMouseEnter,
-        handleSuggestionMouseLeave,
-        handleHighlightClick,
-        handleRemoveScrollId,
-        handleCardClick,
+        display: {
+            hoveredSuggestionId,
+            scrollToId,
+            onSuggestionMouseEnter: handleSuggestionMouseEnter,
+            onSuggestionMouseLeave: handleSuggestionMouseLeave,
+            onHighlightClick: handleHighlightClick,
+            onRemoveScrollId: handleRemoveScrollId,
+            onCardClick: handleCardClick,
+        },
 
-        manualRedactionAnchor,
-        pendingRedaction,
-        handleTextSelect,
-        handleCreateManualRedaction,
-        handleCloseManualRedactionPopover,
-        handleOnContextSave,
+        manual: {
+            anchor: manualRedactionAnchor,
+            pending: pendingRedaction,
+            onTextSelect: handleTextSelect,
+            onCreate: handleCreateManualRedaction,
+            onClose: handleCloseManualRedactionPopover,
+            onContextSave: handleOnContextSave,
+            onRemoveSelect: handleRemoveSelect,
+            onUnhighlightClick: handleUnhighlightClick,
+        },
 
-        handleRemoveRedaction,
-        handleRemoveSelect,
-        handleUnhighlightClick,
+        commands: {
+            accept: handleAcceptSuggestion,
+            bulkAccept: handleBulkAccept,
+            rejectAsDisclosable: handleRejectAsDisclosable,
+            changeTypeAndAccept: handleChangeTypeAndAccept,
+            bulkChangeTypeAndAccept: handleBulkChangeTypeAndAccept,
+            openRejectDialog: handleOpenRejectDialog,
+            openBulkRejectDialog: handleOpenBulkRejectDialog,
+            splitMerge: handleSplitMerge,
+            removeFromMerge: handleRemoveFromMerge,
+            remove: handleRemoveRedaction,
+        },
 
-        handleAcceptSuggestion,
-        handleBulkAccept,
-        handleRejectAsDisclosable,
-        handleChangeTypeAndAccept,
-        handleBulkChangeTypeAndAccept,
-        handleOpenRejectDialog,
-        handleOpenBulkRejectDialog,
-        handleRejectConfirm,
-        handleSplitMerge,
-        handleRemoveFromMerge,
+        markAllInCase: {
+            target: markAllInCaseTarget,
+            setTarget: setMarkAllInCaseTarget,
+            onMarkAll: handleMarkAllInCase,
+            onAcceptConfirm: handleMarkAllInCaseAcceptConfirm,
+        },
 
-        markAllInCaseTarget,
-        setMarkAllInCaseTarget,
-        handleMarkAllInCase,
-        handleMarkAllInCaseAcceptConfirm,
-        handleMarkAllInCaseRejectConfirm,
+        layout: {
+            baseFontSize,
+            canIncreaseFont,
+            canDecreaseFont,
+            sidebarWidth,
+            onFontDecrease: handleFontDecrease,
+            onFontIncrease: handleFontIncrease,
+            onResizeStart: handleResizeStart,
+        },
 
-        isLoading,
-        isResubmitting,
-        resubmitDialogOpen,
-        setResubmitDialogOpen,
-        baseFontSize,
-        canIncreaseFont,
-        canDecreaseFont,
-        sidebarWidth,
-        activeHighlightType,
-        handleToggleHighlightTool,
-        handleFontDecrease,
-        handleFontIncrease,
-        handleResizeStart,
-        handleMarkAsComplete,
-        handleResubmit,
+        tool: {
+            activeType: activeHighlightType,
+            onToggle: handleToggleHighlightTool,
+        },
 
-        undo,
-        redo,
-        canUndo,
-        canRedo,
+        history: {
+            canUndo,
+            canRedo,
+            onUndo: undo,
+            onRedo: redo,
+        },
 
-        rejectionDialogOpen,
-        rejectionTarget,
-        handleCloseRejectionDialog,
+        document: {
+            isLoading,
+            isResubmitting,
+            resubmitDialogOpen,
+            setResubmitDialogOpen,
+            onMarkAsComplete: handleMarkAsComplete,
+            onResubmit: handleResubmit,
+        },
+
+        rejectionDialog: {
+            open: rejectionDialogOpen,
+            target: rejectionTarget,
+            onClose: handleCloseRejectionDialog,
+            onSubmit: handleRejectDialogSubmit,
+        },
+    };
+}
+
+export function getDocumentViewerProps(store, document) {
+    return {
+        text: document?.extracted_text,
+        tables: document?.extracted_tables,
+        structure: document?.extracted_structure,
+        redactions: store.redactions,
+        pendingRedaction: store.manual.pending,
+        hoveredSuggestionId: store.display.hoveredSuggestionId,
+        onTextSelect: store.manual.onTextSelect,
+        onRemoveSelect: store.manual.onRemoveSelect,
+        onHighlightClick: store.display.onHighlightClick,
+        onUnhighlightClick: store.manual.onUnhighlightClick,
+        reviewComplete: store.pendingCount === 0,
+        baseFontSize: store.layout.baseFontSize,
+        activeHighlightType: store.tool.activeType,
+    };
+}
+
+export function getRedactionSidebarProps(store, { exemptionTemplates, documentCompleted }) {
+    return {
+        redactions: store.displaySections,
+        exemptionTemplates,
+        onAccept: store.commands.accept,
+        onReject: store.commands.openRejectDialog,
+        onRemove: store.commands.remove,
+        onChangeTypeAndAccept: store.commands.changeTypeAndAccept,
+        onBulkChangeTypeAndAccept: store.commands.bulkChangeTypeAndAccept,
+        onBulkAccept: store.commands.bulkAccept,
+        onBulkReject: store.commands.openBulkRejectDialog,
+        onRejectAsDisclosable: store.commands.rejectAsDisclosable,
+        onMarkAllInCase: store.markAllInCase.onMarkAll,
+        onSplitMerge: store.commands.splitMerge,
+        onRemoveFromMerge: store.commands.removeFromMerge,
+        onSuggestionMouseEnter: store.display.onSuggestionMouseEnter,
+        onSuggestionMouseLeave: store.display.onSuggestionMouseLeave,
+        scrollToId: store.display.scrollToId,
+        removeScrollId: store.display.onRemoveScrollId,
+        onContextSave: store.manual.onContextSave,
+        onCardClick: store.display.onCardClick,
+        activeHighlightType: store.tool.activeType,
+        onToggleHighlightTool: store.tool.onToggle,
+        documentCompleted,
+        onUndo: store.history.onUndo,
+        onRedo: store.history.onRedo,
+        canUndo: store.history.canUndo,
+        canRedo: store.history.canRedo,
     };
 }

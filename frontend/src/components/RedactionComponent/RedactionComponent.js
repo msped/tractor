@@ -13,7 +13,7 @@ import { ResubmitDialog } from '@/components/ResubmitDialog';
 import { getExemptionTemplates } from '@/services/redactionService';
 import useSWR from 'swr';
 import { DocumentViewer } from '@/components/DocumentViewer';
-import { useRedactionState } from '@/hooks/useRedactionState';
+import { useRedactionState, getDocumentViewerProps, getRedactionSidebarProps } from '@/hooks/useRedactionState';
 import { useRouter } from 'next/navigation';
 
 const REDACTION_TYPE_LABELS = {
@@ -31,64 +31,8 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
         { dedupingInterval: 60000 }
     );
 
-    const {
-        redactions,
-        displaySections,
-        pendingCount,
-        hoveredSuggestionId,
-        scrollToId,
-        handleSuggestionMouseEnter,
-        handleSuggestionMouseLeave,
-        handleHighlightClick,
-        handleRemoveScrollId,
-        handleCardClick,
-        manualRedactionAnchor,
-        pendingRedaction,
-        handleTextSelect,
-        handleCreateManualRedaction,
-        handleCloseManualRedactionPopover,
-        handleOnContextSave,
-        handleRemoveRedaction,
-        handleRemoveSelect,
-        handleUnhighlightClick,
-        handleAcceptSuggestion,
-        handleBulkAccept,
-        handleRejectAsDisclosable,
-        handleChangeTypeAndAccept,
-        handleBulkChangeTypeAndAccept,
-        handleOpenRejectDialog,
-        handleOpenBulkRejectDialog,
-        handleRejectConfirm,
-        handleSplitMerge,
-        handleRemoveFromMerge,
-        markAllInCaseTarget,
-        setMarkAllInCaseTarget,
-        handleMarkAllInCase,
-        handleMarkAllInCaseAcceptConfirm,
-        handleMarkAllInCaseRejectConfirm,
-        isLoading,
-        isResubmitting,
-        resubmitDialogOpen,
-        setResubmitDialogOpen,
-        baseFontSize,
-        canIncreaseFont,
-        canDecreaseFont,
-        sidebarWidth,
-        activeHighlightType,
-        handleToggleHighlightTool,
-        handleFontDecrease,
-        handleFontIncrease,
-        handleResizeStart,
-        handleMarkAsComplete,
-        handleResubmit,
-        undo,
-        redo,
-        canUndo,
-        canRedo,
-        rejectionDialogOpen,
-        rejectionTarget,
-        handleCloseRejectionDialog,
-    } = useRedactionState({ document: currentDocument, initialRedactions, router });
+    const store = useRedactionState({ document: currentDocument, initialRedactions, router });
+    const { layout, tool, document: docState, history, markAllInCase, rejectionDialog } = store;
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
@@ -107,8 +51,8 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                             <span>
                                 <IconButton
                                     aria-label="Decrease font size"
-                                    onClick={handleFontDecrease}
-                                    disabled={!canDecreaseFont}
+                                    onClick={layout.onFontDecrease}
+                                    disabled={!layout.canDecreaseFont}
                                     size="small"
                                     sx={{ fontSize: '0.85rem', fontWeight: 'bold' }}
                                 >
@@ -120,8 +64,8 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                             <span>
                                 <IconButton
                                     aria-label="Increase font size"
-                                    onClick={handleFontIncrease}
-                                    disabled={!canIncreaseFont}
+                                    onClick={layout.onFontIncrease}
+                                    disabled={!layout.canIncreaseFont}
                                     size="small"
                                     sx={{ fontSize: '1.1rem', fontWeight: 'bold' }}
                                 >
@@ -135,22 +79,22 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                                     <IconButton
                                         aria-label="Resubmit for processing"
                                         color="warning"
-                                        onClick={() => setResubmitDialogOpen(true)}
-                                        disabled={isResubmitting}
+                                        onClick={() => docState.setResubmitDialogOpen(true)}
+                                        disabled={docState.isResubmitting}
                                     >
                                         <RefreshIcon />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip title={pendingCount > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                                <Tooltip title={store.pendingCount > 0 ? "You must resolve all AI suggestions before completing." : ""}>
                                     <span>
                                         <Button
                                             variant="contained"
                                             color="info"
-                                            disabled={pendingCount > 0 || isLoading}
-                                            onClick={handleMarkAsComplete}
+                                            disabled={store.pendingCount > 0 || docState.isLoading}
+                                            onClick={docState.onMarkAsComplete}
                                             sx={{ minWidth: 180 }}
                                         >
-                                            {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
+                                            {docState.isLoading ? <CircularProgress size={24} color="inherit" /> : 'Mark as Complete'}
                                         </Button>
                                     </span>
                                 </Tooltip>
@@ -166,26 +110,12 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                         )}
                     </Box>
                 </Box>
-                <DocumentViewer
-                    text={currentDocument?.extracted_text}
-                    tables={currentDocument?.extracted_tables}
-                    structure={currentDocument?.extracted_structure}
-                    redactions={redactions}
-                    pendingRedaction={pendingRedaction}
-                    hoveredSuggestionId={hoveredSuggestionId}
-                    onTextSelect={handleTextSelect}
-                    onRemoveSelect={handleRemoveSelect}
-                    onHighlightClick={handleHighlightClick}
-                    onUnhighlightClick={handleUnhighlightClick}
-                    reviewComplete={pendingCount === 0}
-                    baseFontSize={baseFontSize}
-                    activeHighlightType={activeHighlightType}
-                />
+                <DocumentViewer {...getDocumentViewerProps(store, currentDocument)} />
             </Container>
 
             <Box
                 data-testid="resize-handle"
-                onMouseDown={handleResizeStart}
+                onMouseDown={layout.onResizeStart}
                 sx={{
                     width: '6px',
                     cursor: 'col-resize',
@@ -194,73 +124,49 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                     flexShrink: 0,
                 }}
             />
-            <Box sx={{ width: sidebarWidth, flexShrink: 0 }}>
-                <RedactionSidebar
-                    redactions={displaySections}
-                    exemptionTemplates={exemptionTemplates}
-                    onAccept={handleAcceptSuggestion}
-                    onReject={handleOpenRejectDialog}
-                    onRemove={handleRemoveRedaction}
-                    onChangeTypeAndAccept={handleChangeTypeAndAccept}
-                    onBulkChangeTypeAndAccept={handleBulkChangeTypeAndAccept}
-                    onBulkAccept={handleBulkAccept}
-                    onBulkReject={handleOpenBulkRejectDialog}
-                    onRejectAsDisclosable={handleRejectAsDisclosable}
-                    onMarkAllInCase={handleMarkAllInCase}
-                    onSplitMerge={handleSplitMerge}
-                    onRemoveFromMerge={handleRemoveFromMerge}
-                    onSuggestionMouseEnter={handleSuggestionMouseEnter}
-                    onSuggestionMouseLeave={handleSuggestionMouseLeave}
-                    scrollToId={scrollToId}
-                    removeScrollId={handleRemoveScrollId}
-                    onContextSave={handleOnContextSave}
-                    onCardClick={handleCardClick}
-                    activeHighlightType={activeHighlightType}
-                    onToggleHighlightTool={handleToggleHighlightTool}
-                    documentCompleted={currentDocument.status === 'Completed'}
-                    onUndo={undo}
-                    onRedo={redo}
-                    canUndo={canUndo}
-                    canRedo={canRedo}
-                />
+            <Box sx={{ width: layout.sidebarWidth, flexShrink: 0 }}>
+                <RedactionSidebar {...getRedactionSidebarProps(store, {
+                    exemptionTemplates,
+                    documentCompleted: currentDocument.status === 'Completed',
+                })} />
             </Box>
 
             <ManualRedactionPopover
-                anchorEl={manualRedactionAnchor}
-                onClose={handleCloseManualRedactionPopover}
-                onRedact={handleCreateManualRedaction}
+                anchorEl={store.manual.anchor}
+                onClose={store.manual.onClose}
+                onRedact={store.manual.onCreate}
             />
 
-            {rejectionTarget && (
+            {rejectionDialog.target && (
                 <RejectReasonDialog
-                    open={rejectionDialogOpen}
-                    onClose={handleCloseRejectionDialog}
-                    onSubmit={markAllInCaseTarget?.action === 'reject' ? handleMarkAllInCaseRejectConfirm : handleRejectConfirm}
-                    redaction={rejectionTarget}
+                    open={rejectionDialog.open}
+                    onClose={rejectionDialog.onClose}
+                    onSubmit={rejectionDialog.onSubmit}
+                    redaction={rejectionDialog.target}
                 />
             )}
 
-            {markAllInCaseTarget?.action === 'accept' && (
-                <Dialog open onClose={() => setMarkAllInCaseTarget(null)}>
+            {markAllInCase.target?.action === 'accept' && (
+                <Dialog open onClose={() => markAllInCase.setTarget(null)}>
                     <DialogTitle>Accept all in case</DialogTitle>
                     <DialogContent>
                         <DialogContentText>
-                            Accept all pending <strong>{REDACTION_TYPE_LABELS[markAllInCaseTarget.redactionType] || markAllInCaseTarget.redactionType}</strong> redactions
-                            for <em>&ldquo;{markAllInCaseTarget.text}&rdquo;</em> across every document in this case?
+                            Accept all pending <strong>{REDACTION_TYPE_LABELS[markAllInCase.target.redactionType] || markAllInCase.target.redactionType}</strong> redactions
+                            for <em>&ldquo;{markAllInCase.target.text}&rdquo;</em> across every document in this case?
                         </DialogContentText>
                     </DialogContent>
                     <DialogActions>
-                        <Button onClick={() => setMarkAllInCaseTarget(null)}>Cancel</Button>
-                        <Button variant="contained" color="success" onClick={handleMarkAllInCaseAcceptConfirm}>Accept all</Button>
+                        <Button onClick={() => markAllInCase.setTarget(null)}>Cancel</Button>
+                        <Button variant="contained" color="success" onClick={markAllInCase.onAcceptConfirm}>Accept all</Button>
                     </DialogActions>
                 </Dialog>
             )}
 
             <ResubmitDialog
-                open={resubmitDialogOpen}
-                onClose={() => setResubmitDialogOpen(false)}
-                onConfirm={handleResubmit}
-                isConfirming={isResubmitting}
+                open={docState.resubmitDialogOpen}
+                onClose={() => docState.setResubmitDialogOpen(false)}
+                onConfirm={docState.onResubmit}
+                isConfirming={docState.isResubmitting}
             />
         </Box>
     );

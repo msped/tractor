@@ -1,1 +1,1 @@
-export * from './useRedactionState';
+export { useRedactionState, getDocumentViewerProps, getRedactionSidebarProps } from './useRedactionState';
