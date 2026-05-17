@@ -1,6 +1,5 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django_q.tasks import async_task
 
 from .models import Document, Redaction
 
@@ -11,13 +10,7 @@ def document_post_save(sender, instance, created, **kwargs):
     When a document is first created, trigger the AI processing task.
     """
     if created and instance.status == Document.Status.PROCESSING:
-        task_id = async_task(
-            "cases.tasks.process_document_and_create_redactions",
-            instance.id,
-        )
-        Document.objects.filter(pk=instance.pk).update(
-            processing_task_id=task_id
-        )
+        instance.start_processing()
 
 
 @receiver(post_save, sender=Redaction)
@@ -28,6 +21,7 @@ def redaction_post_save(sender, instance, created, **kwargs):
     """
     if instance.redaction_type == Redaction.RedactionType.DS_INFORMATION:
         if created:
+            from django_q.tasks import async_task
             async_task(
                 "cases.tasks.find_and_flag_matching_text_in_case",
                 instance.id,
@@ -35,6 +29,7 @@ def redaction_post_save(sender, instance, created, **kwargs):
         else:
             update_fields = kwargs.get("update_fields") or set()
             if "redaction_type" in update_fields:
+                from django_q.tasks import async_task
                 async_task(
                     "cases.tasks.find_and_flag_matching_text_in_case",
                     instance.id,

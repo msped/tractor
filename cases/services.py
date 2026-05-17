@@ -159,7 +159,10 @@ def process_document_and_create_redactions(document_id):
                 )
             )
         Redaction.objects.bulk_create(redactions_to_create)
-        _apply_existing_case_decisions(document)
+
+    # Run case-decision propagation in its own transaction so a failure here
+    # does not roll back the committed redactions above.
+    _apply_existing_case_decisions(document)
 
     document.status = Document.Status.READY_FOR_REVIEW
     document.save(update_fields=["status"])

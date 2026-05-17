@@ -198,6 +198,22 @@ class Document(models.Model):
                 self.file_type = self.filename.split(".")[-1].upper()
         super().save(*args, **kwargs)
 
+    def start_processing(self):
+        """
+        Transition this document to PROCESSING, enqueue the NLP task, and
+        persist the task ID.  Both initial upload (via signal) and resubmit
+        (via view) use this method — it is the single place that knows the
+        task routing string.  Returns the task_id.
+        """
+        task_id = async_task(
+            "cases.tasks.process_document_and_create_redactions", self.id
+        )
+        Document.objects.filter(pk=self.pk).update(
+            status=self.Status.PROCESSING,
+            processing_task_id=task_id,
+        )
+        return task_id
+
     def __str__(self):
         return f"{self.filename} (Case: {self.case.case_reference})"
 

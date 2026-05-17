@@ -2,7 +2,6 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django_q.models import OrmQ
-from django_q.tasks import async_task
 from rest_framework import status
 from rest_framework.generics import (
     ListCreateAPIView,
@@ -232,12 +231,7 @@ class DocumentResubmitView(APIView):
         ]:
             # Delete existing redactions to avoid duplicates
             document.redactions.all().delete()
-            document.status = Document.Status.PROCESSING
-            document.save(update_fields=["status"])
-            async_task(
-                "cases.tasks.process_document_and_create_redactions",
-                document.id,
-            )
+            document.start_processing()
             return Response(status=status.HTTP_200_OK)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 

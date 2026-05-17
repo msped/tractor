@@ -383,9 +383,10 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             RedactionContext.objects.filter(redaction=self.redaction).exists()
         )
 
-    @patch("cases.views.async_task")
+    @patch("cases.models.async_task")
     def test_resubmit_document_success(self, mock_async_task):
         """Test resubmitting a document in ERROR status."""
+        mock_async_task.return_value = "test-task-id"
         self.document.status = Document.Status.ERROR
         self.document.save()
 
@@ -402,9 +403,10 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             self.document.id,
         )
 
-    @patch("cases.views.async_task")
+    @patch("cases.models.async_task")
     def test_resubmit_document_ready_status_success(self, mock_async_task):
         """Test resubmitting a document in READY status succeeds."""
+        mock_async_task.return_value = "test-task-id"
         self.document.status = Document.Status.READY_FOR_REVIEW
         self.document.save()
 
@@ -421,7 +423,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             self.document.id,
         )
 
-    @patch("cases.views.async_task")
+    @patch("cases.models.async_task")
     def test_resubmit_document_wrong_status(self, mock_async_task):
         """Test resubmitting a document in COMPLETED status fails."""
         self.document.status = Document.Status.COMPLETED
@@ -437,9 +439,10 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(self.document.status, Document.Status.COMPLETED)
         mock_async_task.assert_not_called()
 
-    @patch("cases.views.async_task")
+    @patch("cases.models.async_task")
     def test_resubmit_document_deletes_redactions(self, mock_async_task):
         """Test that resubmitting a document deletes existing redactions."""
+        mock_async_task.return_value = "test-task-id"
         self.document.status = Document.Status.READY_FOR_REVIEW
         self.document.save()
 
@@ -527,11 +530,12 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self.document.redactions.count(), 0)
 
-    @patch("cases.views.async_task")
+    @patch("cases.models.async_task")
     def test_resubmit_document_unprocessed_status_success(
         self, mock_async_task
     ):
         """Test resubmitting a document in UNPROCESSED status succeeds."""
+        mock_async_task.return_value = "test-task-id"
         self.document.status = Document.Status.UNPROCESSED
         self.document.save()
 
