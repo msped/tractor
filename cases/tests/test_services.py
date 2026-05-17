@@ -338,9 +338,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIsNotNone(html_disclosure)
         self.assertIn('class="redaction', html_disclosure)
 
-        html_redacted, _ = _build_document_html(
-            self.document, mode="redacted"
-        )
+        html_redacted, _ = _build_document_html(self.document, mode="redacted")
         self.assertIsNotNone(html_redacted)
         self.assertIn('class="redaction', html_redacted)
 

@@ -22,6 +22,7 @@ def redaction_post_save(sender, instance, created, **kwargs):
     if instance.redaction_type == Redaction.RedactionType.DS_INFORMATION:
         if created:
             from django_q.tasks import async_task
+
             async_task(
                 "cases.tasks.find_and_flag_matching_text_in_case",
                 instance.id,
@@ -30,6 +31,7 @@ def redaction_post_save(sender, instance, created, **kwargs):
             update_fields = kwargs.get("update_fields") or set()
             if "redaction_type" in update_fields:
                 from django_q.tasks import async_task
+
                 async_task(
                     "cases.tasks.find_and_flag_matching_text_in_case",
                     instance.id,

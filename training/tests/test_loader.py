@@ -6,8 +6,8 @@ from ..loader import (
     DEFAULT_GLINER_MODEL,
     GLiNERModelManager,
     SpanCatModelManager,
-    _ModelManagerBase,
     _get_device,
+    _ModelManagerBase,
 )
 from ..models import Model
 from .base import NetworkBlockerMixin
@@ -191,16 +191,15 @@ class SpanCatModelManagerTests(NetworkBlockerMixin, TestCase):
 
         self.assertIsNone(manager.model)
         self.assertTrue(
-            any("SpanCat model could not be loaded" in line for line in cm.output)
+            any(
+                "SpanCat model could not be loaded" in line
+                for line in cm.output
+            )
         )
 
 
 class ModelManagerBaseTests(TestCase):
     def test_subclasses_have_independent_instances_and_locks(self):
         """Each subclass gets its own _instance and _lock via __init_subclass__."""
-        self.assertIsNot(
-            GLiNERModelManager._lock, SpanCatModelManager._lock
-        )
-        self.assertIsNot(
-            GLiNERModelManager._lock, _ModelManagerBase._lock
-        )
+        self.assertIsNot(GLiNERModelManager._lock, SpanCatModelManager._lock)
+        self.assertIsNot(GLiNERModelManager._lock, _ModelManagerBase._lock)

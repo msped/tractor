@@ -164,9 +164,7 @@ class SpanCatModelManager(_ModelManagerBase):
             try:
                 self._load_active_model()
             except Exception:
-                logger.warning(
-                    "SpanCat model reload failed.", exc_info=True
-                )
+                logger.warning("SpanCat model reload failed.", exc_info=True)
         return self.model
 
     def get_model_entry(self):

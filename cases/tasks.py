@@ -4,6 +4,7 @@ Async task entry points for the cases app.
 All django-q2 async_task() calls should reference this module so that
 service functions can be renamed/moved without touching task routing strings.
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
