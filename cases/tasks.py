@@ -36,3 +36,15 @@ def export_case_documents(case_id):
     from .services import export_case_documents as _impl
 
     return _impl(case_id)
+
+
+def delete_cases_past_retention_date():
+    from .services import delete_cases_past_retention_date as _impl
+
+    return _impl()
+
+
+def delete_original_files_past_threshold():
+    from .services import delete_original_files_past_threshold as _impl
+
+    return _impl()
