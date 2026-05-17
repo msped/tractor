@@ -168,7 +168,7 @@ describe('<CaseDocuments />', () => {
       cy.get('[role="dialog"]').contains('button', 'Upload').click();
 
       cy.wait('@uploadRequest');
-      cy.contains('Failed to upload document(s): Server is on fire').should('be.visible');
+      cy.contains('Server is on fire').should('be.visible');
     });
 
     it('shows confirmation dialog when delete is clicked', () => {

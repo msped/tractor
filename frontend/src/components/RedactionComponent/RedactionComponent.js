@@ -32,7 +32,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     );
 
     const store = useRedactionState({ document: currentDocument, initialRedactions, router });
-    const { layout, tool, document: docState, history, markAllInCase, rejectionDialog } = store;
+    const { layout, document: docState, markAllInCase, rejectionDialog } = store;
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>

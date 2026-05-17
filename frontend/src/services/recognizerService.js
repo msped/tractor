@@ -1,4 +1,5 @@
 import apiClient from '@/api/apiClient';
+import { extractApiError } from '@/api/apiError';
 
 const BASE = 'model-management/custom-recognizers';
 
@@ -7,7 +8,7 @@ export const getCustomRecognizers = async () => {
         const response = await apiClient.get(BASE);
         return response.data;
     } catch (error) {
-        throw new Error('Failed to load custom recognizers.');
+        throw new Error(extractApiError(error, 'Failed to load custom recognizers. Please try again.'));
     }
 };
 
@@ -16,11 +17,7 @@ export const createCustomRecognizer = async (data) => {
         const response = await apiClient.post(BASE, data);
         return response.data;
     } catch (error) {
-        const detail = error.response?.data?.name?.[0]
-            || error.response?.data?.non_field_errors?.[0]
-            || error.response?.data?.detail
-            || 'Unknown error';
-        throw new Error(`Failed to create recognizer: ${detail}`);
+        throw new Error(extractApiError(error, 'Failed to create recognizer. Please try again.'));
     }
 };
 
@@ -29,10 +26,7 @@ export const updateCustomRecognizer = async (id, data) => {
         const response = await apiClient.patch(`${BASE}/${id}`, data);
         return response.data;
     } catch (error) {
-        const detail = error.response?.data?.non_field_errors?.[0]
-            || error.response?.data?.detail
-            || 'Unknown error';
-        throw new Error(`Failed to update recognizer: ${detail}`);
+        throw new Error(extractApiError(error, 'Failed to update recognizer. Please try again.'));
     }
 };
 
@@ -41,7 +35,7 @@ export const deleteCustomRecognizer = async (id) => {
         await apiClient.delete(`${BASE}/${id}`);
         return true;
     } catch (error) {
-        throw new Error('Failed to delete recognizer.');
+        throw new Error(extractApiError(error, 'Failed to delete recognizer. Please try again.'));
     }
 };
 
@@ -56,6 +50,6 @@ export const validateRegex = async (pattern, sampleText) => {
         if (error.response?.data) {
             return { valid: false, error: error.response.data.error || 'Invalid pattern' };
         }
-        throw new Error('Failed to validate regex.');
+        throw new Error('Failed to validate regex. Please try again.');
     }
 };
