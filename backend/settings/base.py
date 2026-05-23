@@ -205,7 +205,7 @@ DELETE_ORIGINAL_FILES_AFTER_DAYS = 30
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
-OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED")
+OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED", "False").lower() in ("true", "1", "yes")
 OLLAMA_CHUNK_SIZE = int(os.environ.get("OLLAMA_CHUNK_SIZE", 4000))
 OLLAMA_CHUNK_OVERLAP = int(os.environ.get("OLLAMA_CHUNK_OVERLAP", 200))
 
