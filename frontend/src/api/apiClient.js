@@ -68,8 +68,8 @@ const apiClient = () => {
 
             const originalRequest = error.config;
             if (originalRequest._retried) {
-                window.location.href = '/';
-                return Promise.reject(error);
+                window.location.href = '/api/force-logout';
+                return new Promise(() => {});
             }
 
             if (isRefreshing) {
@@ -102,8 +102,8 @@ const apiClient = () => {
             } catch {
                 clientToken = null;
                 refreshSubscribers = [];
-                window.location.href = '/';
-                return Promise.reject(error);
+                window.location.href = '/api/force-logout';
+                return new Promise(() => {});
             } finally {
                 clearTimeout(timeout);
                 isRefreshing = false;

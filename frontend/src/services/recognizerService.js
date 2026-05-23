@@ -1,5 +1,5 @@
 import apiClient from '@/api/apiClient';
-import { extractApiError } from '@/api/apiError';
+import { throwApiError } from '@/api/apiError';
 
 const BASE = 'model-management/custom-recognizers';
 
@@ -8,7 +8,7 @@ export const getCustomRecognizers = async () => {
         const response = await apiClient.get(BASE);
         return response.data;
     } catch (error) {
-        throw new Error(extractApiError(error, 'Failed to load custom recognizers. Please try again.'));
+        throwApiError(error, 'Failed to load custom recognizers. Please try again.');
     }
 };
 
@@ -17,7 +17,7 @@ export const createCustomRecognizer = async (data) => {
         const response = await apiClient.post(BASE, data);
         return response.data;
     } catch (error) {
-        throw new Error(extractApiError(error, 'Failed to create recognizer. Please try again.'));
+        throwApiError(error, 'Failed to create recognizer. Please try again.');
     }
 };
 
@@ -26,7 +26,7 @@ export const updateCustomRecognizer = async (id, data) => {
         const response = await apiClient.patch(`${BASE}/${id}`, data);
         return response.data;
     } catch (error) {
-        throw new Error(extractApiError(error, 'Failed to update recognizer. Please try again.'));
+        throwApiError(error, 'Failed to update recognizer. Please try again.');
     }
 };
 
@@ -35,7 +35,7 @@ export const deleteCustomRecognizer = async (id) => {
         await apiClient.delete(`${BASE}/${id}`);
         return true;
     } catch (error) {
-        throw new Error(extractApiError(error, 'Failed to delete recognizer. Please try again.'));
+        throwApiError(error, 'Failed to delete recognizer. Please try again.');
     }
 };
 

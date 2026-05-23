@@ -12,3 +12,9 @@ export function extractApiError(error, fallback) {
         || fallback
     );
 }
+
+export function throwApiError(error, fallback) {
+    const err = new Error(extractApiError(error, fallback));
+    err.status = error.response?.status;
+    throw err;
+}
