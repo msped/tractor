@@ -1,4 +1,5 @@
 import React from 'react';
+import { redirect } from 'next/navigation';
 import { DocumentViewComponent } from '@/components/DocumentViewComponent';
 import { Box, Alert } from '@mui/material';
 import { getDocument } from '@/services/documentService';
@@ -19,6 +20,9 @@ export default async function page({ params }) {
         redactions = allRedactions.filter(r => r.is_accepted || !r.is_suggestion);
 
     } catch (error) {
+        if (error.status === 401) {
+            redirect('/api/force-logout');
+        }
         console.error("Failed to fetch document for view:", error);
         fetchError = "There was an issue retrieving the document. Please try again later.";
     }

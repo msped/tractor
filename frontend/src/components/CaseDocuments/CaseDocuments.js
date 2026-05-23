@@ -83,9 +83,6 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
         setIsDragging(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             handleFilesSelected(e.dataTransfer.files);
-            if (typeof e.dataTransfer.clearData === 'function') {
-                e.dataTransfer.clearData();
-            }
         }
     };
 
