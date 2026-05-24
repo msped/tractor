@@ -161,6 +161,7 @@ def process_document_and_create_redactions(document_id):
     # Run case-decision propagation in its own transaction so a failure here
     # does not roll back the committed redactions above.
     _apply_existing_case_decisions(document)
+    _apply_case_ds_info_to_document(document)
 
     document.status = Document.Status.READY_FOR_REVIEW
     document.save(update_fields=["status"])
@@ -223,6 +224,132 @@ def _apply_existing_case_decisions(document):
                 .first()
             )
             target_qs.reject(top["justification"] if top else "")
+
+
+def _apply_case_ds_info_to_document(document):
+    """
+    After a new document is processed, search its text for any accepted DS_INFO
+    text from other documents in the same case and auto-accept those matches.
+
+    This covers the case where a user has already marked text as DS_INFO in an
+    earlier document — the same text in a newly uploaded document is auto-accepted
+    without needing manual review.
+    """
+    if not document.extracted_text:
+        return
+
+    case = document.case
+
+    ds_info_texts = list(
+        Redaction.objects.filter(
+            document__case=case,
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+        )
+        .exclude(document=document)
+        .values_list("text", flat=True)
+        .distinct()
+    )
+
+    if not ds_info_texts:
+        return
+
+    p = inflect.engine()
+
+    existing_by_position: dict[tuple, list] = {}
+    for r in document.redactions.all():
+        existing_by_position.setdefault((r.start_char, r.end_char), []).append(
+            r
+        )
+
+    redactions_to_create = []
+    redactions_to_update = []
+    ids_to_delete = []
+    seen_positions = set()
+
+    for search_term in ds_info_texts:
+        search_variations = {search_term}
+        plural_form = p.plural(search_term)
+        if plural_form and plural_form != search_term:
+            search_variations.add(plural_form)
+        singular_form = p.singular_noun(search_term)
+        if singular_form and singular_form != search_term:
+            search_variations.add(singular_form)
+
+        sorted_variations = sorted(search_variations, key=len, reverse=True)
+        pattern = (
+            r"\b("
+            + "|".join(re.escape(term) for term in sorted_variations)
+            + r")\b"
+        )
+
+        for match in re.finditer(
+            pattern, document.extracted_text, re.IGNORECASE
+        ):
+            start, end = match.span()
+            pos = (start, end)
+
+            if pos in seen_positions:
+                continue
+            seen_positions.add(pos)
+
+            text = match.group(0)
+            existing = existing_by_position.get(pos, [])
+            ds_info = [
+                r
+                for r in existing
+                if r.redaction_type == Redaction.RedactionType.DS_INFORMATION
+            ]
+            others = [
+                r
+                for r in existing
+                if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
+            ]
+
+            if ds_info:
+                primary = ds_info[0]
+                if not primary.is_accepted:
+                    primary.is_accepted = True
+                    primary.justification = None
+                    redactions_to_update.append(primary)
+                ids_to_delete.extend(r.id for r in ds_info[1:])
+                ids_to_delete.extend(r.id for r in others)
+            elif others:
+                primary = others[0]
+                primary.redaction_type = Redaction.RedactionType.DS_INFORMATION
+                primary.is_suggestion = True
+                primary.is_accepted = True
+                primary.justification = None
+                redactions_to_update.append(primary)
+                ids_to_delete.extend(r.id for r in others[1:])
+            else:
+                redactions_to_create.append(
+                    Redaction(
+                        document=document,
+                        start_char=start,
+                        end_char=end,
+                        text=text,
+                        redaction_type=Redaction.RedactionType.DS_INFORMATION,
+                        is_suggestion=True,
+                        is_accepted=True,
+                    )
+                )
+
+    with transaction.atomic():
+        if ids_to_delete:
+            Redaction.objects.filter(id__in=ids_to_delete).delete()
+        if redactions_to_create:
+            Redaction.objects.bulk_create(redactions_to_create)
+        if redactions_to_update:
+            Redaction.objects.bulk_update(
+                redactions_to_update,
+                [
+                    "redaction_type",
+                    "is_suggestion",
+                    "is_accepted",
+                    "justification",
+                ],
+            )
 
 
 def find_and_flag_matching_text_in_case(redaction_id):
@@ -288,33 +415,57 @@ def find_and_flag_matching_text_in_case(redaction_id):
         if not document.extracted_text:
             continue
 
-        # Load all non-DS_INFO redactions for this document once, keyed by position.
-        existing_by_position = {
-            (r.start_char, r.end_char): r
-            for r in document.redactions.exclude(
-                redaction_type=Redaction.RedactionType.DS_INFORMATION
-            )
-        }
+        # Group all existing redactions by position — a position may have
+        # duplicates (e.g. a THIRD_PARTY and a DS_INFO at the same span).
+        existing_by_position: dict[tuple, list] = {}
+        for r in document.redactions.all():
+            existing_by_position.setdefault(
+                (r.start_char, r.end_char), []
+            ).append(r)
 
         redactions_to_create = []
         redactions_to_update = []
+        ids_to_delete = []
 
         for match in re.finditer(
             pattern, document.extracted_text, re.IGNORECASE
         ):
             start, end = match.span()
             text = match.group(0)
+            pos = (start, end)
 
-            existing_redaction = existing_by_position.get((start, end))
+            existing = existing_by_position.get(pos, [])
+            ds_info = [
+                r
+                for r in existing
+                if r.redaction_type == Redaction.RedactionType.DS_INFORMATION
+            ]
+            others = [
+                r
+                for r in existing
+                if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
+            ]
 
-            if existing_redaction:
-                existing_redaction.redaction_type = (
-                    Redaction.RedactionType.DS_INFORMATION
-                )
-                existing_redaction.is_suggestion = True
-                existing_redaction.is_accepted = False
-                existing_redaction.justification = None
-                redactions_to_update.append(existing_redaction)
+            if ds_info:
+                # Ensure the DS_INFO is accepted; delete any stale other-type
+                # duplicates at the same position.
+                primary = ds_info[0]
+                if not primary.is_accepted:
+                    primary.is_accepted = True
+                    primary.justification = None
+                    redactions_to_update.append(primary)
+                ids_to_delete.extend(r.id for r in ds_info[1:])
+                ids_to_delete.extend(r.id for r in others)
+            elif others:
+                # Upgrade the first non-DS_INFO to DS_INFO+accepted; delete
+                # any remaining duplicates at the same position.
+                primary = others[0]
+                primary.redaction_type = Redaction.RedactionType.DS_INFORMATION
+                primary.is_suggestion = True
+                primary.is_accepted = True
+                primary.justification = None
+                redactions_to_update.append(primary)
+                ids_to_delete.extend(r.id for r in others[1:])
             else:
                 redactions_to_create.append(
                     Redaction(
@@ -324,13 +475,13 @@ def find_and_flag_matching_text_in_case(redaction_id):
                         text=text,
                         redaction_type=Redaction.RedactionType.DS_INFORMATION,
                         is_suggestion=True,
-                        is_accepted=False,
+                        is_accepted=True,
                     )
                 )
 
-        document_modified = bool(redactions_to_create or redactions_to_update)
-
         with transaction.atomic():
+            if ids_to_delete:
+                Redaction.objects.filter(id__in=ids_to_delete).delete()
             if redactions_to_create:
                 Redaction.objects.bulk_create(redactions_to_create)
             if redactions_to_update:
@@ -343,15 +494,6 @@ def find_and_flag_matching_text_in_case(redaction_id):
                         "justification",
                     ],
                 )
-
-            # If we modified this document and it was already completed,
-            # revert its status so it can be reviewed again.
-            if (
-                document_modified
-                and document.status == Document.Status.COMPLETED
-            ):
-                document.status = Document.Status.READY_FOR_REVIEW
-                document.save(update_fields=["status"])
 
 
 def _apply_redactions_to_segment(
