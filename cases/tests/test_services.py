@@ -23,6 +23,7 @@ from ..models import (
     RedactionContext,
 )
 from ..services import (
+    _apply_case_ds_info_to_document,
     _apply_existing_case_decisions,
     _build_document_html,
     _build_export_css,
@@ -312,12 +313,59 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             Redaction.RedactionType.DS_INFORMATION,
         )
         self.assertTrue(existing_redaction.is_suggestion)
-        self.assertFalse(existing_redaction.is_accepted)
+        self.assertTrue(existing_redaction.is_accepted)
         self.assertIsNone(existing_redaction.justification)
 
-        # Check that the document status was reverted for review
+        # Completed documents stay completed — matches are auto-accepted
         doc2.refresh_from_db()
-        self.assertEqual(doc2.status, Document.Status.READY_FOR_REVIEW)
+        self.assertEqual(doc2.status, Document.Status.COMPLETED)
+
+    def test_find_and_flag_removes_duplicate_redaction_at_same_position(self):
+        """When a THIRD_PARTY and a DS_INFO exist at the same position, the
+        THIRD_PARTY duplicate is deleted and the DS_INFO is kept accepted."""
+        doc2_text = "This text contains a name."
+        doc2 = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("doc2b.txt", doc2_text.encode()),
+            extracted_text=doc2_text,
+            status=Document.Status.READY_FOR_REVIEW,
+        )
+        # Simulate the pre-existing duplicate: same position, different types
+        third_party = Redaction.objects.create(
+            document=doc2,
+            start_char=21,
+            end_char=25,
+            text="name",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        ds_info = Redaction.objects.create(
+            document=doc2,
+            start_char=21,
+            end_char=25,
+            text="name",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+        )
+
+        source_redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="name",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+        )
+
+        find_and_flag_matching_text_in_case(source_redaction.id)
+
+        # Only the DS_INFO should remain; the THIRD_PARTY duplicate is deleted
+        self.assertEqual(doc2.redactions.count(), 1)
+        self.assertFalse(Redaction.objects.filter(id=third_party.id).exists())
+        ds_info.refresh_from_db()
+        self.assertEqual(
+            ds_info.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertTrue(ds_info.is_accepted)
 
     def test_build_document_html_contains_redaction_span(self):
         """Accepted redacted text produces a redaction span in both modes."""
@@ -1300,3 +1348,129 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class ApplyCaseDsInfoToDocumentTests(NetworkBlockerMixin, TestCase):
+    """Tests for _apply_case_ds_info_to_document — DS_INFO propagation on upload."""
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="DS01",
+            data_subject_name="Test Subject",
+        )
+        file1 = SimpleUploadedFile("existing.pdf", b"x", "application/pdf")
+        file2 = SimpleUploadedFile("new.pdf", b"y", "application/pdf")
+        self.existing_doc = Document.objects.create(
+            case=self.case,
+            original_file=file1,
+            status=Document.Status.READY_FOR_REVIEW,
+        )
+        self.new_doc = Document.objects.create(
+            case=self.case,
+            original_file=file2,
+            status=Document.Status.READY_FOR_REVIEW,
+            extracted_text="Alice spoke to the officer about the party.",
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _ds_info(self, doc, text, accepted=True):
+        return Redaction.objects.create(
+            document=doc,
+            start_char=0,
+            end_char=len(text),
+            text=text,
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=accepted,
+        )
+
+    def test_creates_accepted_ds_info_for_matching_text(self):
+        self._ds_info(self.existing_doc, "Alice")
+
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        redactions = self.new_doc.redactions.all()
+        self.assertEqual(redactions.count(), 1)
+        r = redactions.first()
+        self.assertEqual(r.text, "Alice")
+        self.assertEqual(
+            r.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertTrue(r.is_accepted)
+
+    def test_upgrades_existing_redaction_at_same_position(self):
+        # A THIRD_PARTY redaction already exists at the position of "Alice"
+        existing = Redaction.objects.create(
+            document=self.new_doc,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=False,
+        )
+        self._ds_info(self.existing_doc, "Alice")
+
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        existing.refresh_from_db()
+        self.assertEqual(
+            existing.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertTrue(existing.is_accepted)
+        self.assertIsNone(existing.justification)
+
+    def test_propagates_plural_and_singular_variants(self):
+        self.new_doc.extracted_text = (
+            "The party discussed with the other parties."
+        )
+        self.new_doc.save(update_fields=["extracted_text"])
+        self._ds_info(self.existing_doc, "party")
+
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        texts = set(self.new_doc.redactions.values_list("text", flat=True))
+        self.assertIn("party", texts)
+        self.assertIn("parties", texts)
+
+    def test_does_not_create_redactions_when_no_case_ds_info(self):
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        self.assertEqual(self.new_doc.redactions.count(), 0)
+
+    def test_ignores_unaccepted_ds_info_from_other_documents(self):
+        self._ds_info(self.existing_doc, "Alice", accepted=False)
+
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        self.assertEqual(self.new_doc.redactions.count(), 0)
+
+    def test_does_nothing_when_document_has_no_extracted_text(self):
+        self.new_doc.extracted_text = None
+        self.new_doc.save(update_fields=["extracted_text"])
+        self._ds_info(self.existing_doc, "Alice")
+
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        self.assertEqual(self.new_doc.redactions.count(), 0)
+
+    def test_does_not_double_create_for_already_accepted_ds_info_position(
+        self,
+    ):
+        """A position already correctly marked DS_INFO and accepted is left alone."""
+        self._ds_info(self.existing_doc, "Alice")
+        already_correct = Redaction.objects.create(
+            document=self.new_doc,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+        )
+
+        _apply_case_ds_info_to_document(self.new_doc)
+
+        self.assertEqual(self.new_doc.redactions.count(), 1)
+        already_correct.refresh_from_db()
+        self.assertTrue(already_correct.is_accepted)
