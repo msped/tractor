@@ -530,8 +530,12 @@ def _apply_redactions_to_segment(
             if is_redaction_start and hasattr(r, "context"):
                 part = f'<span class="redaction disclosure-context">[{html_escape(r.context.text)}]</span>'
             else:
-                block_text = "█" * len(clipped_text)
-                part = f'<span class="redaction">{block_text}</span>'
+                char_count = len(clipped_text)
+                part = (
+                    f'<span class="redaction" style="display: inline-block; '
+                    f'width: {char_count}ch; max-width: 100%; '
+                    f'height: 1.1em; vertical-align: middle;"></span>'
+                )
         else:
             part = f'<span class="redaction type-{r.redaction_type}">{html_escape(clipped_text)}</span>'
             if is_redaction_start and hasattr(r, "context"):
