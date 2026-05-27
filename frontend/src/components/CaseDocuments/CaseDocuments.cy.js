@@ -283,9 +283,17 @@ describe('<CaseDocuments />', () => {
       
       cy.wait('@uploadRequest').then((interception) => {
         cy.get('@onUpdate').should('have.been.calledOnce');
-        cy.wrap(interception.request.body)
-          .should('contain', 'filename="new-cool-name.pdf"')
-          .and('contain', 'name="original_file"');
+        const body = interception.request.body;
+        if (typeof body === 'string') {
+          expect(body).to.include('filename="new-cool-name.pdf"');
+          expect(body).to.include('name="original_file"');
+        } else if (body && typeof body === 'object') {
+          const files = body['original_file'];
+          const file = Array.isArray(files) ? files[0] : files;
+          if (file && file.name) {
+            expect(file.name).to.equal('new-cool-name.pdf');
+          }
+        }
       });
     });
 

@@ -39,9 +39,7 @@ export const cancelProcessing = async (docId) => {
 
 export const uploadDocuments = async (caseId, formData) => {
     try {
-        const response = await apiClient.post(`/cases/${caseId}/documents`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const response = await apiClient.post(`/cases/${caseId}/documents`, formData);
         return response.data;
     } catch (error) {
         throwApiError(error, 'Failed to upload document(s). Please try again.');
