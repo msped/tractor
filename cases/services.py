@@ -533,7 +533,7 @@ def _apply_redactions_to_segment(
                 char_count = len(clipped_text)
                 part = (
                     f'<span class="redaction" style="display: inline-block; '
-                    f'width: {char_count}ch; max-width: 100%; '
+                    f"width: {char_count}ch; max-width: 100%; "
                     f'height: 1.1em; vertical-align: middle;"></span>'
                 )
         else:
