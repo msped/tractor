@@ -98,6 +98,9 @@ function djangoCredentialsPlugin() {
                             email
                         );
                     let user;
+                    const isAdmin =
+                        (djangoData.user?.is_staff || djangoData.user?.is_superuser) ?? false;
+
                     if (existing?.user) {
                         user =
                             (await ctx.context.internalAdapter.updateUser(
@@ -105,6 +108,7 @@ function djangoCredentialsPlugin() {
                                 {
                                     djangoAccessToken: djangoData.access,
                                     djangoRefreshToken: djangoData.refresh,
+                                    isAdmin,
                                 }
                             )) || existing.user;
                     } else {
@@ -114,6 +118,7 @@ function djangoCredentialsPlugin() {
                             emailVerified: true,
                             djangoAccessToken: djangoData.access,
                             djangoRefreshToken: djangoData.refresh,
+                            isAdmin,
                         });
                     }
 
@@ -246,6 +251,10 @@ function buildMicrosoftProvider() {
                         emailVerified: true,
                         djangoAccessToken: djangoData.access,
                         djangoRefreshToken: djangoData.refresh,
+                        isAdmin:
+                            (djangoData.user?.is_staff ||
+                                djangoData.user?.is_superuser) ??
+                            false,
                     };
                 },
             },
@@ -285,14 +294,24 @@ export const auth = betterAuth({
                 required: false,
                 returned: false,
             },
+            isAdmin: {
+                type: "boolean",
+                required: false,
+                returned: true,
+                defaultValue: false,
+            },
         },
     },
     plugins: [
         djangoCredentialsPlugin(),
         customSession(async ({ user, session }) => {
-            const { djangoAccessToken, djangoRefreshToken, ...safeUser } = user;
+            const { djangoAccessToken, djangoRefreshToken, isAdmin, ...safeUser } = user;
             return {
-                user: { ...safeUser, access_token: djangoAccessToken },
+                user: {
+                    ...safeUser,
+                    access_token: djangoAccessToken,
+                    is_admin: isAdmin ?? false,
+                },
                 session,
             };
         }),

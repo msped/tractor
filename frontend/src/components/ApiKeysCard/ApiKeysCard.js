@@ -259,6 +259,14 @@ export const ApiKeysCard = () => {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                         Allow external services to create cases via the REST API.
                     </Typography>
+                    {process.env.NEXT_PUBLIC_API_HOST && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Endpoint:{' '}
+                            <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                                {process.env.NEXT_PUBLIC_API_HOST}/api/
+                            </Box>
+                        </Typography>
+                    )}
                     {keys && (
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                             {keyCount} active {keyCount === 1 ? 'key' : 'keys'}

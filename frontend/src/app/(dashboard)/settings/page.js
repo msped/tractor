@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {
+    CircularProgress,
     Container,
     Grid,
 } from '@mui/material';
@@ -13,8 +14,16 @@ import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
 
 export default function SettingsPage() {
-    const { session } = useSession();
-    const isAdmin = session?.user?.is_staff === true || session?.user?.is_superuser === true;
+    const { session, isPending } = useSession();
+    const isAdmin = session?.user?.is_admin === true;
+
+    if (isPending) {
+        return (
+            <Container sx={{ display: 'flex', justifyContent: 'center', mt: 5 }}>
+                <CircularProgress />
+            </Container>
+        );
+    }
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4 }}>
