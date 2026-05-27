@@ -1025,7 +1025,7 @@ class RenderTableWithRedactionsTests(NetworkBlockerMixin, TestCase):
         result = _render_table_with_redactions(
             table_data, full_text, [redaction], "disclosure"
         )
-        self.assertIn("█", result)
+        self.assertIn('class="redaction"', result)
         self.assertNotIn("Secret", result)
 
     def test_merged_continuation_cell_skipped(self):
