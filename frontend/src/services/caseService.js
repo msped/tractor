@@ -72,3 +72,21 @@ export const createCaseExport = async (caseId) => {
         throwApiError(error, 'Failed to create export. Please try again.');
     }
 };
+
+export const getRetentionSettings = async () => {
+    try {
+        const response = await apiClient.get('/cases/settings/retention');
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to retrieve retention settings.');
+    }
+};
+
+export const bulkDeleteCases = async (ids) => {
+    try {
+        const response = await apiClient.post('/cases/settings/retention/bulk-delete', { ids });
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to delete cases.');
+    }
+};

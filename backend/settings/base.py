@@ -203,6 +203,11 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 DELETE_ORIGINAL_FILES = False
 DELETE_ORIGINAL_FILES_AFTER_DAYS = 30
 
+AUTO_CASE_DELETION_ENABLED = os.environ.get(
+    "AUTO_CASE_DELETION_ENABLED", "true"
+).lower() in ("true", "1", "yes")
+RETENTION_WARNING_DAYS = int(os.environ.get("RETENTION_WARNING_DAYS", 30))
+
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED", "False").lower() in (
@@ -213,6 +218,13 @@ OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED", "False").lower() in (
 OLLAMA_CHUNK_SIZE = int(os.environ.get("OLLAMA_CHUNK_SIZE", 4000))
 OLLAMA_CHUNK_OVERLAP = int(os.environ.get("OLLAMA_CHUNK_OVERLAP", 200))
 
+_retention_schedule = {}
+if AUTO_CASE_DELETION_ENABLED:
+    _retention_schedule["delete_old_cases_daily"] = {
+        "func": "cases.tasks.delete_cases_past_retention_date",
+        "schedule_type": "D",
+    }
+
 Q_CLUSTER = {
     "name": "DjangORM",
     "workers": 4,
@@ -222,10 +234,7 @@ Q_CLUSTER = {
     "bulk": 10,
     "orm": "default",
     "schedule": {
-        "delete_old_cases_daily": {
-            "func": "cases.tasks.delete_cases_past_retention_date",
-            "schedule_type": "D",
-        },
+        **_retention_schedule,
         "delete_original_files_daily": {
             "func": "cases.tasks.delete_original_files_past_threshold",
             "schedule_type": "D",

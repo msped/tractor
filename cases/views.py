@@ -1,6 +1,10 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_q.models import OrmQ
 from rest_framework import status
 from rest_framework.generics import (
@@ -22,6 +26,7 @@ from .models import (
 )
 from .serializers import (
     BulkByTextSerializer,
+    BulkCaseDeleteSerializer,
     CaseDetailSerializer,
     CaseSerializer,
     DocumentExportSettingsSerializer,
@@ -402,3 +407,57 @@ class BulkByTextRedactionView(APIView):
                 count = pending_qs.reject(data.get("rejection_reason", ""))
 
         return Response({"updated": count}, status=status.HTTP_200_OK)
+
+
+class RetentionSettingsView(APIView):
+    """
+    GET /api/cases/settings/retention
+    Returns retention configuration and two lists of cases:
+    - past: retention_review_date < today
+    - upcoming: retention_review_date within RETENTION_WARNING_DAYS days
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        today = timezone.now().date()
+        warning_days = getattr(settings, "RETENTION_WARNING_DAYS", 30)
+        cutoff = today + timedelta(days=warning_days)
+
+        past_qs = Case.objects.filter(retention_review_date__lt=today)
+        upcoming_qs = Case.objects.filter(
+            retention_review_date__gte=today,
+            retention_review_date__lte=cutoff,
+        )
+
+        return Response(
+            {
+                "auto_case_deletion_enabled": getattr(
+                    settings, "AUTO_CASE_DELETION_ENABLED", True
+                ),
+                "retention_warning_days": warning_days,
+                "past": CaseSerializer(past_qs, many=True).data,
+                "upcoming": CaseSerializer(upcoming_qs, many=True).data,
+            }
+        )
+
+
+class BulkCaseDeleteView(APIView):
+    """
+    POST /api/cases/retention/bulk-delete
+    Deletes a list of cases by ID. Admin only.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        serializer = BulkCaseDeleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data["ids"]
+
+        cases = Case.objects.filter(id__in=ids)
+        count = cases.count()
+        for case in cases.iterator():
+            case.delete()
+
+        return Response({"deleted": count}, status=status.HTTP_200_OK)

@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     BulkByTextRedactionView,
+    BulkCaseDeleteView,
     BulkRedactionUpdateView,
     CaseDetailView,
     CaseExportView,
@@ -17,6 +18,7 @@ from .views import (
     RedactionContextView,
     RedactionDetailView,
     RedactionListCreateView,
+    RetentionSettingsView,
 )
 
 urlpatterns = [
@@ -24,6 +26,16 @@ urlpatterns = [
         "cases/settings/export",
         DocumentExportSettingsView.as_view(),
         name="export-settings",
+    ),
+    path(
+        "cases/settings/retention",
+        RetentionSettingsView.as_view(),
+        name="retention-settings",
+    ),
+    path(
+        "cases/settings/retention/bulk-delete",
+        BulkCaseDeleteView.as_view(),
+        name="bulk-case-delete",
     ),
     path(
         "cases/exemptions",

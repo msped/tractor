@@ -215,6 +215,13 @@ class DocumentExportSettingsSerializer(serializers.ModelSerializer):
         ]
 
 
+class BulkCaseDeleteSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        min_length=1,
+    )
+
+
 class DocumentReviewSerializer(serializers.ModelSerializer):
     redactions = RedactionSerializer(many=True, read_only=True)
 

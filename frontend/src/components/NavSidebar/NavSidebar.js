@@ -15,6 +15,7 @@ import {
     Tooltip,
     Avatar,
 } from '@mui/material';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
 import FolderIcon from '@mui/icons-material/Folder';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -53,10 +54,13 @@ export function NavSidebar() {
         return name[0].toUpperCase();
     };
 
+    const isAdmin = session?.user?.is_admin === true;
+
     // Base nav items
     const allNavItems = [
         { label: 'Cases', href: '/cases', icon: <FolderIcon /> },
         { label: 'Model Management', href: '/model-management', icon: <PsychologyIcon /> },
+        { label: 'Retention Review', href: '/retention', icon: <EventBusyIcon />, showWhen: isAdmin },
     ];
 
     // Filter nav items based on visibility conditions
