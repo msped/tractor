@@ -1,33 +1,25 @@
 "use client"
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import NextLink from 'next/link';
 import Link from '@mui/material/Link';
 import Button from '@mui/material/Button';
-import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
+import IconButton from '@mui/material/IconButton';
 import CancelIcon from '@mui/icons-material/Cancel';
 import SearchIcon from '@mui/icons-material/Search';
-import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
-import {
-    DataGrid,
-    Toolbar,
-    ToolbarButton,
-    QuickFilter,
-    QuickFilterControl,
-    QuickFilterClear,
-    QuickFilterTrigger,
-    useGridApiContext,
-    useGridSelector,
-    gridFilterModelSelector,
-} from '@mui/x-data-grid';
+import Typography from '@mui/material/Typography';
+import { DataGrid, Toolbar } from '@mui/x-data-grid';
 import { Box } from '@mui/system';
+import { getCases } from '@/services/caseService';
 
-const openInProgressValues = ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW'];
-const completedClosedValues = ['COMPLETED', 'CLOSED'];
-const withdrawnValues = ['WITHDRAWN'];
+const OPEN_IN_PROGRESS = ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW'];
+const COMPLETED_CLOSED = ['COMPLETED', 'CLOSED'];
+const WITHDRAWN = ['WITHDRAWN'];
+const MIN_SEARCH_LENGTH = 3;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const getStatusChipColor = (status) => {
     switch (status) {
@@ -78,146 +70,144 @@ const columns = [
     },
 ];
 
-const StyledQuickFilter = styled(QuickFilter)({
-    display: 'grid',
-    alignItems: 'center',
-    marginLeft: 'auto',
-});
-
-const StyledToolbarButton = styled(ToolbarButton)(({ theme, ownerState }) => ({
-    gridArea: '1 / 1',
-    width: 'min-content',
-    height: 'min-content',
-    zIndex: 1,
-    opacity: ownerState.expanded ? 0 : 1,
-    pointerEvents: ownerState.expanded ? 'none' : 'auto',
-    transition: theme.transitions.create(['opacity']),
-}));
-
-const StyledTextField = styled(TextField)(({ theme, ownerState }) => ({
-    gridArea: '1 / 1',
-    overflowX: 'clip',
-    width: ownerState.expanded ? 260 : 'var(--trigger-width)',
-    opacity: ownerState.expanded ? 1 : 0,
-    transition: theme.transitions.create(['width', 'opacity']),
-}));
-
-function CustomToolbar() {
-    const apiRef = useGridApiContext();
-    const filterModel = useGridSelector(apiRef, gridFilterModelSelector);
-
-    const statusFilter = filterModel.items.find((item) => item.field === 'status');
-    const activeFilterValues = statusFilter?.value || [];
-
-    const isFilterActive = (values) => JSON.stringify(activeFilterValues.sort()) === JSON.stringify(values.sort());
-
-    const handleFilterChange = (values) => {
-        const otherFilters = filterModel.items.filter(
-            (item) => item.field !== 'status',
-        );
-
-        const newFilterItems = [...otherFilters];
-
-        if (values && values.length > 0) {
-            newFilterItems.push({ field: 'status', operator: 'isAnyOf', value: values });
-        }
-
-        apiRef.current.setFilterModel({ items: newFilterItems });
-    }
+function CustomToolbar({ statusFilter, onStatusChange, search, onSearchChange }) {
+    const isFilterActive = (values) =>
+        JSON.stringify([...statusFilter].sort()) === JSON.stringify([...values].sort());
 
     return (
         <Toolbar>
-            <Button size="small" onClick={() => handleFilterChange([])} variant={activeFilterValues.length === 0 ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => onStatusChange([])} variant={statusFilter.length === 0 ? 'contained' : 'text'}>
                 All
             </Button>
-            <Button size="small" onClick={() => handleFilterChange(openInProgressValues)} variant={isFilterActive(openInProgressValues) ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => onStatusChange(OPEN_IN_PROGRESS)} variant={isFilterActive(OPEN_IN_PROGRESS) ? 'contained' : 'text'}>
                 Open / In Progress
             </Button>
-            <Button size="small" onClick={() => handleFilterChange(completedClosedValues)} variant={isFilterActive(completedClosedValues) ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => onStatusChange(COMPLETED_CLOSED)} variant={isFilterActive(COMPLETED_CLOSED) ? 'contained' : 'text'}>
                 Completed / Closed
             </Button>
-            <Button size="small" onClick={() => handleFilterChange(withdrawnValues)} variant={isFilterActive(withdrawnValues) ? 'contained' : 'text'}>
+            <Button size="small" onClick={() => onStatusChange(WITHDRAWN)} variant={isFilterActive(WITHDRAWN) ? 'contained' : 'text'}>
                 Withdrawn
             </Button>
             <Box sx={{ flexGrow: 1 }} />
-            <StyledQuickFilter defaultExpanded>
-                <QuickFilterTrigger
-                    render={(triggerProps, state) => (
-                        <Tooltip title="Search" enterDelay={0}>
-                            <StyledToolbarButton
-                                {...triggerProps}
-                                ownerState={{ expanded: state.expanded }}
-                                color="default"
-                                aria-disabled={state.expanded}
-                            >
+            <TextField
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search..."
+                size="small"
+                inputProps={{ 'aria-label': 'Search' }}
+                slotProps={{
+                    input: {
+                        startAdornment: (
+                            <InputAdornment position="start">
                                 <SearchIcon fontSize="small" />
-                            </StyledToolbarButton>
-                        </Tooltip>
-                    )}
-                />
-                <QuickFilterControl
-                    render={({ ref, ...controlProps }, state) => (
-                        <StyledTextField
-                            {...controlProps}
-                            ownerState={{ expanded: state.expanded }}
-                            inputRef={ref}
-                            aria-label="Search"
-                            placeholder="Search..."
-                            size="small"
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <SearchIcon fontSize="small" />
-                                        </InputAdornment>
-                                    ),
-                                    endAdornment: state.value ? (
-                                        <InputAdornment position="end">
-                                            <QuickFilterClear
-                                                edge="end"
-                                                size="small"
-                                                aria-label="Clear search"
-                                                material={{ sx: { marginRight: -0.75 } }}
-                                            >
-                                                <CancelIcon fontSize="small" />
-                                            </QuickFilterClear>
-                                        </InputAdornment>
-                                    ) : null,
-                                ...controlProps.slotProps?.input,
-                                },
-                                ...controlProps.slotProps,
-                            }}
-                        />
-                    )}
-                />
-            </StyledQuickFilter>
+                            </InputAdornment>
+                        ),
+                        endAdornment: search ? (
+                            <InputAdornment position="end">
+                                <IconButton
+                                    edge="end"
+                                    size="small"
+                                    aria-label="Clear search"
+                                    onClick={() => onSearchChange('')}
+                                    sx={{ marginRight: -0.75 }}
+                                >
+                                    <CancelIcon fontSize="small" />
+                                </IconButton>
+                            </InputAdornment>
+                        ) : null,
+                    },
+                }}
+                sx={{ width: 260 }}
+            />
         </Toolbar>
     );
 }
 
-export const DataTable = ({ rows }) => {
-    return <DataGrid
-        rows={rows}
-        columns={columns}
-        pageSize={10}
-        rowsPerPageOptions={[10, 20, 50]}
-        disableSelectionOnClick
-        getRowId={(row) => row.id}
-        slots={{ toolbar: CustomToolbar }}
-        showToolbar
-        initialState={{
-            filter: {
-                filterModel: {
-                    items: [
-                        {
-                            field: 'status',
-                            operator: 'isAnyOf',
-                            value: openInProgressValues,
-                        },
-                    ],
+export const DataTable = () => {
+    const [rows, setRows] = useState([]);
+    const [rowCount, setRowCount] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
+    const [statusFilter, setStatusFilter] = useState(OPEN_IN_PROGRESS);
+    const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    useEffect(() => {
+        if (search.length > 0 && search.length < MIN_SEARCH_LENGTH) return;
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+            setPaginationModel((prev) => ({ ...prev, page: 0 }));
+        }, SEARCH_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [search]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchCases = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const params = {
+                    page: paginationModel.page + 1,
+                    page_size: paginationModel.pageSize,
+                };
+                if (debouncedSearch) params.search = debouncedSearch;
+                if (statusFilter.length > 0) params.status = statusFilter.join(',');
+
+                const data = await getCases(params);
+                if (!cancelled) {
+                    setRows(data.results);
+                    setRowCount(data.count);
+                }
+            } catch {
+                if (!cancelled) setError('Failed to load cases. Please try again.');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        fetchCases();
+        return () => { cancelled = true; };
+    }, [paginationModel, debouncedSearch, statusFilter]);
+
+    const handleStatusChange = (values) => {
+        setStatusFilter(values);
+        setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    };
+
+    const handleSearchChange = (value) => {
+        setSearch(value);
+    };
+
+    if (error) {
+        return <Typography color="error">{error}</Typography>;
+    }
+
+    return (
+        <DataGrid
+            rows={rows}
+            columns={columns}
+            rowCount={rowCount}
+            loading={loading}
+            paginationMode="server"
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 25, 50]}
+            disableSelectionOnClick
+            getRowId={(row) => row.id}
+            slots={{ toolbar: CustomToolbar }}
+            slotProps={{
+                toolbar: {
+                    statusFilter,
+                    onStatusChange: handleStatusChange,
+                    search,
+                    onSearchChange: handleSearchChange,
                 },
-            },
-        }}
-        sx={{ height: '100%', width: '100%' }}
-    />;
-}
+            }}
+            showToolbar
+            sx={{ height: '100%', width: '100%' }}
+        />
+    );
+};
