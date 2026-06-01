@@ -16,7 +16,7 @@ import { RetentionSettingsCard } from '@/components/RetentionSettingsCard';
 
 export default function SettingsPage() {
     const { session, isPending } = useSession();
-    const isAdmin = session?.user?.is_admin === true;
+    const isAdmin = session?.user?.isAdmin === true;
 
     if (isPending) {
         return (

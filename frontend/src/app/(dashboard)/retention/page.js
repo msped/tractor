@@ -17,7 +17,7 @@ import toast from 'react-hot-toast';
 
 export default function RetentionPage() {
     const { session, isPending } = useSession();
-    const isAdmin = session?.user?.is_admin === true;
+    const isAdmin = session?.user?.isAdmin === true;
 
     const { data, isLoading, error, mutate } = useSWR(
         isAdmin ? ['retention-settings'] : null,

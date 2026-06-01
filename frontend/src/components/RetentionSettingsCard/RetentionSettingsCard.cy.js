@@ -2,7 +2,7 @@ import React from 'react';
 import { SWRConfig } from 'swr';
 import { RetentionSettingsCard } from './RetentionSettingsCard';
 
-const mountOpts = { mockSession: { user: { id: '1', name: 'Admin', email: 'admin@example.com', is_admin: true }, session: { token: 'fake-token', userId: '1' } } };
+const mountOpts = { mockSession: { user: { id: '1', name: 'Admin', email: 'admin@example.com', isAdmin: true }, session: { token: 'fake-token', userId: '1' } } };
 
 const TestWrapper = ({ children }) => (
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>

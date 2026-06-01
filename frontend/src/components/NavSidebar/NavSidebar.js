@@ -54,7 +54,7 @@ export function NavSidebar() {
         return name[0].toUpperCase();
     };
 
-    const isAdmin = session?.user?.is_admin === true;
+    const isAdmin = session?.user?.isAdmin === true;
 
     // Base nav items
     const allNavItems = [

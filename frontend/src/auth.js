@@ -305,12 +305,11 @@ export const auth = betterAuth({
     plugins: [
         djangoCredentialsPlugin(),
         customSession(async ({ user, session }) => {
-            const { djangoAccessToken, djangoRefreshToken, isAdmin, ...safeUser } = user;
+            const { djangoAccessToken, djangoRefreshToken, ...safeUser } = user;
             return {
                 user: {
                     ...safeUser,
                     access_token: djangoAccessToken,
-                    is_admin: isAdmin ?? false,
                 },
                 session,
             };
