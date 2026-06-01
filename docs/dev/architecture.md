@@ -120,8 +120,8 @@ Tractor supports two authentication methods, both enforced at the DRF layer.
 ### JWT (Interactive Users)
 
 1. The Next.js frontend authenticates via **better-auth** using either username/password credentials or **Microsoft Entra ID** OAuth2.
-2. On login, better-auth calls `POST /api/auth/login` (or `POST /api/auth/microsoft`) and stores the Django-issued JWT access token in the session and the refresh token in an `httpOnly` `django_rt` cookie. The session is cached as a signed JWE cookie — no database round-trip is needed to verify the session on subsequent requests.
-3. `SessionContext` syncs the access token from the better-auth session into the Axios client via `setClientToken`. All frontend API calls include `Authorization: Bearer <access_token>`.
+2. On login, better-auth calls `POST /api/auth/login` (or `POST /api/auth/microsoft`) and stores the Django-issued JWT access token and the user's `isAdmin` flag in the session. The refresh token is stored in an `httpOnly` `django_rt` cookie. The session (including `isAdmin`) is cached as a signed JWE cookie — no database round-trip is needed to verify the session on subsequent requests. After a successful credential login, `authClient.$store.notify("$sessionSignal")` is called explicitly to trigger `useSession()` to re-fetch, since better-auth's built-in `atomListeners` only cover its own sign-in endpoints.
+3. `SessionContext` syncs the access token from the better-auth session into the Axios client via `setClientToken`. All frontend API calls include `Authorization: Bearer <access_token>`. The `isAdmin` field is read directly from `session.user.isAdmin` (camelCase) — this matches the field name in both the cookie cache and the database, avoiding a stale-cache mismatch.
 4. The access token is valid for 60 minutes. On a `401` response, `apiClient.js` calls `POST /api/auth/refresh-django-token`, which reads the `django_rt` cookie and exchanges it with Django via `POST /api/auth/token/refresh`. The new token is cached and the original request is retried automatically.
 5. DRF authenticates the request via `rest_framework_simplejwt.authentication.JWTAuthentication`.
 
