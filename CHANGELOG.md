@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Document.start_processing()` method to transition a document into processing state and dispatch the async task
 
+### Fixed
+
+- Admin-only UI elements (Retention Review nav item, API Keys, LLM Prompt Settings, and Retention Settings cards) not appearing until a hard page refresh after logging in. Root causes: (1) the `customSession` plugin renamed `isAdmin` → `is_admin`, causing a mismatch with the raw field name stored in better-auth's JWE cookie cache; (2) better-auth's `atomListeners` does not include the custom `/sign-in/username` endpoint, so `useSession()` was never notified to re-fetch after login. Fixed by keeping the field as `isAdmin` throughout and explicitly calling `authClient.$store.notify("$sessionSignal")` after a successful login.
+
 ### Changed
 
 - `training/services.py` split into `training/extraction.py` (document structure extraction and `DocumentStructure` dataclass) and `training/pipeline.py` (`ExtractionPipeline` and `build_default_pipeline`)

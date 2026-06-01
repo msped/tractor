@@ -17,14 +17,12 @@ export const LoginComponent = ({ sessionError, socialProviders = [] }) => {
         e.preventDefault();
         setError("");
         setLoading(true);
-        const result = await authClient.$fetch("/sign-in/username", {
-            method: "POST",
-            body: { username, password },
-        });
+        const result = await authClient.signIn.username({ username, password });
         if (result.error) {
             setError("Login failed. Please check your credentials.");
             setLoading(false);
         } else {
+            authClient.$store.notify("$sessionSignal");
             router.push("/cases");
         }
     };

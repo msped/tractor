@@ -12,10 +12,11 @@ import { CustomRecognizersCard } from '@/components/CustomRecognizersCard';
 import { DocumentExportSettingsCard } from '@/components/DocumentExportSettingsCard';
 import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
+import { RetentionSettingsCard } from '@/components/RetentionSettingsCard';
 
 export default function SettingsPage() {
     const { session, isPending } = useSession();
-    const isAdmin = session?.user?.is_admin === true;
+    const isAdmin = session?.user?.isAdmin === true;
 
     if (isPending) {
         return (
@@ -45,6 +46,11 @@ export default function SettingsPage() {
                 {isAdmin && (
                     <Grid size={{xs: 12, md: 6}}>
                         <LLMPromptSettingsCard />
+                    </Grid>
+                )}
+                {isAdmin && (
+                    <Grid size={{xs: 12, md: 6}}>
+                        <RetentionSettingsCard />
                     </Grid>
                 )}
             </Grid>

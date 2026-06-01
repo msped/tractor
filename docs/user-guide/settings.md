@@ -146,6 +146,51 @@ For one-off reasons that do not fit an existing template, reviewers can still cl
 
 ---
 
+## Retention Review
+
+!!! note
+    This section is only visible and accessible to administrators.
+
+Tractor automatically calculates a retention date for every case based on the data subject's age and the configured retention period (`CASE_RETENTION_YEARS`). The Retention Review page and the Auto Case Deletion card let administrators manage what happens when cases approach or pass that date.
+
+### Auto Case Deletion (Settings card)
+
+Navigate to **Settings** and find the **Auto Case Deletion** card. It shows whether automatic daily deletion of overdue cases is currently active:
+
+| Status | Meaning |
+|--------|---------|
+| **Enabled** | Cases past their retention date are deleted automatically each day by a scheduled background task. |
+| **Disabled** | No automatic deletion occurs. Administrators must review and delete overdue cases manually via the Retention Review page. |
+
+This setting is read-only in the UI — it reflects the value of the `AUTO_CASE_DELETION_ENABLED` environment variable. To change it you must update your deployment configuration and restart the worker.
+
+### Retention Review page
+
+Navigate to **Retention Review** in the sidebar (administrators only). The page lists:
+
+- **Overdue cases** — cases whose retention date has already passed.
+- **Upcoming cases** — cases whose retention date falls within the next `RETENTION_WARNING_DAYS` days (default: 30).
+
+Both lists are combined and sorted by retention date, earliest first.
+
+#### Reviewing cases
+
+Each row shows the case reference, data subject name and date of birth, retention date, creation date, and case outcome. Use the column chooser (grid icon, top-left) to hide columns you do not need.
+
+Click the **open in new tab** icon on any row to review the case before deciding whether to delete it.
+
+#### Deleting cases
+
+- **Delete one** — click the delete icon on a row and confirm the prompt.
+- **Delete selected** — check one or more rows (or use the header checkbox to select all), then click **Delete selected (N)** and confirm.
+
+!!! warning
+    Case deletion is permanent and cannot be undone. All documents, redactions, and exports associated with the case are removed. Verify the case before deleting.
+
+If auto deletion is disabled, the page description notes that cases must be deleted manually — no automatic cleanup will occur until the feature is re-enabled.
+
+---
+
 ## API Keys
 
 !!! note

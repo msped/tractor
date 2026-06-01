@@ -4,7 +4,7 @@ import shutil
 import tempfile
 import uuid
 import zipfile
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -1100,3 +1100,147 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@override_settings(
+    MEDIA_ROOT=MEDIA_ROOT,
+    AUTO_CASE_DELETION_ENABLED=False,
+    RETENTION_WARNING_DAYS=30,
+)
+class RetentionViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_superuser(
+            username="retentionadmin", password="password"
+        )
+        self.user = User.objects.create_user(
+            username="retentionuser", password="password"
+        )
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(user=self.admin)
+        self.client.force_authenticate(user=self.user)
+
+        today = date.today()
+        self.past_case = Case.objects.create(
+            case_reference="RET001",
+            data_subject_name="Past Subject",
+            created_by=self.admin,
+            retention_review_date=today - timedelta(days=1),
+        )
+        self.upcoming_case = Case.objects.create(
+            case_reference="RET002",
+            data_subject_name="Upcoming Subject",
+            created_by=self.admin,
+            retention_review_date=today + timedelta(days=15),
+        )
+        self.future_case = Case.objects.create(
+            case_reference="RET003",
+            data_subject_name="Future Subject",
+            created_by=self.admin,
+            retention_review_date=today + timedelta(days=365),
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def test_get_returns_expected_structure(self):
+        url = reverse("retention-settings")
+        response = self.admin_client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("auto_case_deletion_enabled", response.data)
+        self.assertIn("retention_warning_days", response.data)
+        self.assertIn("past", response.data)
+        self.assertIn("upcoming", response.data)
+
+    def test_past_cases_appear_in_past_list(self):
+        url = reverse("retention-settings")
+        response = self.admin_client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        refs = [c["case_reference"] for c in response.data["past"]]
+        self.assertIn("RET001", refs)
+        self.assertNotIn("RET002", refs)
+        self.assertNotIn("RET003", refs)
+
+    def test_upcoming_cases_appear_in_upcoming_list(self):
+        url = reverse("retention-settings")
+        response = self.admin_client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        refs = [c["case_reference"] for c in response.data["upcoming"]]
+        self.assertIn("RET002", refs)
+        self.assertNotIn("RET001", refs)
+        self.assertNotIn("RET003", refs)
+
+    def test_far_future_cases_not_in_either_list(self):
+        url = reverse("retention-settings")
+        response = self.admin_client.get(url)
+
+        all_refs = [c["case_reference"] for c in response.data["past"]] + [
+            c["case_reference"] for c in response.data["upcoming"]
+        ]
+        self.assertNotIn("RET003", all_refs)
+
+    def test_non_admin_gets_403(self):
+        url = reverse("retention-settings")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_gets_401(self):
+        unauthenticated = APIClient()
+        url = reverse("retention-settings")
+        response = unauthenticated.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_bulk_delete_removes_cases(self):
+        url = reverse("bulk-case-delete")
+        response = self.admin_client.post(
+            url,
+            {"ids": [str(self.past_case.id)]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["deleted"], 1)
+        self.assertFalse(Case.objects.filter(id=self.past_case.id).exists())
+
+    def test_bulk_delete_multiple_cases(self):
+        url = reverse("bulk-case-delete")
+        response = self.admin_client.post(
+            url,
+            {"ids": [str(self.past_case.id), str(self.upcoming_case.id)]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["deleted"], 2)
+
+    def test_bulk_delete_ignores_nonexistent_ids(self):
+        url = reverse("bulk-case-delete")
+        response = self.admin_client.post(
+            url,
+            {"ids": [str(uuid.uuid4())]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["deleted"], 0)
+
+    def test_bulk_delete_empty_ids_returns_400(self):
+        url = reverse("bulk-case-delete")
+        response = self.admin_client.post(
+            url,
+            {"ids": []},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_bulk_delete_non_admin_gets_403(self):
+        url = reverse("bulk-case-delete")
+        response = self.client.post(
+            url,
+            {"ids": [str(self.past_case.id)]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

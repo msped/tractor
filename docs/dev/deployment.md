@@ -270,6 +270,30 @@ The Gemma model is pulled and stored inside the `ollama_volume` volume (see the 
 
 ---
 
+## Case Retention
+
+Tractor calculates a retention date for every case when it is created. For adult data subjects the date is `created_at + CASE_RETENTION_YEARS` years. For minors it is the data subject's 18th birthday plus `CASE_RETENTION_YEARS` years.
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CASE_RETENTION_YEARS` | `6` | Number of years to retain cases before they become eligible for deletion. |
+| `AUTO_CASE_DELETION_ENABLED` | `true` | When `true`, a scheduled daily task (`delete_cases_past_retention_date`) automatically deletes cases whose retention date has passed. Set to `false` to require manual deletion via the Retention Review page. |
+| `RETENTION_WARNING_DAYS` | `30` | Number of days before the retention date at which a case appears on the Retention Review page as "upcoming". |
+
+### Automatic deletion
+
+When `AUTO_CASE_DELETION_ENABLED=true`, the `delete_cases_past_retention_date` task runs once per day via the `worker` service. It deletes all cases where `retention_review_date < today`. The current status of this setting is visible to administrators on the **Settings** page under the **Auto Case Deletion** card.
+
+> **Note:** Automatic deletion is permanent. Ensure your `CASE_RETENTION_YEARS` value meets your organisation's data retention obligations before enabling.
+
+### Manual review
+
+When automatic deletion is disabled, administrators must periodically visit the **Retention Review** page to inspect and manually delete overdue and upcoming cases. See the [user guide](../user-guide/settings.md#retention-review) for details.
+
+---
+
 ## Original File Auto-Deletion
 
 Tractor can automatically clear original uploaded files after a case reaches a terminal state (Completed, Closed, Withdrawn, Under Review, or Error) and has not been updated for a configurable number of days. This reduces storage usage over time while leaving redaction review and exports fully functional — all extracted text is stored in the database.
