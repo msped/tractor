@@ -122,13 +122,72 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_list_cases(self):
-        """Test listing all cases."""
+        """Test listing cases returns paginated response."""
         url = reverse("case-list-create")
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["case_reference"], "250001")
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(
+            response.data["results"][0]["case_reference"], "250001"
+        )
+
+    def test_list_cases_search_by_reference(self):
+        url = reverse("case-list-create")
+        response = self.client.get(url, {"search": "250001"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_list_cases_search_no_match(self):
+        url = reverse("case-list-create")
+        response = self.client.get(url, {"search": "XXXXXX"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_list_cases_status_filter(self):
+        url = reverse("case-list-create")
+        response = self.client.get(url, {"status": "OPEN"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+
+    def test_list_cases_status_filter_no_match(self):
+        url = reverse("case-list-create")
+        response = self.client.get(url, {"status": "COMPLETED"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_list_cases_ordered_newest_first(self):
+        Case.objects.create(
+            case_reference="250002",
+            data_subject_name="Second Case",
+            created_by=self.user,
+        )
+        url = reverse("case-list-create")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["results"][0]["case_reference"], "250002"
+        )
+
+    def test_list_cases_pagination(self):
+        for i in range(2, 15):
+            Case.objects.create(
+                case_reference=f"2500{i:02d}",
+                data_subject_name=f"Subject {i}",
+                created_by=self.user,
+            )
+        url = reverse("case-list-create")
+        response = self.client.get(url, {"page": 1, "page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["results"]), 10)
+        self.assertIsNotNone(response.data["next"])
 
     def test_create_case(self):
         """Test creating a new case."""

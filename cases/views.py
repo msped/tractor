@@ -7,11 +7,13 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_q.models import OrmQ
 from rest_framework import status
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveAPIView,
     RetrieveUpdateDestroyAPIView,
 )
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -117,19 +119,34 @@ class CaseExportView(APIView):
         )
 
 
+class CasePagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+
 class CaseListCreateView(ListCreateAPIView):
     """
     API view to list and create cases.
     """
 
     permission_classes = [IsAuthenticated]
-    queryset = Case.objects.select_related("created_by")
     serializer_class = CaseSerializer
+    pagination_class = CasePagination
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ["case_reference", "data_subject_name"]
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        queryset = Case.objects.select_related("created_by")
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            statuses = [s.strip() for s in status_param.split(",")]
+            queryset = queryset.filter(status__in=statuses)
+        return queryset
 
     def perform_create(self, serializer):
-        """
-        Override to set the created_by field to the current user.
-        """
         serializer.save(created_by=self.request.user)
 
 

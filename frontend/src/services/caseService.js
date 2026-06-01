@@ -37,9 +37,9 @@ export const deleteCase = async (caseId) => {
     }
 };
 
-export const getCases = async () => {
+export const getCases = async (params = {}) => {
     try {
-        const response = await apiClient.get('/cases');
+        const response = await apiClient.get('/cases', { params });
         return response.data;
     } catch (error) {
         throwApiError(error, 'Failed to retrieve cases. Please try again.');
