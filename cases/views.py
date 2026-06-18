@@ -25,6 +25,7 @@ from .models import (
     ExemptionTemplate,
     Redaction,
     RedactionContext,
+    ReviewWorkflowSettings,
 )
 from .serializers import (
     BulkByTextSerializer,
@@ -37,6 +38,7 @@ from .serializers import (
     ExemptionTemplateSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
+    ReviewWorkflowSettingsSerializer,
 )
 
 
@@ -56,6 +58,28 @@ class DocumentExportSettingsView(APIView):
     def patch(self, request):
         serializer = DocumentExportSettingsSerializer(
             DocumentExportSettings.get(), data=request.data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class ReviewWorkflowSettingsView(APIView):
+    """
+    GET/PATCH the singleton review workflow settings (admin only).
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        serializer = ReviewWorkflowSettingsSerializer(
+            ReviewWorkflowSettings.get()
+        )
+        return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = ReviewWorkflowSettingsSerializer(
+            ReviewWorkflowSettings.get(), data=request.data, partial=True
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()

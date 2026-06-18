@@ -19,6 +19,7 @@ from .views import (
     RedactionDetailView,
     RedactionListCreateView,
     RetentionSettingsView,
+    ReviewWorkflowSettingsView,
 )
 
 urlpatterns = [
@@ -31,6 +32,11 @@ urlpatterns = [
         "cases/settings/retention",
         RetentionSettingsView.as_view(),
         name="retention-settings",
+    ),
+    path(
+        "cases/settings/review-workflow",
+        ReviewWorkflowSettingsView.as_view(),
+        name="review-workflow-settings",
     ),
     path(
         "cases/settings/retention/bulk-delete",
