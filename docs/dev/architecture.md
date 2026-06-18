@@ -38,7 +38,7 @@ tractor/
     - **GLiNER** identifies **THIRD_PARTY** spans (names, orgs, locations, DOB, addresses) using a zero-shot model from HuggingFace
     - **Presidio** identifies structured **THIRD_PARTY** PII (phone, email, NHS, postcode, NI) and structured **OPERATIONAL** refs (crime references, collar numbers) via pattern recognisers
     - **Gemma** (via Ollama) performs contextual analysis of the document text to identify disclosable information based on the system prompt (optional — skipped if `OLLAMA_ENABLED` is `False`)
-    - Results are deduplicated with priority: **SpanCat > GLiNER > Presidio > Gemma**
+    - Results are deduplicated with priority: **Custom Presidio > SpanCat > Presidio > GLiNER > Gemma**
 4. **Data Subject Filtering**: Entities matching the case's data subject name or DOB are excluded from suggestions
 5. **User Review**: User accepts/rejects redactions in the UI. Adjacent same-type spans are automatically merged into compound display items for easier review. Merged items can be split and reviewed individually.
 6. **Export**: WeasyPrint generates PDF exports with redactions applied
@@ -225,10 +225,11 @@ For Ollama (Gemma), GPU acceleration is handled at the container/host level — 
 
 After all four models run, overlapping spans are deduplicated with this priority order:
 
-1. SpanCat results are kept in full
-2. GLiNER results are added where they don't overlap SpanCat spans
-3. Presidio results are added where they don't overlap either of the above
-4. Gemma results are added where they don't overlap any of the above
+1. Custom Presidio results are kept in full (admin-configured patterns always win)
+2. SpanCat results are added where they don't overlap custom Presidio spans
+3. Built-in Presidio results are added where they don't overlap either of the above
+4. GLiNER results are added where they don't overlap any of the above
+5. Gemma results are added where they don't overlap any of the above
 
 ### Merged Display Items
 

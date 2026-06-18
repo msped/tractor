@@ -118,7 +118,7 @@ The regex tester sends your pattern and sample text to the server and highlights
 
 ### How matches appear
 
-Custom recognizer matches appear in the review panel alongside built-in detections and participate in the standard deduplication priority order (SpanCat > GLiNER > Presidio / custom > Gemma). They are labelled by entity type in the same way as built-in results.
+Custom recognizer matches appear in the review panel alongside built-in detections and take the **highest priority** in deduplication (Custom Presidio > SpanCat > built-in Presidio > GLiNER > Gemma). This ensures admin-configured patterns always override the learned models. They are labelled by entity type in the same way as built-in results.
 
 Changes to custom recognizers take effect on the next document processed — documents already reviewed are not retroactively updated.
 
