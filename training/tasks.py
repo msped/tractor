@@ -27,8 +27,10 @@ HIGHLIGHT_COLOR_TO_LABEL = {
     "TURQUOISE": "OPERATIONAL",
 }
 
+# Case redactions: only OP_DATA feeds SpanCat training. PII redactions are excluded
+# because they originate from GLiNER suggestions which may be incorrect, and training
+# on them would cause SpanCat to learn and reinforce those mistakes.
 REDACTION_TYPE_TO_ENTITY_LABEL = {
-    "PII": "THIRD_PARTY",
     "OP_DATA": "OPERATIONAL",
 }
 
@@ -160,9 +162,9 @@ def collect_training_data_detailed(source="both"):
                 continue
 
             entities = []
-            for redaction in doc.redactions.filter(is_accepted=True).exclude(
-                redaction_type=Redaction.RedactionType.DS_INFORMATION
-            ):
+            for redaction in doc.redactions.filter(
+                is_accepted=True, auto_accepted=False
+            ).exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION):
                 label = REDACTION_TYPE_TO_ENTITY_LABEL.get(
                     redaction.redaction_type
                 )

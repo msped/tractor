@@ -145,6 +145,8 @@ def _build_operational_analyzer():
 # Singletons are (engine, custom_entity_names) tuples; None when not yet built.
 _analyzer = None
 _operational_analyzer = None
+_custom_third_party_analyzer = None
+_custom_operational_analyzer = None
 
 
 def _get_analyzer():
@@ -161,6 +163,30 @@ def _get_operational_analyzer():
     if _operational_analyzer is None:
         _operational_analyzer = _build_operational_analyzer()
     return _operational_analyzer
+
+
+def _get_custom_third_party_analyzer():
+    """Return an engine containing ONLY custom THIRD_PARTY recognizers (no built-ins)."""
+    global _custom_third_party_analyzer
+    if _custom_third_party_analyzer is None:
+        from training.models import CustomRecognizer
+
+        _custom_third_party_analyzer = _build_engine(
+            [], CustomRecognizer.EntityType.THIRD_PARTY
+        )
+    return _custom_third_party_analyzer
+
+
+def _get_custom_operational_analyzer():
+    """Return an engine containing ONLY custom OPERATIONAL recognizers (no built-ins)."""
+    global _custom_operational_analyzer
+    if _custom_operational_analyzer is None:
+        from training.models import CustomRecognizer
+
+        _custom_operational_analyzer = _build_engine(
+            [], CustomRecognizer.EntityType.OPERATIONAL
+        )
+    return _custom_operational_analyzer
 
 
 def extract_with_presidio(text):
@@ -207,4 +233,47 @@ def extract_operational_with_presidio(text):
                 "end_char": r.end,
             }
         )
+    return output
+
+
+def extract_custom_with_presidio(text):
+    """
+    Run ONLY the admin-configured custom recognizers against *text*.
+
+    Returns THIRD_PARTY and OPERATIONAL matches from custom recognizers,
+    with no built-in patterns. Used as the highest-priority pipeline stage
+    so explicit admin rules always override learned model predictions.
+    """
+    output = []
+
+    engine, custom_entities = _get_custom_third_party_analyzer()
+    if custom_entities:
+        results = engine.analyze(
+            text=text, language="en", entities=custom_entities
+        )
+        for r in results:
+            output.append(
+                {
+                    "text": text[r.start : r.end],
+                    "label": "THIRD_PARTY",
+                    "start_char": r.start,
+                    "end_char": r.end,
+                }
+            )
+
+    engine, custom_entities = _get_custom_operational_analyzer()
+    if custom_entities:
+        results = engine.analyze(
+            text=text, language="en", entities=custom_entities
+        )
+        for r in results:
+            output.append(
+                {
+                    "text": text[r.start : r.end],
+                    "label": "OPERATIONAL",
+                    "start_char": r.start,
+                    "end_char": r.end,
+                }
+            )
+
     return output

@@ -59,14 +59,16 @@ class ExtractionPipeline:
 def build_default_pipeline(data_subject_name=None, data_subject_dob=None):
     """Build the standard four-extractor pipeline from singleton model managers.
 
-    Priority order: SpanCat > GLiNER > Presidio > Gemma.
-    SpanCat is omitted if no model is trained. Gemma is non-fatal.
+    Priority order: Custom Presidio > SpanCat > Presidio > GLiNER > Gemma.
+    Custom recognizers run first so admin-configured rules always override learned
+    model predictions. SpanCat is omitted if no model is trained. Gemma is non-fatal.
     Raises ValueError if no GLiNER model is available.
     """
     # Lazy imports — keep Django models and heavy extractor deps away from module load time
     from .extractors.gemma_extractor import extract_with_gemma
     from .extractors.gliner_extractor import extract_with_gliner
     from .extractors.presidio_extractor import (
+        extract_custom_with_presidio,
         extract_operational_with_presidio,
         extract_with_presidio,
     )
@@ -81,6 +83,10 @@ def build_default_pipeline(data_subject_name=None, data_subject_dob=None):
 
     stages = []
 
+    # Custom recognizers take absolute priority — runs before SpanCat so that
+    # admin-configured patterns cannot be overridden by learned model predictions.
+    stages.append(extract_custom_with_presidio)
+
     if spancat_nlp:
 
         def _spancat_stage(text):
@@ -88,17 +94,17 @@ def build_default_pipeline(data_subject_name=None, data_subject_dob=None):
 
         stages.append(_spancat_stage)
 
-    def _gliner_stage(text):
-        return extract_with_gliner(gliner_model, text)
-
-    stages.append(_gliner_stage)
-
     def _presidio_stage(text):
         return extract_with_presidio(text) + extract_operational_with_presidio(
             text
         )
 
     stages.append(_presidio_stage)
+
+    def _gliner_stage(text):
+        return extract_with_gliner(gliner_model, text)
+
+    stages.append(_gliner_stage)
 
     def _gemma_stage(text):
         return extract_with_gemma(text, data_subject_name, data_subject_dob)
