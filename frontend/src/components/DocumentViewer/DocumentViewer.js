@@ -275,8 +275,16 @@ const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hovere
     return parts.length > 0 ? parts : elementText;
 };
 
-export const DocumentViewer = ({ text, tables, structure, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onRemoveSelect = null, onHighlightClick, onUnhighlightClick = null, reviewComplete, viewMode = 'review', baseFontSize = 1, activeHighlightType = null }) => {
+export const DocumentViewer = ({ text, tables, structure, redactions, pendingRedaction, hoveredSuggestionId, onTextSelect, onRemoveSelect = null, onHighlightClick, onUnhighlightClick = null, reviewComplete, viewMode = 'review', baseFontSize = 1, activeHighlightType = null, onScrolledToBottom = null }) => {
     const viewerRef = useRef(null);
+
+    const handleScroll = (e) => {
+        if (!onScrolledToBottom) return;
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        if (scrollTop + clientHeight >= scrollHeight - 50) {
+            onScrolledToBottom();
+        }
+    };
     const tableRegions = useMemo(() => buildTableRegions(tables), [tables]);
     const scaledFontSize = `${baseFontSize}rem`;
     const headingStyles = useMemo(() => getHeadingStyles(baseFontSize), [baseFontSize]);
@@ -579,8 +587,8 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
             }}
             ref={viewerRef}
             data-testid="document-viewer"
-            // Only attach mouseup listener if onTextSelect is provided (i.e., in review mode)
             onMouseUp={onTextSelect ? handleMouseUp : undefined}
+            onScroll={onScrolledToBottom ? handleScroll : undefined}
         >
             {hasStructure ? renderStructuredDocument() : renderPlainDocument()}
         </Paper>

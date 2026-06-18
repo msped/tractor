@@ -82,6 +82,24 @@ export const getRetentionSettings = async () => {
     }
 };
 
+export const getReviewWorkflowSettings = async () => {
+    try {
+        const response = await apiClient.get('/cases/settings/review-workflow');
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to retrieve review workflow settings.');
+    }
+};
+
+export const updateReviewWorkflowSettings = async (data) => {
+    try {
+        const response = await apiClient.patch('/cases/settings/review-workflow', data);
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to update review workflow settings.');
+    }
+};
+
 export const bulkDeleteCases = async (ids) => {
     try {
         const response = await apiClient.post('/cases/settings/retention/bulk-delete', { ids });

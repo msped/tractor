@@ -13,6 +13,7 @@ import { DocumentExportSettingsCard } from '@/components/DocumentExportSettingsC
 import { ExemptionTemplatesCard } from '@/components/ExemptionTemplatesCard';
 import { LLMPromptSettingsCard } from '@/components/LLMPromptSettingsCard';
 import { RetentionSettingsCard } from '@/components/RetentionSettingsCard';
+import { ReviewWorkflowSettingsCard } from '@/components/ReviewWorkflowSettingsCard';
 
 export default function SettingsPage() {
     const { session, isPending } = useSession();
@@ -51,6 +52,11 @@ export default function SettingsPage() {
                 {isAdmin && (
                     <Grid size={{xs: 12, md: 6}}>
                         <RetentionSettingsCard />
+                    </Grid>
+                )}
+                {isAdmin && (
+                    <Grid size={{xs: 12, md: 6}}>
+                        <ReviewWorkflowSettingsCard />
                     </Grid>
                 )}
             </Grid>
