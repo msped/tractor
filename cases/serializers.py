@@ -10,6 +10,7 @@ from .models import (
     ExemptionTemplate,
     Redaction,
     RedactionContext,
+    ReviewWorkflowSettings,
 )
 
 
@@ -173,11 +174,12 @@ class RedactionSerializer(serializers.ModelSerializer):
             "justification",
             "is_suggestion",
             "is_accepted",
+            "auto_accepted",
             "source",
             "created_at",
             "context",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "auto_accepted", "created_at"]
 
 
 class BulkByTextSerializer(serializers.Serializer):
@@ -194,6 +196,12 @@ class BulkByTextSerializer(serializers.Serializer):
     rejection_reason = serializers.CharField(
         required=False, allow_blank=True, default=""
     )
+
+
+class ReviewWorkflowSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReviewWorkflowSettings
+        fields = ["auto_accept_enabled"]
 
 
 class ExemptionTemplateSerializer(serializers.ModelSerializer):

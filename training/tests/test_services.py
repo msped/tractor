@@ -89,9 +89,9 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
             extracted_text, "Hello, I'm John Doe and I live in London."
         )
         self.assertEqual(len(results), 2)
-        self.assertEqual(results[0]["text"], "John Doe")
+        self.assertEqual(results[0]["text"], "London")
         self.assertEqual(results[0]["label"], "THIRD_PARTY")
-        self.assertEqual(results[1]["text"], "London")
+        self.assertEqual(results[1]["text"], "John Doe")
         self.assertEqual(results[1]["label"], "THIRD_PARTY")
         self.assertEqual(tables, [])
         self.assertIsNone(structure)
@@ -283,16 +283,7 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
         )
         mock_pdf.return_value = "John Doe lives in London."
 
-        # GLiNER finds "John Doe" at 0-8
-        mock_gliner.return_value = [
-            {
-                "text": "John Doe",
-                "label": "THIRD_PARTY",
-                "start_char": 0,
-                "end_char": 8,
-            },
-        ]
-        # Presidio also finds "John" at 0-4 (overlaps with GLiNER result)
+        # Presidio finds "John" at 0-4
         mock_presidio.return_value = [
             {
                 "text": "John",
@@ -302,12 +293,21 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
             },
         ]
         mock_presidio_op.return_value = []
+        # GLiNER also finds "John Doe" at 0-8 (overlaps with Presidio result)
+        mock_gliner.return_value = [
+            {
+                "text": "John Doe",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 8,
+            },
+        ]
 
         _, results, _, _ = extract_entities_from_text(self.file_path)
 
-        # Only "John Doe" should remain (overlap removed)
+        # Only "John" should remain — Presidio > GLiNER priority, overlap removed
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0]["text"], "John Doe")
+        self.assertEqual(results[0]["text"], "John")
 
     @patch("training.services._extract_text_from_pdf")
     @patch(

@@ -99,16 +99,16 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
             end_char=23,
             text="accepted",
             is_accepted=True,
-            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
         )
-        # This one should be ignored
+        # This one should be ignored (not accepted)
         Redaction.objects.create(
             document=self.case_doc,
             start_char=0,
             end_char=4,
             text="Some",
             is_accepted=False,
-            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
         )
 
     @classmethod
@@ -150,7 +150,28 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         start, end, label = annotations["entities"][0]
         self.assertEqual(start, 15)
         self.assertEqual(end, 23)
-        self.assertEqual(label, "THIRD_PARTY")
+        self.assertEqual(label, "OPERATIONAL")
+
+    def test_pii_redactions_excluded_from_case_training(self):
+        """PII redactions from case documents must not feed into SpanCat training."""
+        pii_doc = CaseDocument.objects.create(
+            case=self.case,
+            extracted_text="John Smith was seen near the scene.",
+            status=CaseDocument.Status.COMPLETED,
+        )
+        Redaction.objects.create(
+            document=pii_doc,
+            start_char=0,
+            end_char=10,
+            text="John Smith",
+            is_accepted=True,
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        train_data, _, c_docs = collect_training_data_detailed(
+            source="redactions"
+        )
+        doc_texts = [text for text, _ in train_data]
+        self.assertNotIn(pii_doc.extracted_text, doc_texts)
 
     def test_collect_from_both(self):
         """Test collecting data from both sources."""
@@ -244,7 +265,7 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         create_test_docx(
             docx_path,
             [
-                ("Name: ", None),
+                ("Ref: ", None),
                 ("John", WD_COLOR_INDEX.BRIGHT_GREEN),
                 (" and ", None),
                 ("Jane", WD_COLOR_INDEX.BRIGHT_GREEN),

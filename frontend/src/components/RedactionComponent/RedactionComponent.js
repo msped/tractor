@@ -1,7 +1,7 @@
 "use client"
 
-import React from 'react';
-import { Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Alert, Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -33,6 +33,20 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
 
     const store = useRedactionState({ document: currentDocument, initialRedactions, router });
     const { layout, document: docState, markAllInCase, rejectionDialog } = store;
+
+    const isAutoAcceptMode = useMemo(
+        () => initialRedactions.some(r => r.auto_accepted),
+        [initialRedactions]
+    );
+    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const handleScrolledToBottom = useCallback(() => setHasScrolledToBottom(true), []);
+
+    const completeBlocked = isAutoAcceptMode && !hasScrolledToBottom;
+    const completeTooltip = store.pendingCount > 0
+        ? "You must resolve all AI suggestions before completing."
+        : completeBlocked
+            ? "Scroll to the bottom of the document to complete review."
+            : "";
 
     return (
         <Box sx={{ display: 'flex', height: 'calc(100vh - 32px)' }}>
@@ -85,12 +99,12 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                                         <RefreshIcon />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip title={store.pendingCount > 0 ? "You must resolve all AI suggestions before completing." : ""}>
+                                <Tooltip title={completeTooltip}>
                                     <span>
                                         <Button
                                             variant="contained"
                                             color="info"
-                                            disabled={store.pendingCount > 0 || docState.isLoading}
+                                            disabled={store.pendingCount > 0 || completeBlocked || docState.isLoading}
                                             onClick={docState.onMarkAsComplete}
                                             sx={{ minWidth: 180 }}
                                         >
@@ -110,7 +124,16 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                         )}
                     </Box>
                 </Box>
-                <DocumentViewer {...getDocumentViewerProps(store, currentDocument)} />
+                {isAutoAcceptMode && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                        All redactions have been pre-accepted. Review and reject any that should not apply.
+                        To propagate data subject information across all documents in this case, change a redaction&apos;s type to <strong>DS Info</strong>.
+                    </Alert>
+                )}
+                <DocumentViewer
+                    {...getDocumentViewerProps(store, currentDocument)}
+                    onScrolledToBottom={isAutoAcceptMode ? handleScrolledToBottom : null}
+                />
             </Container>
 
             <Box

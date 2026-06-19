@@ -295,6 +295,10 @@ class Redaction(models.Model):
         default=False,
         help_text="True if the user has confirmed this redaction should be applied.",
     )
+    auto_accepted = models.BooleanField(
+        default=False,
+        help_text="True if accepted automatically by the system (not by a human reviewer).",
+    )
     source = models.CharField(
         max_length=3,
         choices=Source.choices,
@@ -396,6 +400,17 @@ class DocumentExportSettings(SingletonModel):
     class Meta(SingletonModel.Meta):
         verbose_name = "Document Export Settings"
         verbose_name_plural = "Document Export Settings"
+
+
+class ReviewWorkflowSettings(SingletonModel):
+    auto_accept_enabled = models.BooleanField(
+        default=False,
+        help_text="When enabled, all NER redaction suggestions are automatically accepted on processing.",
+    )
+
+    class Meta(SingletonModel.Meta):
+        verbose_name = "Review Workflow Settings"
+        verbose_name_plural = "Review Workflow Settings"
 
 
 auditlog.register(Case)

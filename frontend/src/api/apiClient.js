@@ -34,6 +34,10 @@ const apiClient = () => {
     const instance = axios.create(defaultOptions);
 
     instance.interceptors.request.use(async (config) => {
+        if (config.data instanceof FormData) {
+            delete config.headers['Content-Type'];
+        }
+
         let token;
         if (typeof window === 'undefined') {
             try {

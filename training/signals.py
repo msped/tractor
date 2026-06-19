@@ -30,6 +30,8 @@ def invalidate_presidio_cache(sender, instance, **kwargs):
 
     mod._analyzer = None
     mod._operational_analyzer = None
+    mod._custom_third_party_analyzer = None
+    mod._custom_operational_analyzer = None
 
 
 @receiver(pre_delete, sender=Model)

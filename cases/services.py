@@ -21,7 +21,13 @@ from training.loader import (
 )
 from training.services import extract_entities_from_text
 
-from .models import Case, Document, DocumentExportSettings, Redaction
+from .models import (
+    Case,
+    Document,
+    DocumentExportSettings,
+    Redaction,
+    ReviewWorkflowSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +163,11 @@ def process_document_and_create_redactions(document_id):
                 )
             )
         Redaction.objects.bulk_create(redactions_to_create)
+
+    if ReviewWorkflowSettings.get().auto_accept_enabled:
+        document.redactions.filter(
+            auto_accepted=False, is_accepted=False
+        ).update(is_accepted=True, auto_accepted=True)
 
     # Run case-decision propagation in its own transaction so a failure here
     # does not roll back the committed redactions above.
