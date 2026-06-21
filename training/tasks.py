@@ -95,47 +95,95 @@ def collect_training_data_detailed(source="both"):
                     current_entity_end = None
                     current_entity_label = None
 
-                for para in doc.paragraphs:
-                    for run in para.runs:
-                        run_text = run.text
-                        start_char = current_pos
-                        end_char = current_pos + len(run_text)
+                def process_run(run, _entities=entities):
+                    nonlocal \
+                        full_text, \
+                        current_pos, \
+                        current_entity_start, \
+                        current_entity_end, \
+                        current_entity_label
+                    run_text = run.text
+                    start_char = current_pos
+                    end_char = current_pos + len(run_text)
 
-                        # Determine the label for this run
-                        run_label = None
-                        if run.font.highlight_color:
-                            color_enum_member = run.font.highlight_color
-                            color_name = (
-                                color_enum_member.name
-                                if color_enum_member
-                                else None
-                            )
-                            run_label = HIGHLIGHT_COLOR_TO_LABEL.get(
-                                color_name
-                            )
+                    run_label = None
+                    if run.font.highlight_color:
+                        color_enum_member = run.font.highlight_color
+                        color_name = (
+                            color_enum_member.name
+                            if color_enum_member
+                            else None
+                        )
+                        run_label = HIGHLIGHT_COLOR_TO_LABEL.get(color_name)
 
-                        if run_label:
-                            # This run is highlighted with a recognized color
-                            if current_entity_label == run_label:
-                                # Same label as current entity - extend it
-                                current_entity_end = end_char
-                            else:
-                                # Different label - close current and start new
-                                close_current_entity(entities, full_text)
-                                current_entity_start = start_char
-                                current_entity_end = end_char
-                                current_entity_label = run_label
+                    if run_label:
+                        if current_entity_label == run_label:
+                            current_entity_end = end_char
                         else:
-                            # No highlight or unrecognized color - close current entity
-                            close_current_entity(entities, full_text)
+                            close_current_entity(_entities, full_text)
+                            current_entity_start = start_char
+                            current_entity_end = end_char
+                            current_entity_label = run_label
+                    else:
+                        close_current_entity(_entities, full_text)
 
-                        full_text += run_text
-                        current_pos = end_char
+                    full_text += run_text
+                    current_pos = end_char
 
-                    # Close entity at end of paragraph (entities don't span paragraphs)
-                    close_current_entity(entities, full_text)
-                    full_text += "\n"
-                    current_pos += 1
+                # Build lookup dicts for O(1) matching during body iteration
+                para_map = {para._element: para for para in doc.paragraphs}
+                table_map = {tbl._tbl: tbl for tbl in doc.tables}
+
+                for element in doc.element.body:
+                    tag = element.tag.split("}")[-1]
+
+                    if tag == "p":
+                        para = para_map.get(element)
+                        if para is None:
+                            continue
+                        for run in para.runs:
+                            process_run(run)
+                        close_current_entity(entities, full_text)
+                        full_text += "\n"
+                        current_pos += 1
+
+                    elif tag == "tbl":
+                        tbl = table_map.get(element)
+                        if tbl is None:
+                            continue
+                        seen_tc = set()
+                        first_row = True
+                        for row in tbl.rows:
+                            if not first_row:
+                                close_current_entity(entities, full_text)
+                                full_text += "\n"
+                                current_pos += 1
+                            first_row = False
+                            first_cell = True
+                            for cell in row.cells:
+                                if cell._tc in seen_tc:
+                                    continue
+                                seen_tc.add(cell._tc)
+                                if not first_cell:
+                                    close_current_entity(entities, full_text)
+                                    full_text += "\t"
+                                    current_pos += 1
+                                first_cell = False
+                                first_para_in_cell = True
+                                for para in cell.paragraphs:
+                                    if not first_para_in_cell:
+                                        close_current_entity(
+                                            entities, full_text
+                                        )
+                                        full_text += " "
+                                        current_pos += 1
+                                    first_para_in_cell = False
+                                    for run in para.runs:
+                                        process_run(run)
+                                    close_current_entity(entities, full_text)
+                        close_current_entity(entities, full_text)
+                        full_text += "\n"
+                        current_pos += 1
 
                 # Close any remaining entity
                 close_current_entity(entities, full_text)
@@ -155,7 +203,7 @@ def collect_training_data_detailed(source="both"):
     if source in ("redactions", "both"):
         completed_docs = Document.objects.filter(
             status=Document.Status.COMPLETED
-        )
+        ).order_by("-uploaded_at")[:500]
         for doc in completed_docs:
             text = doc.extracted_text
             if not text:
@@ -201,7 +249,7 @@ def _build_spancat_pipeline():
     spancat_config = {
         "suggester": {
             "@misc": "spacy.ngram_suggester.v1",
-            "sizes": list(range(1, 51)),
+            "sizes": list(range(1, 21)),
         },
         "model": {
             "@architectures": "spacy.SpanCategorizer.v1",
