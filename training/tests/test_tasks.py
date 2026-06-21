@@ -331,6 +331,138 @@ class CollectTrainingDataMergeTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(text[start:end], "Valid")
 
 
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_tables"))
+class CollectTrainingDataTableTests(NetworkBlockerMixin, TestCase):
+    """Tests for table cell highlight extraction in training documents."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("testuser3", password="password")
+        self.tmp_dir = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+
+    def _make_training_doc(self, docx_path, name):
+        with open(docx_path, "rb") as f:
+            return TrainingDocument.objects.create(
+                name=name,
+                original_file=SimpleUploadedFile(
+                    docx_path.name,
+                    f.read(),
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ),
+                created_by=self.user,
+                processed=False,
+            )
+
+    def test_highlighted_table_cells_extracted_as_entities(self):
+        """Highlighted cells in training doc tables are included as training entities."""
+        docx_path = Path(self.tmp_dir) / "table_test.docx"
+        doc = DocxDocument()
+        tbl = doc.add_table(rows=2, cols=3)
+        for i, header in enumerate(["Type", "Author", "Link"]):
+            tbl.rows[0].cells[i].paragraphs[0].add_run(header)
+        tbl.rows[1].cells[0].paragraphs[0].add_run("Action")
+        author_run = (
+            tbl.rows[1].cells[1].paragraphs[0].add_run("SMITH, J. #0712345")
+        )
+        author_run.font.highlight_color = WD_COLOR_INDEX.TURQUOISE
+        link_run = tbl.rows[1].cells[2].paragraphs[0].add_run("No")
+        link_run.font.highlight_color = WD_COLOR_INDEX.TURQUOISE
+        doc.save(docx_path)
+        self._make_training_doc(docx_path, "Table Test")
+
+        train_data, _, _ = collect_training_data_detailed(
+            source="training_docs"
+        )
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+        entities = annotations["entities"]
+
+        self.assertIn("\t", text)
+        self.assertIn("SMITH, J. #0712345", text)
+        self.assertIn("No", text)
+
+        operational = [e for e in entities if e[2] == "OPERATIONAL"]
+        self.assertEqual(len(operational), 2)
+        entity_texts = {text[s:e] for s, e, _ in operational}
+        self.assertIn("SMITH, J. #0712345", entity_texts)
+        self.assertIn("No", entity_texts)
+
+    def test_table_text_format_matches_inference_format(self):
+        """Table text in training data uses tab-separated cells and newline-separated rows."""
+        docx_path = Path(self.tmp_dir) / "format_test.docx"
+        doc = DocxDocument()
+        tbl = doc.add_table(rows=2, cols=2)
+        tbl.rows[0].cells[0].paragraphs[0].add_run("Col A")
+        tbl.rows[0].cells[1].paragraphs[0].add_run("Col B")
+        tbl.rows[1].cells[0].paragraphs[0].add_run("Row 1 A")
+        run = tbl.rows[1].cells[1].paragraphs[0].add_run("Row 1 B")
+        run.font.highlight_color = WD_COLOR_INDEX.TURQUOISE
+        doc.save(docx_path)
+        self._make_training_doc(docx_path, "Format Test")
+
+        train_data, _, _ = collect_training_data_detailed(
+            source="training_docs"
+        )
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+
+        self.assertIn("Col A\tCol B", text)
+        self.assertIn("Row 1 A\tRow 1 B", text)
+
+        entity_texts = [text[s:e] for s, e, _ in annotations["entities"]]
+        self.assertIn("Row 1 B", entity_texts)
+
+    def test_paragraphs_and_tables_both_extracted_in_order(self):
+        """Paragraph highlights and table cell highlights are both extracted from the same doc."""
+        docx_path = Path(self.tmp_dir) / "mixed_test.docx"
+        doc = DocxDocument()
+        p = doc.add_paragraph()
+        p.add_run("Before: ")
+        para_run = p.add_run("ParaEntity")
+        para_run.font.highlight_color = WD_COLOR_INDEX.BRIGHT_GREEN
+        tbl = doc.add_table(rows=1, cols=2)
+        tbl.rows[0].cells[0].paragraphs[0].add_run("Cell A")
+        cell_run = tbl.rows[0].cells[1].paragraphs[0].add_run("CellEntity")
+        cell_run.font.highlight_color = WD_COLOR_INDEX.TURQUOISE
+        doc.save(docx_path)
+        self._make_training_doc(docx_path, "Mixed Test")
+
+        train_data, _, _ = collect_training_data_detailed(
+            source="training_docs"
+        )
+
+        self.assertEqual(len(train_data), 1)
+        text, annotations = train_data[0]
+
+        self.assertIn("ParaEntity", text)
+        self.assertIn("CellEntity", text)
+        self.assertEqual(len(annotations["entities"]), 2)
+
+        third_party = [
+            e for e in annotations["entities"] if e[2] == "THIRD_PARTY"
+        ]
+        operational = [
+            e for e in annotations["entities"] if e[2] == "OPERATIONAL"
+        ]
+        self.assertEqual(len(third_party), 1)
+        self.assertEqual(len(operational), 1)
+        self.assertEqual(
+            text[third_party[0][0] : third_party[0][1]], "ParaEntity"
+        )
+        self.assertEqual(
+            text[operational[0][0] : operational[0][1]], "CellEntity"
+        )
+
+        para_pos = text.index("ParaEntity")
+        cell_pos = text.index("CellEntity")
+        self.assertLess(para_pos, cell_pos)
+
+
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_model_train"))
 class TrainModelTests(NetworkBlockerMixin, TestCase):
     """Tests for the full SpanCat training pipeline."""
