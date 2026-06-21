@@ -45,7 +45,7 @@ The simplist hosting solution is to use [Docker](https://www.docker.com/) to hos
 
 The service uses a four-model pipeline to perform Named Entity Recognition (NER) on user-submitted text:
 
-* **SpanCat (spaCy)** — a custom trained model that identifies both **Operational Data** and **Third-Party PII** based on your organisation's accepted redactions. This takes highest priority in the pipeline. If no model has been trained yet, the system falls back to the other models.
+* **SpanCat (spaCy)** — a custom trained model that identifies **Operational Data** based on your organisation's accepted redactions. This takes the second-highest priority in the pipeline, after admin-configured custom Presidio recognizers. If no model has been trained yet, the system falls back to the other models.
 * **GLiNER** — a zero-shot NER model downloaded from HuggingFace. It identifies **Third-Party PII** such as names, organisations, addresses, and dates of birth without requiring training data.
 * **Microsoft Presidio** — a rule-based PII detection framework. It identifies structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, NI numbers) and structured **Operational Data** (crime reference numbers, collar numbers) using pattern recognisers.
 * **Gemma (via Ollama)** — a locally-hosted large language model that performs contextual analysis of documents. It reasons about whether information is disclosable given the broader context of the document, catching disclosures that pattern-matching alone may miss. This stage is optional and can be disabled if Ollama is not available.

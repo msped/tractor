@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Admin-only UI elements (Retention Review nav item, API Keys, LLM Prompt Settings, and Retention Settings cards) not appearing until a hard page refresh after logging in. Root causes: (1) the `customSession` plugin renamed `isAdmin` → `is_admin`, causing a mismatch with the raw field name stored in better-auth's JWE cookie cache; (2) better-auth's `atomListeners` does not include the custom `/sign-in/username` endpoint, so `useSession()` was never notified to re-fetch after login. Fixed by keeping the field as `isAdmin` throughout and explicitly calling `authClient.$store.notify("$sessionSignal")` after a successful login.
+- SpanCat training now extracts highlighted text from table cells in training documents, not just body paragraphs. Previously, any annotations in occurrence report tables (e.g. Link/No columns, involved-officer blocks) were silently ignored.
+- Data subject name filter now handles inverted name formats (e.g. "COOPER, ALEX" in a document matching the stored name "Alex Cooper") using word-set subset comparison.
 
 ### Changed
 
@@ -22,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Task routing for the `cases` app centralised in `cases/tasks.py`; unhandled exceptions during document processing now log the traceback and mark the document `ERROR` rather than propagating silently
 - Frontend services now use a shared `extractApiError` utility for consistent API error handling
 - `RedactionComponent` state logic extracted into `useRedactionState` hook; mark-all-in-case logic extracted into `useMarkAllInCase` hook
+- SpanCat superset extension rule: when SpanCat predicts a span that strictly contains a same-label custom Presidio span (e.g. it captures "OIC / HUGHES, R. #0723222" while Presidio only matched "HUGHES, R. #0723222"), SpanCat's wider span replaces the narrower one instead of being dropped. This is intentionally limited to the SpanCat stage.
+- SpanCat training task timeout increased from the cluster-wide 1800 s to 7200 s; ngram candidate sizes capped at 1–20 (was 1–50) to reduce memory pressure on large document sets; case document input capped at 500 most-recent documents per training run
 
 ---
 

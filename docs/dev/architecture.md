@@ -150,12 +150,12 @@ Tractor uses a four-model pipeline. All models run on every document and their r
 
 ### SpanCat (Trained Model)
 
-A custom SpanCat (Span Categorisation) model trained on your organisation's accepted redactions. It can identify both:
+A custom SpanCat (Span Categorisation) model. It can identify both:
 
-- **OPERATIONAL** — reference numbers, case IDs, and other domain-specific operational patterns
-- **THIRD_PARTY** — domain-specific PII patterns learned from training data
+- **OPERATIONAL** — reference numbers, case IDs, and other domain-specific operational patterns, learned from accepted case redactions (OP_DATA type only)
+- **THIRD_PARTY** — PII patterns learned exclusively from manually annotated training documents; accepted PII redactions from cases are excluded to avoid reinforcing GLiNER errors
 
-SpanCat is loaded as a singleton (`SpanCatModelManager`) and takes the **highest priority** in deduplication. If no SpanCat model has been trained yet, this step is skipped and the system falls back to GLiNER + Presidio. Trained models are stored in `nlp_models/`.
+SpanCat is loaded as a singleton (`SpanCatModelManager`) and takes the **second-highest priority** in deduplication, after custom Presidio recognizers. If no SpanCat model has been trained yet, this step is skipped and the system falls back to GLiNER + Presidio. Trained models are stored in `nlp_models/`.
 
 ### GLiNER (Third-Party PII — Zero-Shot)
 
@@ -226,10 +226,12 @@ For Ollama (Gemma), GPU acceleration is handled at the container/host level — 
 After all four models run, overlapping spans are deduplicated with this priority order:
 
 1. Custom Presidio results are kept in full (admin-configured patterns always win)
-2. SpanCat results are added where they don't overlap custom Presidio spans
+2. SpanCat results are added where they don't overlap custom Presidio spans — with one exception: if a SpanCat prediction **strictly contains** a custom Presidio span of the same label (e.g. SpanCat produces "OIC / HUGHES, R. #0723222" while Presidio only caught "HUGHES, R. #0723222"), SpanCat's wider span replaces the narrower Presidio one. This lets the trained model capture surrounding context without being clipped.
 3. Built-in Presidio results are added where they don't overlap either of the above
 4. GLiNER results are added where they don't overlap any of the above
 5. Gemma results are added where they don't overlap any of the above
+
+The superset extension rule is intentionally limited to the SpanCat stage. Lower-priority extractors (GLiNER, Gemma) cannot widen higher-priority matches.
 
 ### Merged Display Items
 
@@ -243,6 +245,7 @@ Entities matching the case's `data_subject_name` or `data_subject_dob` are autom
 
 - Full name matches (case-insensitive)
 - Individual name parts (e.g., "John" or "Doe" from "John Doe")
+- Word-set subset matching — the filter handles inverted name formats such as "COOPER, ALEX" matching a stored name of "Alex Cooper"
 - DOB in common date formats (DD/MM/YYYY, YYYY-MM-DD, D Month YYYY, etc.)
 
 The data subject's own information should remain visible in the document. Users can still manually mark text as DS_INFORMATION, which propagates across all documents in the case via `find_and_flag_matching_text_in_case()`.
