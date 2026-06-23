@@ -291,6 +291,7 @@ class RunManualTrainingViewTests(BaseTrainingAPITestCase):
             "training.tasks.train_model",
             source="training_docs",
             user=self.admin_user,
+            timeout=7200,
         )
 
     def test_run_manual_training_no_docs(self):

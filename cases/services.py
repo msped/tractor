@@ -65,9 +65,18 @@ def _matches_data_subject(text, case):
         # Full name match (case-insensitive)
         if text_lower == ds_name_lower or ds_name_lower in text_lower:
             return True
-        # Individual name parts match (ignore single-char parts like initials)
-        name_parts = [p for p in ds_name_lower.split() if len(p) > 1]
-        if text_lower in name_parts:
+        # Part-set match: handles format differences between storage and document
+        # (e.g. stored as "Alex Cooper", document has "COOPER, ALEX")
+        text_word_parts = {
+            p for p in re.findall(r"[a-z]+", text_lower) if len(p) > 1
+        }
+        name_word_parts = {
+            p for p in re.findall(r"[a-z]+", ds_name_lower) if len(p) > 1
+        }
+        if name_word_parts and name_word_parts.issubset(text_word_parts):
+            return True
+        # Single part: entity text is one word from the name
+        if text_word_parts and text_word_parts.issubset(name_word_parts):
             return True
 
     # Check against data subject DOB

@@ -625,6 +625,123 @@ class DeduplicateEntitiesTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["text"], "John Smith")
 
+    def test_secondary_strict_superset_same_label_replaces_primary(self):
+        """Secondary that strictly contains a same-label primary replaces it when allow_superset=True."""
+        primary = [
+            {
+                "text": "HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 6,
+                "end_char": 25,
+            }
+        ]
+        secondary = [
+            {
+                "text": "OIC / HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 25,
+            }
+        ]
+        result = _deduplicate_entities(primary, secondary, allow_superset=True)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "OIC / HUGHES, R. #0723222")
+
+    def test_secondary_superset_not_applied_without_flag(self):
+        """Secondary superset does not replace primary when allow_superset=False (default)."""
+        primary = [
+            {
+                "text": "HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 6,
+                "end_char": 25,
+            }
+        ]
+        secondary = [
+            {
+                "text": "OIC / HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 25,
+            }
+        ]
+        result = _deduplicate_entities(primary, secondary)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["text"], "HUGHES, R. #0723222")
+
+    def test_secondary_superset_different_label_does_not_replace(self):
+        """Secondary superset with a different label does not replace the primary."""
+        primary = [
+            {
+                "text": "HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 6,
+                "end_char": 25,
+            }
+        ]
+        secondary = [
+            {
+                "text": "OIC / HUGHES, R. #0723222",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 25,
+            }
+        ]
+        result = _deduplicate_entities(primary, secondary, allow_superset=True)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["label"], "OPERATIONAL")
+
+    def test_secondary_superset_blocked_by_other_overlap(self):
+        """Secondary superset is dropped when it also partially overlaps a third entity."""
+        primary = [
+            {
+                "text": "HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 6,
+                "end_char": 25,
+            },
+            {
+                "text": "OIC",
+                "label": "THIRD_PARTY",
+                "start_char": 0,
+                "end_char": 3,
+            },
+        ]
+        secondary = [
+            {
+                "text": "OIC / HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 25,
+            }
+        ]
+        result = _deduplicate_entities(primary, secondary, allow_superset=True)
+        self.assertEqual(len(result), 2)
+        texts = {e["text"] for e in result}
+        self.assertIn("HUGHES, R. #0723222", texts)
+        self.assertIn("OIC", texts)
+
+    def test_identical_span_same_label_is_not_superset(self):
+        """Identical spans are not treated as a strict superset; primary wins."""
+        primary = [
+            {
+                "text": "HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 19,
+            }
+        ]
+        secondary = [
+            {
+                "text": "HUGHES, R. #0723222",
+                "label": "OPERATIONAL",
+                "start_char": 0,
+                "end_char": 19,
+            }
+        ]
+        result = _deduplicate_entities(primary, secondary, allow_superset=True)
+        self.assertEqual(len(result), 1)
+
 
 class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
     def test_hash_prefix_expands_start_char(self):

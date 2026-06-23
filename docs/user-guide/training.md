@@ -7,12 +7,12 @@ Tractor can train a custom SpanCat model from the redactions your team has accep
 
 ## How Training Works
 
-When a document is marked as completed, all of its accepted redactions are stored as training examples. Tractor uses these examples to fine-tune a SpanCat (Span Categorisation) model that learns to recognise both:
+When a document is marked as completed, its accepted **Operational Data** redactions are stored as training examples. Tractor uses these to fine-tune a SpanCat (Span Categorisation) model that learns to recognise **OPERATIONAL** patterns — reference numbers, case IDs, and domain-specific identifiers.
 
-- **THIRD_PARTY** — person names, organisations, and other PII specific to your document corpus
-- **OPERATIONAL** — reference numbers, case IDs, and domain-specific patterns
+!!! note
+    PII (Third-Party) redactions accepted during review are **not** used to train SpanCat, because they originate from GLiNER suggestions which may contain errors. Training on them could cause SpanCat to reinforce those mistakes. Third-Party signal comes exclusively from manually annotated training documents (see [Uploading Training Documents](#uploading-training-documents)).
 
-Once trained, the new model must be **activated** before it is used for processing. The trained model then takes the highest priority in the four-model pipeline, ahead of GLiNER, Presidio, and Gemma.
+Once trained, the new model must be **activated** before it is used for processing. The trained model takes the second-highest priority in the four-model pipeline — ahead of built-in Presidio, GLiNER, and Gemma — with only admin-configured custom Presidio rules taking precedence.
 
 ## Running a Training Job
 
@@ -39,6 +39,13 @@ A banner will appear at the top of the page while training is in progress. Train
 ## Uploading Training Documents
 
 You can supplement training data from accepted redactions by uploading pre-annotated Word documents. This is useful when you have existing labelled data or want to bootstrap the model before any documents have been completed.
+
+Annotations are detected via Word's text highlight colours:
+
+- **Bright green** highlight → THIRD_PARTY entity
+- **Turquoise** highlight → OPERATIONAL entity
+
+Both body paragraphs and table cells are scanned for highlighted text, so annotations in occurrence report tables (e.g. the Link/No columns or involved-officer blocks) are included in training.
 
 1. Go to **Settings → Training → Manual Training**.
 2. Click **Upload Documents** and select one or more `.docx` files.

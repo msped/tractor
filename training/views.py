@@ -248,6 +248,7 @@ class RunManualTrainingView(APIView):
             "training.tasks.train_model",
             source="training_docs",
             user=request.user,
+            timeout=7200,
         )
 
         return Response(
