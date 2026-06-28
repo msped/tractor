@@ -33,6 +33,15 @@ def extract_entities_from_text(
     if pipeline is None:
         pipeline = build_default_pipeline(data_subject_name, data_subject_dob)
 
+    if path.lower().endswith(".txt"):
+        with open(path, encoding="utf-8") as f:
+            ner_text = f.read()
+        if not ner_text.strip():
+            return "", [], [], None
+        combined = pipeline.run(ner_text)
+        combined = _expand_prefix_symbols(combined, ner_text)
+        return ner_text, combined, [], None
+
     # Try structure extraction for DOCX files first
     structure_result = extract_document_structure(path)
 

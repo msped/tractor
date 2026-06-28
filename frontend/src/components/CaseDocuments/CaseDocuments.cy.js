@@ -47,7 +47,7 @@ describe('<CaseDocuments />', () => {
         <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
         mountOpts
     );
-    cy.contains('No documents have been uploaded for this case.').should('be.visible');
+    cy.contains('No documents have been added for this case.').should('be.visible');
   });
 
   it('disables the upload button if the case is finalised', () => {
@@ -56,8 +56,8 @@ describe('<CaseDocuments />', () => {
         mountOpts
     );
 
-    cy.contains('button', 'Upload Document').should('be.disabled');
-    cy.contains('button', 'Upload Document').trigger('mouseover', { force: true });
+    cy.contains('button', 'Add Document').should('be.disabled');
+    cy.contains('button', 'Add Document').trigger('mouseover', { force: true });
     cy.contains('This case is finalised and no longer accepts new documents.').should('be.visible');
   });
   it('opens upload dialog and lists selected files', () => {
@@ -66,8 +66,8 @@ describe('<CaseDocuments />', () => {
         mountOpts
     );
 
-    cy.contains('button', 'Upload Document').click();
-    cy.contains('Upload New Document').should('be.visible');
+    cy.contains('button', 'Add Document').click();
+    cy.contains('Add Document').should('be.visible');
 
     cy.get('#file-upload-input').selectFile({
       contents: Cypress.Buffer.from('file content'),
@@ -85,7 +85,7 @@ describe('<CaseDocuments />', () => {
         mountOpts
     );
 
-    cy.contains('button', 'Upload Document').click();
+    cy.contains('button', 'Add Document').click();
     cy.get('#file-upload-input').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'file-to-remove.txt' }, { force: true });
 
     cy.contains('li', 'file-to-remove.txt').should('be.visible');
@@ -101,7 +101,7 @@ describe('<CaseDocuments />', () => {
           mountOpts
       );
 
-      cy.contains('button', 'Upload Document').click();
+      cy.contains('button', 'Add Document').click();
 
       const dropzone = cy.get('[role="dialog"]').contains('Drag & drop files here').parent().parent();
 
@@ -147,9 +147,9 @@ describe('<CaseDocuments />', () => {
           <CaseDocuments caseId={caseId} documents={[]} onUpdate={onUpdate} isCaseFinalised={false} />,
           mountOpts
       );
-      cy.contains('button', 'Upload Document').click();
+      cy.contains('button', 'Add Document').click();
       cy.get('#file-upload-input').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'upload.pdf' }, { force: true });
-      cy.get('[role="dialog"]').contains('button', 'Upload').click();
+      cy.get('.MuiDialogActions-root').contains('button', 'Upload').click();
 
       cy.wait('@uploadRequest');
       cy.get('@onUpdate').should('have.been.calledOnce');
@@ -163,9 +163,9 @@ describe('<CaseDocuments />', () => {
           <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
           mountOpts
       );
-      cy.contains('button', 'Upload Document').click({ force: true });
+      cy.contains('button', 'Add Document').click({ force: true });
       cy.get('#file-upload-input').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'big.pdf' }, { force: true });
-      cy.get('[role="dialog"]').contains('button', 'Upload').click();
+      cy.get('.MuiDialogActions-root').contains('button', 'Upload').click();
 
       cy.wait('@uploadRequest');
       cy.contains('Server is on fire').should('be.visible');
@@ -267,7 +267,7 @@ describe('<CaseDocuments />', () => {
         mountOpts
       );
 
-      cy.contains('button', 'Upload Document').click();
+      cy.contains('button', 'Add Document').click();
 
       cy.get('#file-upload-input').selectFile({
         contents: Cypress.Buffer.from('file content'),
@@ -279,7 +279,7 @@ describe('<CaseDocuments />', () => {
         cy.get('input[value="original-name"]').clear().type('new-cool-name');
       });
 
-      cy.get('[role="dialog"]').contains('button', 'Upload').click();
+      cy.get('.MuiDialogActions-root').contains('button', 'Upload').click();
       
       cy.wait('@uploadRequest').then((interception) => {
         cy.get('@onUpdate').should('have.been.calledOnce');
@@ -294,6 +294,92 @@ describe('<CaseDocuments />', () => {
             expect(file.name).to.equal('new-cool-name.pdf');
           }
         }
+      });
+    });
+
+    context('Paste Text tab', () => {
+      it('shows paste tab with name field and textarea', () => {
+        cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+        );
+        cy.contains('button', 'Add Document').click();
+        cy.contains('[role="tab"]', 'Paste Text').click();
+        cy.get('[role="dialog"]').find('input').filter(':visible').should('exist');
+        cy.get('[role="dialog"]').find('textarea').filter(':visible').should('exist');
+      });
+
+      it('keeps Create button disabled until both fields are filled', () => {
+        cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+        );
+        cy.contains('button', 'Add Document').click();
+        cy.contains('[role="tab"]', 'Paste Text').click();
+        cy.get('[role="dialog"]').contains('button', 'Create').should('be.disabled');
+        cy.get('[role="dialog"]').find('input').filter(':visible').first().type('My Report');
+        cy.get('[role="dialog"]').contains('button', 'Create').should('be.disabled');
+      });
+
+      it('submits pasted text as a .txt file and calls onUpdate', () => {
+        cy.intercept('POST', `/api/cases/${caseId}/documents`, {
+          statusCode: 201, body: [{
+            id: 'txt-doc-1',
+            filename: 'My Report.txt',
+            file_type: '.txt',
+            status: 'Processing',
+            extracted_text: null,
+            uploaded_at: '2026-06-27T10:00:00Z',
+            redactions: []
+          }]
+        }).as('createRequest');
+        const onUpdate = cy.stub().as('onUpdate');
+        cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={onUpdate} isCaseFinalised={false} />,
+          mountOpts
+        );
+        cy.contains('button', 'Add Document').click();
+        cy.contains('[role="tab"]', 'Paste Text').click();
+        cy.get('[role="dialog"]').find('input').filter(':visible').type('My Report');
+        cy.get('[role="dialog"]').find('textarea').first().type('Some document content here.');
+        cy.get('[role="dialog"]').contains('button', 'Create').click();
+
+        cy.wait('@createRequest');
+        cy.get('@onUpdate').should('have.been.calledOnce');
+        cy.contains('Document created successfully.').should('be.visible');
+      });
+
+      it('shows error toast when paste submission fails', () => {
+        cy.intercept('POST', `/api/cases/${caseId}/documents`, { statusCode: 500 }).as('createRequest');
+        cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+        );
+        cy.contains('button', 'Add Document').click();
+        cy.contains('[role="tab"]', 'Paste Text').click();
+        cy.get('[role="dialog"]').find('input').filter(':visible').type('Bad Doc');
+        cy.get('[role="dialog"]').find('textarea').first().type('Some text.');
+        cy.get('[role="dialog"]').contains('button', 'Create').click();
+
+        cy.wait('@createRequest');
+        cy.contains('Failed to upload document(s). Please try again.').should('be.visible');
+      });
+
+      it('resets paste fields when dialog is closed and reopened', () => {
+        cy.fullMount(
+          <CaseDocuments caseId={caseId} documents={[]} onUpdate={() => {}} isCaseFinalised={false} />,
+          mountOpts
+        );
+        cy.contains('button', 'Add Document').click();
+        cy.contains('[role="tab"]', 'Paste Text').click();
+        cy.get('[role="dialog"]').find('input').filter(':visible').type('Draft');
+        cy.get('[role="dialog"]').find('textarea').first().type('Draft content.');
+        cy.get('[role="dialog"]').contains('button', 'Cancel').click();
+
+        cy.contains('button', 'Add Document').click();
+        cy.contains('[role="tab"]', 'Paste Text').click();
+        cy.get('[role="dialog"]').find('input').filter(':visible').should('have.value', '');
+        cy.get('[role="dialog"]').find('textarea').first().should('have.value', '');
       });
     });
 
