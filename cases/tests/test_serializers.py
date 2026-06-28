@@ -151,13 +151,23 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         )
 
     def test_document_serializer_rejects_unsupported_extension(self):
-        """Test that non-.docx/.pdf extensions are rejected."""
-        txt_file = SimpleUploadedFile("report.txt", b"content")
-        data = {"case": self.case.pk, "original_file": txt_file}
+        """Test that non-.docx/.pdf/.txt extensions are rejected."""
+        csv_file = SimpleUploadedFile("report.csv", b"col1,col2\n1,2")
+        data = {"case": self.case.pk, "original_file": csv_file}
 
         serializer = DocumentSerializer(data=data)
         self.assertFalse(serializer.is_valid())
         self.assertIn("original_file", serializer.errors)
+
+    def test_document_serializer_accepts_txt_extension(self):
+        """Test that .txt files are accepted."""
+        txt_file = SimpleUploadedFile(
+            "report.txt", b"Some plain text content."
+        )
+        data = {"case": self.case.pk, "original_file": txt_file}
+
+        serializer = DocumentSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_document_serializer_rejects_mismatched_mime(self):
         """Test that a file whose content doesn't match its extension is rejected."""

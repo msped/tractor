@@ -37,7 +37,7 @@ class CaseSerializer(serializers.ModelSerializer):
         ]
 
 
-_ALLOWED_EXTENSIONS = {".docx", ".pdf"}
+_ALLOWED_EXTENSIONS = {".docx", ".pdf", ".txt"}
 # DOCX is a ZIP container — filetype identifies it as application/zip
 _MIME_TO_EXT = {
     "application/pdf": ".pdf",
@@ -83,6 +83,8 @@ class DocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "File exceeds the 100 MB size limit."
             )
+        if ext == ".txt":
+            return file
         header = file.read(261)
         file.seek(0)
         kind = filetype.guess(header)

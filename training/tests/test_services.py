@@ -898,6 +898,53 @@ class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(structure, [])
 
 
+class ExtractEntitiesTxtPathTests(NetworkBlockerMixin, TestCase):
+    def test_txt_file_reads_content_and_runs_pipeline(self):
+        """TXT files bypass DOCX/PDF extraction and feed content directly into the pipeline."""
+        content = "PC John Smith attended the scene."
+        entity = {
+            "text": "John Smith",
+            "label": "THIRD_PARTY",
+            "start_char": 3,
+            "end_char": 13,
+        }
+        pipeline = ExtractionPipeline(stages=[lambda text: [entity]])
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".txt", delete=False, mode="w", encoding="utf-8"
+        ) as f:
+            f.write(content)
+            path = f.name
+        try:
+            ner_text, results, tables, structure = extract_entities_from_text(
+                path, pipeline=pipeline
+            )
+            self.assertEqual(ner_text, content)
+            self.assertEqual(results, [entity])
+            self.assertEqual(tables, [])
+            self.assertIsNone(structure)
+        finally:
+            os.remove(path)
+
+    def test_empty_txt_file_returns_empty(self):
+        """An empty TXT file returns the same empty result as other empty documents."""
+        pipeline = ExtractionPipeline(stages=[lambda text: []])
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".txt", delete=False, mode="w", encoding="utf-8"
+        ) as f:
+            f.write("   ")
+            path = f.name
+        try:
+            ner_text, results, tables, structure = extract_entities_from_text(
+                path, pipeline=pipeline
+            )
+            self.assertEqual(ner_text, "")
+            self.assertEqual(results, [])
+        finally:
+            os.remove(path)
+
+
 class ExtractDocumentStructureTests(NetworkBlockerMixin, TestCase):
     def test_non_docx_returns_none(self):
         result = extract_document_structure("/some/file.pdf")

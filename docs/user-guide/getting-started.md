@@ -39,17 +39,26 @@ The case reference can be up to 6 characters (alphanumeric), however can be chan
 
 Once these fields are complete, you can click the button 'Create Case' which will redirect you the case page.
 
-## Uploading Documents
+## Adding Documents
 
-After navigating to the cases page of the case you would like to upload documents to, underneath the Case information you will see a section for the case documents.
+After navigating to the cases page of the case you would like to add documents to, underneath the Case information you will see a section for the case documents.
 
-To upload new documents, click on 'Upload Document' on the top right of this section. A modal will open and give you the option to either drag and drop the files into the area, or clicking in the area will open the file browser to select files.
+To add a new document, click 'Add Document' on the top right of this section. A modal will open with two tabs:
 
-The current supported documents are docx and PDF.
+### Upload File
 
-Once either the files are selected, or files are dropped into the area, they will appear at the bottom of the modal where you are given the chance to name file on the system. The orginal file will always retain it's original file name.
+Drag and drop files into the area, or click to open the file browser. Supported formats are DOCX and PDF.
 
-Once you are happy, click 'Upload Document' and the modal will close where you will see it appear under 'Case Documents' with the status of 'Processing'.
+Once files are selected they will appear below the drop area, where you can rename each file before it is saved. Click 'Upload' to submit — the modal will close and the document will appear under 'Case Documents' with the status of 'Processing'.
+
+### Paste Text (Alpha)
+
+!!! warning
+    This feature is in alpha. Behaviour when pasting from certain systems may be unpredictable.
+
+If you have text you want to analyse without a file, switch to the 'Paste Text' tab. Enter a document name, paste the content into the text area, and click 'Create'.
+
+The content is processed through the same NER pipeline as uploaded documents. Note that **table formatting is not preserved** — if your source document contains tables, the text within them will be extracted as plain text only.
 
 ## Next Steps
 

@@ -93,6 +93,7 @@ class TrainingDocumentModelTests(NetworkBlockerMixin, TestCase):
         self.assertFalse(doc.processed)
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingEntityModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         user = User.objects.create_user(
@@ -103,6 +104,9 @@ class TrainingEntityModelTests(NetworkBlockerMixin, TestCase):
             original_file=SimpleUploadedFile("entities.docx", b"content"),
             created_by=user,
         )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
 
     def test_training_entity_str(self):
         entity = TrainingEntity.objects.create(
@@ -115,6 +119,7 @@ class TrainingEntityModelTests(NetworkBlockerMixin, TestCase):
         self.assertIn("(DocForEntities)", str(entity))
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
         self.model = Model.objects.create(
@@ -133,6 +138,9 @@ class TrainingRunModelTests(NetworkBlockerMixin, TestCase):
             original_file=SimpleUploadedFile("training.docx", b"content"),
             created_by=user,
         )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
 
     def test_training_run_str(self):
         run = TrainingRun.objects.create(model=self.model, source="redactions")

@@ -12,6 +12,7 @@ import {
     CircularProgress 
 } from '@mui/material';
 import ArticleIcon from '@mui/icons-material/Article';
+import SubjectIcon from '@mui/icons-material/Subject';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -127,7 +128,9 @@ export const DocumentListItem = ({
                 </Stack>
             }
         >
-            <ListItemIcon><ArticleIcon /></ListItemIcon>
+            <ListItemIcon>
+                {doc.file_type === '.txt' ? <SubjectIcon /> : <ArticleIcon />}
+            </ListItemIcon>
             <ListItemText
                 primary={
                     <Stack direction="row" spacing={2} alignItems="center">
