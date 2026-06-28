@@ -10,12 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `Document.start_processing()` method to transition a document into processing state and dispatch the async task
+- Paste Text tab (alpha) on the Add Document dialog — allows creating a document by pasting plain text directly, without uploading a file. The pasted content is stored as a `.txt` file and processed through the same NER pipeline as uploaded documents. Table formatting is not preserved.
 
 ### Fixed
 
 - Admin-only UI elements (Retention Review nav item, API Keys, LLM Prompt Settings, and Retention Settings cards) not appearing until a hard page refresh after logging in. Root causes: (1) the `customSession` plugin renamed `isAdmin` → `is_admin`, causing a mismatch with the raw field name stored in better-auth's JWE cookie cache; (2) better-auth's `atomListeners` does not include the custom `/sign-in/username` endpoint, so `useSession()` was never notified to re-fetch after login. Fixed by keeping the field as `isAdmin` throughout and explicitly calling `authClient.$store.notify("$sessionSignal")` after a successful login.
 - SpanCat training now extracts highlighted text from table cells in training documents, not just body paragraphs. Previously, any annotations in occurrence report tables (e.g. Link/No columns, involved-officer blocks) were silently ignored.
 - Data subject name filter now handles inverted name formats (e.g. "COOPER, ALEX" in a document matching the stored name "Alex Cooper") using word-set subset comparison.
+- Training Documents now use media settings overide to stop test data being uploaded to the directroy.
 
 ### Changed
 
