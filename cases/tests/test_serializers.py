@@ -161,7 +161,9 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
 
     def test_document_serializer_accepts_txt_extension(self):
         """Test that .txt files are accepted."""
-        txt_file = SimpleUploadedFile("report.txt", b"Some plain text content.")
+        txt_file = SimpleUploadedFile(
+            "report.txt", b"Some plain text content."
+        )
         data = {"case": self.case.pk, "original_file": txt_file}
 
         serializer = DocumentSerializer(data=data)
