@@ -384,6 +384,10 @@ class DocumentExportSettings(SingletonModel):
         "verdana": "Verdana, sans-serif",
     }
 
+    class DisclosureStyle(models.TextChoices):
+        BARS = "bars", "Black Bars"
+        REMOVAL = "removal", "Remove Text"
+
     header_text = models.CharField(max_length=500, blank=True, default="")
     footer_text = models.CharField(max_length=500, blank=True, default="")
     watermark_text = models.CharField(max_length=200, blank=True, default="")
@@ -391,6 +395,11 @@ class DocumentExportSettings(SingletonModel):
     page_numbers_enabled = models.BooleanField(default=False)
     font_family = models.CharField(
         max_length=50, choices=FontFamily, default=FontFamily.ARIAL
+    )
+    disclosure_style = models.CharField(
+        max_length=20,
+        choices=DisclosureStyle.choices,
+        default=DisclosureStyle.BARS,
     )
 
     @property

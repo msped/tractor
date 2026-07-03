@@ -516,10 +516,73 @@ def find_and_flag_matching_text_in_case(redaction_id):
                 )
 
 
+_REMOVAL_MARKER = '<span style="white-space: nowrap;">[...]</span>'
+
+# Characters that count as "nothing" between two adjacent redactions and
+# cause them to be merged into a single [...].  Whitespace plus common
+# punctuation separators (commas, colons, semicolons, hyphens, slashes…)
+# so that e.g. "[name], [address]" becomes a single [...].
+_REMOVAL_GAP_CHARS = frozenset(" \t\n\r\f\v,.:;-/&|()'\"")
+
+
+def _is_separator_gap(text):
+    return bool(text) and all(c in _REMOVAL_GAP_CHARS for c in text)
+
+
+def _merge_spans_for_removal(full_text, seg_start, seg_end, sorted_redactions):
+    """Collapse overlapping/adjacent redaction spans into merged (start, end) pairs.
+
+    Two spans are merged when the gap between them is empty, pure whitespace,
+    or consists solely of punctuation/separator characters (so that constructs
+    like "[name], [address]" collapse to a single [...]).
+    """
+    spans = []
+    for r in sorted_redactions:
+        if r.end_char <= seg_start or r.start_char >= seg_end:
+            continue
+        r_start = max(r.start_char, seg_start)
+        r_end = min(r.end_char, seg_end)
+        while r_start > seg_start and full_text[r_start - 1] in {"#"}:
+            r_start -= 1
+        if not spans:
+            spans.append([r_start, r_end])
+        else:
+            gap = full_text[spans[-1][1] : r_start]
+            if r_start <= spans[-1][1] or not gap.strip() or _is_separator_gap(gap):
+                spans[-1][1] = max(spans[-1][1], r_end)
+            else:
+                spans.append([r_start, r_end])
+    return spans
+
+
+def _cell_fully_redacted(full_text, seg_start, seg_end, sorted_redactions):
+    """Return True if every non-whitespace character in [seg_start, seg_end) is covered by a redaction."""
+    if seg_start >= seg_end:
+        return False  # empty cell — nothing to redact, treat as unredacted
+    merged = _merge_spans_for_removal(full_text, seg_start, seg_end, sorted_redactions)
+    prev = seg_start
+    for r_start, r_end in merged:
+        if full_text[prev:r_start].strip():
+            return False
+        prev = r_end
+    return not full_text[prev:seg_end].strip()
+
+
 def _apply_redactions_to_segment(
     full_text, start, end, sorted_redactions, mode
 ):
     """Apply accepted redactions to a text segment and return an HTML string with redaction spans."""
+    if mode == "removal":
+        merged = _merge_spans_for_removal(full_text, start, end, sorted_redactions)
+        parts = []
+        prev = start
+        for r_start, r_end in merged:
+            parts.append(html_escape(full_text[prev:r_start]))
+            parts.append(_REMOVAL_MARKER)
+            prev = r_end
+        parts.append(html_escape(full_text[prev:end]))
+        return "".join(parts)
+
     parts = []
     prev = start
 
@@ -622,6 +685,19 @@ def _render_table_with_redactions(
         num_cols = max((cell["col"] for cell in cells), default=0) + 1
         col_widths = [round(100 / num_cols, 2)] * num_cols
 
+    if mode == "removal":
+        all_redacted = all(
+            _cell_fully_redacted(
+                full_text, cell["start"], cell["end"], sorted_redactions
+            )
+            for cell in cells
+            if not cell.get("isMergedContinuation", False)
+        )
+        if all_redacted:
+            return ""
+
+    num_cols = max((cell["col"] for cell in cells), default=0) + 1
+
     table_html = '<table style="border-collapse: collapse; width: 100%; margin: 1em 0; table-layout: fixed;">'
     table_html += "<colgroup>"
     for w in col_widths:
@@ -630,9 +706,49 @@ def _render_table_with_redactions(
         )
     table_html += "</colgroup>"
 
+    prev_row_all_redacted = False
     for row_idx in sorted(rows_dict.keys()):
         row_cells = rows_dict[row_idx]
+
+        if mode == "removal":
+            active_cells = [
+                cell for cell in row_cells.values()
+                if not cell.get("isMergedContinuation", False)
+            ]
+            row_all_redacted = bool(active_cells) and all(
+                _cell_fully_redacted(
+                    full_text, cell["start"], cell["end"], sorted_redactions
+                )
+                for cell in active_cells
+            )
+            if row_all_redacted:
+                if not prev_row_all_redacted:
+                    # First row in this all-redacted block: [...] in first cell only
+                    table_html += "<tr>"
+                    emit_marker = True
+                    for col_idx in sorted(row_cells.keys()):
+                        cell = row_cells[col_idx]
+                        if cell.get("isMergedContinuation", False):
+                            continue
+                        colspan = cell.get("colspan", 1)
+                        rowspan = cell.get("rowspan", 1)
+                        cell_style = cell.get("style", "padding: 6px 8px;")
+                        span_attrs = ""
+                        if colspan > 1:
+                            span_attrs += f' colspan="{colspan}"'
+                        if rowspan > 1:
+                            span_attrs += f' rowspan="{rowspan}"'
+                        content = _REMOVAL_MARKER if emit_marker else ""
+                        emit_marker = False
+                        table_html += f'<td{span_attrs} style="{cell_style}">{content}</td>'
+                    table_html += "</tr>"
+                # Subsequent consecutive all-redacted rows are skipped entirely
+                prev_row_all_redacted = True
+                continue
+            prev_row_all_redacted = False
+
         table_html += "<tr>"
+        in_redacted_run = False
         for col_idx in sorted(row_cells.keys()):
             cell = row_cells[col_idx]
             if cell.get("isMergedContinuation", False):
@@ -640,14 +756,21 @@ def _render_table_with_redactions(
             colspan = cell.get("colspan", 1)
             rowspan = cell.get("rowspan", 1)
             cell_style = cell.get("style", "padding: 6px 8px;")
-            cell_content = _apply_redactions_to_segment(
-                full_text, cell["start"], cell["end"], sorted_redactions, mode
-            )
             span_attrs = ""
             if colspan > 1:
                 span_attrs += f' colspan="{colspan}"'
             if rowspan > 1:
                 span_attrs += f' rowspan="{rowspan}"'
+            if mode == "removal" and _cell_fully_redacted(
+                full_text, cell["start"], cell["end"], sorted_redactions
+            ):
+                cell_content = "" if in_redacted_run else _REMOVAL_MARKER
+                in_redacted_run = True
+            else:
+                cell_content = _apply_redactions_to_segment(
+                    full_text, cell["start"], cell["end"], sorted_redactions, mode
+                )
+                in_redacted_run = False
             table_html += (
                 f'<td{span_attrs} style="{cell_style}">{cell_content}</td>'
             )
@@ -732,6 +855,30 @@ def _build_export_css(settings, case_reference=""):
     )
 
 
+def _suppress_isolated_markers(segment, mode):
+    """Drop any line whose only content is [...] marker(s) with no alphanumeric text.
+
+    Applied to rendered text-block segments in removal mode so that a
+    fully-redacted bullet item or standalone paragraph doesn't leave a lone
+    [...] floating on its own line.  Uses isalpha()/isdigit() rather than a
+    fixed character set so that any bullet glyph (including DOCX private-use-
+    area chars like \\uf0b7) is correctly treated as non-content.
+    """
+    if mode != "removal" or _REMOVAL_MARKER not in segment:
+        return segment
+
+    filtered = []
+    for line in segment.split("\n"):
+        if _REMOVAL_MARKER not in line:
+            filtered.append(line)
+        else:
+            remainder = line.replace(_REMOVAL_MARKER, "")
+            if any(c.isalpha() or c.isdigit() for c in remainder):
+                filtered.append(line)
+            # else: line has no letters or digits beyond the marker → drop it
+    return "\n".join(filtered)
+
+
 def _build_document_html(
     document, mode="disclosure", export_settings=None, case_reference=""
 ):
@@ -782,10 +929,16 @@ def _build_document_html(
         ner_end = table["ner_end"]
 
         if prev_pos < ner_start:
-            segment = _apply_redactions_to_segment(
-                text, prev_pos, ner_start, sorted_redactions, mode
-            )
-            html_parts.append(f'<div class="text-block">{segment}</div>')
+            if not (
+                mode == "removal"
+                and _cell_fully_redacted(text, prev_pos, ner_start, sorted_redactions)
+            ):
+                segment = _apply_redactions_to_segment(
+                    text, prev_pos, ner_start, sorted_redactions, mode
+                )
+                segment = _suppress_isolated_markers(segment, mode)
+                if segment.strip():
+                    html_parts.append(f'<div class="text-block">{segment}</div>')
 
         html_parts.append(
             _render_table_with_redactions(table, text, sorted_redactions, mode)
@@ -795,10 +948,16 @@ def _build_document_html(
         )  # +1 to skip the newline separator after the table
 
     if prev_pos < len(text):
-        segment = _apply_redactions_to_segment(
-            text, prev_pos, len(text), sorted_redactions, mode
-        )
-        html_parts.append(f'<div class="text-block">{segment}</div>')
+        if not (
+            mode == "removal"
+            and _cell_fully_redacted(text, prev_pos, len(text), sorted_redactions)
+        ):
+            segment = _apply_redactions_to_segment(
+                text, prev_pos, len(text), sorted_redactions, mode
+            )
+            segment = _suppress_isolated_markers(segment, mode)
+            if segment.strip():
+                html_parts.append(f'<div class="text-block">{segment}</div>')
 
     body_content = "".join(html_parts)
 
@@ -913,9 +1072,15 @@ def export_case_documents(case_id):
                 ) as f:
                     f.write(redacted_pdf_content)
 
+            disclosure_mode = (
+                "removal"
+                if export_settings.disclosure_style
+                == DocumentExportSettings.DisclosureStyle.REMOVAL
+                else "disclosure"
+            )
             disclosure_pdf_content = _generate_pdf_from_document(
                 doc,
-                mode="disclosure",
+                mode=disclosure_mode,
                 export_settings=export_settings,
                 case_reference=case.case_reference,
             )

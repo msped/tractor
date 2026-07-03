@@ -38,6 +38,7 @@ export const DocumentExportSettingsCard = () => {
     const [watermarkIncludeCaseRef, setWatermarkIncludeCaseRef] = useState(false);
     const [pageNumbersEnabled, setPageNumbersEnabled] = useState(false);
     const [fontFamily, setFontFamily] = useState('arial');
+    const [disclosureStyle, setDisclosureStyle] = useState('bars');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [configureOpen, setConfigureOpen] = useState(false);
 
@@ -49,6 +50,7 @@ export const DocumentExportSettingsCard = () => {
             setWatermarkIncludeCaseRef(data.watermark_include_case_ref ?? false);
             setPageNumbersEnabled(data.page_numbers_enabled ?? false);
             setFontFamily(data.font_family ?? 'arial');
+            setDisclosureStyle(data.disclosure_style ?? 'bars');
         }
     }, [data]);
 
@@ -63,6 +65,7 @@ export const DocumentExportSettingsCard = () => {
             setWatermarkIncludeCaseRef(data.watermark_include_case_ref ?? false);
             setPageNumbersEnabled(data.page_numbers_enabled ?? false);
             setFontFamily(data.font_family ?? 'arial');
+            setDisclosureStyle(data.disclosure_style ?? 'bars');
         }
     };
 
@@ -76,6 +79,7 @@ export const DocumentExportSettingsCard = () => {
                 watermark_include_case_ref: watermarkIncludeCaseRef,
                 page_numbers_enabled: pageNumbersEnabled,
                 font_family: fontFamily,
+                disclosure_style: disclosureStyle,
             });
             toast.success('Export settings saved.');
             setConfigureOpen(false);
@@ -146,6 +150,25 @@ export const DocumentExportSettingsCard = () => {
                                     <MenuItem value="verdana">Verdana</MenuItem>
                                 </Select>
                             </FormControl>
+                            <FormControl fullWidth size="small">
+                                <InputLabel id="disclosure-style-label">Disclosure style</InputLabel>
+                                <Select
+                                    labelId="disclosure-style-label"
+                                    label="Disclosure style"
+                                    value={disclosureStyle}
+                                    onChange={(e) => setDisclosureStyle(e.target.value)}
+                                    inputProps={{ 'aria-label': 'disclosure style' }}
+                                >
+                                    <MenuItem value="bars">Black bars</MenuItem>
+                                    <MenuItem value="removal">Remove text ([...])</MenuItem>
+                                </Select>
+                            </FormControl>
+                            {disclosureStyle === 'removal' && (
+                                <Typography variant="caption" color="text.secondary">
+                                    The in-browser document preview always shows colour-highlighted redactions.
+                                    The removal style only takes effect in the exported disclosure PDF.
+                                </Typography>
+                            )}
                             <FormControlLabel
                                 control={
                                     <Switch
