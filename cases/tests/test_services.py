@@ -552,7 +552,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
 
     def test_build_document_html_removal_mode_own_line_marker_suppressed(self):
         """A redaction that occupies its own line (no surrounding text on that line) is dropped."""
-        self.document.extracted_text = "Involved persons:\nJohn Smith\nOccurrence log:"
+        self.document.extracted_text = (
+            "Involved persons:\nJohn Smith\nOccurrence log:"
+        )
         self.document.save()
         Redaction.objects.create(
             document=self.document,
@@ -568,7 +570,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIn("Involved persons", html)
         self.assertIn("Occurrence log", html)
 
-    def test_build_document_html_removal_mode_bullet_only_line_suppressed(self):
+    def test_build_document_html_removal_mode_bullet_only_line_suppressed(
+        self,
+    ):
         """A bullet point whose only content is a redaction is dropped entirely."""
         self.document.extracted_text = (
             "Involved persons:\n• John Smith\n• Jane Doe\nOccurrence log:"
@@ -597,7 +601,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIn("Involved persons", html)
         self.assertIn("Occurrence log", html)
 
-    def test_build_document_html_removal_mode_isolated_mid_segment_suppressed(self):
+    def test_build_document_html_removal_mode_isolated_mid_segment_suppressed(
+        self,
+    ):
         """A lone [...] appearing mid-segment on its own line is dropped."""
         self.document.extracted_text = (
             "Some text here.\nJohn Smith\nMore text below."
@@ -617,7 +623,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIn("Some text here", html)
         self.assertIn("More text below", html)
 
-    def test_build_document_html_removal_mode_fully_redacted_block_suppressed(self):
+    def test_build_document_html_removal_mode_fully_redacted_block_suppressed(
+        self,
+    ):
         """A text block that is entirely redacted is omitted in removal mode."""
         self.document.extracted_text = "John Smith"
         self.document.save()
@@ -710,7 +718,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             SimpleNamespace(start_char=0, end_char=4),
             SimpleNamespace(start_char=5, end_char=8),
         ]
-        result = _render_table_with_redactions(table_data, text, redactions, "removal")
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
         self.assertEqual(result, "")
 
     def test_render_table_removal_partial_redaction_keeps_table(self):
@@ -725,7 +735,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             ],
         }
         redactions = [SimpleNamespace(start_char=0, end_char=4)]
-        result = _render_table_with_redactions(table_data, text, redactions, "removal")
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
         self.assertIn("<table", result)
 
     def test_render_table_removal_mixed_rows_collapses_redacted_rows(self):
@@ -744,15 +756,17 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             ],
         }
         redactions = [
-            SimpleNamespace(start_char=0, end_char=4),   # "Name"
-            SimpleNamespace(start_char=11, end_char=15), # "John"
-            SimpleNamespace(start_char=16, end_char=21), # "Smith"
+            SimpleNamespace(start_char=0, end_char=4),  # "Name"
+            SimpleNamespace(start_char=11, end_char=15),  # "John"
+            SimpleNamespace(start_char=16, end_char=21),  # "Smith"
         ]
-        result = _render_table_with_redactions(table_data, text, redactions, "removal")
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
         self.assertIn("<table", result)
         # Row 0: col 0 redacted → [...], col 1 unredacted → text
         # Row 1: all redacted, prev row not all-redacted → first cell [...], second cell empty
-        self.assertNotIn('colspan=', result)
+        self.assertNotIn("colspan=", result)
         self.assertEqual(result.count("[...]"), 2)
 
     def test_render_table_removal_cell_run_first_gets_marker_rest_empty(self):
@@ -771,7 +785,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             SimpleNamespace(start_char=0, end_char=4),
             SimpleNamespace(start_char=5, end_char=10),
         ]
-        result = _render_table_with_redactions(table_data, text, redactions, "removal")
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
         self.assertIn("<table", result)
         self.assertEqual(result.count("[...]"), 1)
         self.assertIn("DOB", result)
@@ -795,10 +811,14 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             SimpleNamespace(start_char=11, end_char=15),
             SimpleNamespace(start_char=16, end_char=19),
         ]
-        result = _render_table_with_redactions(table_data, text, redactions, "removal")
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
         self.assertEqual(result, "")
 
-    def test_render_table_removal_partial_table_first_redacted_row_shows_marker(self):
+    def test_render_table_removal_partial_table_first_redacted_row_shows_marker(
+        self,
+    ):
         """In a mixed table, the first all-redacted row shows [...] in col 0; a second
         consecutive all-redacted row is skipped."""
         text = "John\tSmith\nJane\tDoe\nNotes\n"
@@ -821,7 +841,9 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             SimpleNamespace(start_char=11, end_char=15),
             SimpleNamespace(start_char=16, end_char=19),
         ]
-        result = _render_table_with_redactions(table_data, text, redactions, "removal")
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
         self.assertIn("<table", result)
         # Two consecutive all-redacted rows → only one [...] emitted for the first
         self.assertEqual(result.count("[...]"), 1)
@@ -832,18 +854,23 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         """When disclosure_style is 'removal', the disclosure PDF uses removal mode."""
         mock_generate_pdf.return_value = b"mock pdf content"
         settings = DocumentExportSettings.get()
-        settings.disclosure_style = DocumentExportSettings.DisclosureStyle.REMOVAL
+        settings.disclosure_style = (
+            DocumentExportSettings.DisclosureStyle.REMOVAL
+        )
         settings.save()
 
         export_case_documents(self.case.id)
 
         calls = mock_generate_pdf.call_args_list
-        disclosure_calls = [c for c in calls if c.kwargs.get("mode") == "removal"]
+        disclosure_calls = [
+            c for c in calls if c.kwargs.get("mode") == "removal"
+        ]
         self.assertTrue(len(disclosure_calls) >= 1)
 
         self.case.refresh_from_db()
         if self.case.export_file:
             import os
+
             if os.path.exists(self.case.export_file.path):
                 os.remove(self.case.export_file.path)
 

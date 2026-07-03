@@ -548,7 +548,11 @@ def _merge_spans_for_removal(full_text, seg_start, seg_end, sorted_redactions):
             spans.append([r_start, r_end])
         else:
             gap = full_text[spans[-1][1] : r_start]
-            if r_start <= spans[-1][1] or not gap.strip() or _is_separator_gap(gap):
+            if (
+                r_start <= spans[-1][1]
+                or not gap.strip()
+                or _is_separator_gap(gap)
+            ):
                 spans[-1][1] = max(spans[-1][1], r_end)
             else:
                 spans.append([r_start, r_end])
@@ -559,7 +563,9 @@ def _cell_fully_redacted(full_text, seg_start, seg_end, sorted_redactions):
     """Return True if every non-whitespace character in [seg_start, seg_end) is covered by a redaction."""
     if seg_start >= seg_end:
         return False  # empty cell — nothing to redact, treat as unredacted
-    merged = _merge_spans_for_removal(full_text, seg_start, seg_end, sorted_redactions)
+    merged = _merge_spans_for_removal(
+        full_text, seg_start, seg_end, sorted_redactions
+    )
     prev = seg_start
     for r_start, r_end in merged:
         if full_text[prev:r_start].strip():
@@ -573,7 +579,9 @@ def _apply_redactions_to_segment(
 ):
     """Apply accepted redactions to a text segment and return an HTML string with redaction spans."""
     if mode == "removal":
-        merged = _merge_spans_for_removal(full_text, start, end, sorted_redactions)
+        merged = _merge_spans_for_removal(
+            full_text, start, end, sorted_redactions
+        )
         parts = []
         prev = start
         for r_start, r_end in merged:
@@ -712,7 +720,8 @@ def _render_table_with_redactions(
 
         if mode == "removal":
             active_cells = [
-                cell for cell in row_cells.values()
+                cell
+                for cell in row_cells.values()
                 if not cell.get("isMergedContinuation", False)
             ]
             row_all_redacted = bool(active_cells) and all(
@@ -768,7 +777,11 @@ def _render_table_with_redactions(
                 in_redacted_run = True
             else:
                 cell_content = _apply_redactions_to_segment(
-                    full_text, cell["start"], cell["end"], sorted_redactions, mode
+                    full_text,
+                    cell["start"],
+                    cell["end"],
+                    sorted_redactions,
+                    mode,
                 )
                 in_redacted_run = False
             table_html += (
@@ -931,14 +944,18 @@ def _build_document_html(
         if prev_pos < ner_start:
             if not (
                 mode == "removal"
-                and _cell_fully_redacted(text, prev_pos, ner_start, sorted_redactions)
+                and _cell_fully_redacted(
+                    text, prev_pos, ner_start, sorted_redactions
+                )
             ):
                 segment = _apply_redactions_to_segment(
                     text, prev_pos, ner_start, sorted_redactions, mode
                 )
                 segment = _suppress_isolated_markers(segment, mode)
                 if segment.strip():
-                    html_parts.append(f'<div class="text-block">{segment}</div>')
+                    html_parts.append(
+                        f'<div class="text-block">{segment}</div>'
+                    )
 
         html_parts.append(
             _render_table_with_redactions(table, text, sorted_redactions, mode)
@@ -950,7 +967,9 @@ def _build_document_html(
     if prev_pos < len(text):
         if not (
             mode == "removal"
-            and _cell_fully_redacted(text, prev_pos, len(text), sorted_redactions)
+            and _cell_fully_redacted(
+                text, prev_pos, len(text), sorted_redactions
+            )
         ):
             segment = _apply_redactions_to_segment(
                 text, prev_pos, len(text), sorted_redactions, mode

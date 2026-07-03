@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('cases', '0019_auto_accept_workflow'),
+        ("cases", "0019_auto_accept_workflow"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='documentexportsettings',
-            name='disclosure_style',
-            field=models.CharField(choices=[('bars', 'Black Bars'), ('removal', 'Remove Text')], default='bars', max_length=20),
+            model_name="documentexportsettings",
+            name="disclosure_style",
+            field=models.CharField(
+                choices=[("bars", "Black Bars"), ("removal", "Remove Text")],
+                default="bars",
+                max_length=20,
+            ),
         ),
     ]
