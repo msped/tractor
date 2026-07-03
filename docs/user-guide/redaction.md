@@ -116,4 +116,9 @@ Once **all documents** in a case have been marked as complete:
 5. Click to download a ZIP file containing:
     - `unedited/` - Original documents in their original format
     - `redacted/` - Documents with colour-highlighted redactions (PDF)
-    - `disclosure/` - Documents with black-box redactions for disclosure (PDF)
+    - `disclosure/` - Documents with redactions applied for disclosure (PDF)
+
+The appearance of the disclosure PDF is controlled by the **Disclosure style** setting on the Settings page. With the default **Black bars** style, redacted text is replaced with solid black rectangles. With the **Remove text** style, redacted content is removed and replaced with `[...]` markers where appropriate, producing a less visually striking document for applicants.
+
+!!! note
+    The in-browser document preview always shows colour-highlighted redactions regardless of the disclosure style setting. To see the removal style in effect, you must generate and download a disclosure package.

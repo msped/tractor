@@ -40,6 +40,18 @@ The **Export font** dropdown controls the typeface used for all body text in exp
 
 All fonts in this list are cross-platform web-safe fonts that render consistently on Linux servers without any additional font installation. The default is **Arial**.
 
+### Disclosure Style
+
+The **Disclosure style** dropdown controls how accepted redactions appear in the `disclosure/` PDF inside the export package.
+
+| Option                  | Effect                                                                       |
+|-------------------------|------------------------------------------------------------------------------|
+| **Black bars**.         | Redacted text is replaced with a solid black rectangle. This is the default. |
+| **Remove text ([...])** | Redacted content is removed entirely. Where text has been removed within a sentence or paragraph, a `[...]` marker is inserted in its place. Isolated or fully-redacted blocks are suppressed without a marker to keep the document readable.         |
+
+!!! note
+    The in-browser document preview always shows colour-highlighted redactions regardless of which disclosure style is selected. The chosen style only takes effect in the exported PDF — you must generate a disclosure package to see the result.
+
 ### Saving
 
 Click **Save** to apply changes. The new settings take effect on the next export — previously generated ZIP packages are not retroactively updated.
@@ -92,10 +104,10 @@ A single recognizer can only be one type. Choose **Regex patterns** or **Deny li
 
 Each recognizer is assigned to one of two categories:
 
-| Entity type | Effect |
-|-------------|--------|
-| **Third-Party PII** | Matches are treated as third-party personal information, equivalent to an email address or NHS number detected by the built-in extractor. |
-| **Operational Data** | Matches are treated as operational references, equivalent to crime reference numbers or collar numbers. |
+| Entity type          | Effect                                                                                                                                    |
+|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| **Third-Party PII**  | Matches are treated as third-party personal information, equivalent to an email address or NHS number detected by the built-in extractor. |
+| **Operational Data** | Matches are treated as operational references, equivalent to crime reference numbers or collar numbers.                                   |
 
 ### Adding a recognizer
 
@@ -157,9 +169,9 @@ Tractor automatically calculates a retention date for every case based on the da
 
 Navigate to **Settings** and find the **Auto Case Deletion** card. It shows whether automatic daily deletion of overdue cases is currently active:
 
-| Status | Meaning |
-|--------|---------|
-| **Enabled** | Cases past their retention date are deleted automatically each day by a scheduled background task. |
+| Status       | Meaning                                                                                                                   |
+|--------------|---------------------------------------------------------------------------------------------------------------------------|
+| **Enabled**  | Cases past their retention date are deleted automatically each day by a scheduled background task.                        |
 | **Disabled** | No automatic deletion occurs. Administrators must review and delete overdue cases manually via the Retention Review page. |
 
 This setting is read-only in the UI — it reflects the value of the `AUTO_CASE_DELETION_ENABLED` environment variable. To change it you must update your deployment configuration and restart the worker.
@@ -209,7 +221,7 @@ Navigate to **Settings** and find the **API Keys** card.
 
 Include the key in the `Authorization` header of your HTTP requests:
 
-```
+```json
 Authorization: Api-Key <your-key>
 ```
 
