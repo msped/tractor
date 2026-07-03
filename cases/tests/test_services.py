@@ -4,6 +4,7 @@ import tempfile
 import uuid
 import zipfile
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 from dateutil.relativedelta import relativedelta
@@ -27,8 +28,10 @@ from ..services import (
     _apply_existing_case_decisions,
     _build_document_html,
     _build_export_css,
+    _cell_fully_redacted,
     _generate_pdf_from_document,
     _matches_data_subject,
+    _merge_spans_for_removal,
     _render_table_with_redactions,
     delete_cases_past_retention_date,
     delete_original_files_past_threshold,
@@ -465,6 +468,411 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         # The crime ref text should not appear outside a redaction span
         self.assertNotIn(">42/12345/24<", html)
         self.assertNotIn(">#42/12345/24<", html)
+
+    def test_merge_spans_for_removal_single(self):
+        """A single redaction produces one (start, end) pair."""
+        text = "Hello world foo bar"
+        r = SimpleNamespace(start_char=6, end_char=11)
+        spans = _merge_spans_for_removal(text, 0, len(text), [r])
+        self.assertEqual(spans, [[6, 11]])
+
+    def test_merge_spans_for_removal_adjacent_merged(self):
+        """Two redactions separated only by whitespace collapse into one span."""
+        text = "John Smith was here"
+        r1 = SimpleNamespace(start_char=0, end_char=4)
+        r2 = SimpleNamespace(start_char=5, end_char=10)
+        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
+        self.assertEqual(spans, [[0, 10]])
+
+    def test_merge_spans_for_removal_non_adjacent_separate(self):
+        """Two redactions with non-whitespace word text between them remain separate."""
+        text = "John went to London"
+        r1 = SimpleNamespace(start_char=0, end_char=4)
+        r2 = SimpleNamespace(start_char=13, end_char=19)
+        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
+        self.assertEqual(spans, [[0, 4], [13, 19]])
+
+    def test_merge_spans_for_removal_comma_separator_merged(self):
+        """Two redactions separated only by ', ' (comma+space) are merged."""
+        text = "John, Smith"
+        r1 = SimpleNamespace(start_char=0, end_char=4)
+        r2 = SimpleNamespace(start_char=6, end_char=11)
+        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
+        self.assertEqual(spans, [[0, 11]])
+
+    def test_merge_spans_for_removal_colon_separator_merged(self):
+        """Two redactions separated only by ': ' are merged."""
+        text = "LPU: Chester"
+        r1 = SimpleNamespace(start_char=0, end_char=3)
+        r2 = SimpleNamespace(start_char=5, end_char=12)
+        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
+        self.assertEqual(spans, [[0, 12]])
+
+    def test_merge_spans_for_removal_hash_expansion(self):
+        """A '#' immediately before a span is pulled into the merged region."""
+        text = "ref #42/12345 noted"
+        r = SimpleNamespace(start_char=5, end_char=13)
+        spans = _merge_spans_for_removal(text, 0, len(text), [r])
+        self.assertEqual(spans, [[4, 13]])
+
+    def test_build_document_html_removal_mode_inline(self):
+        """A redaction surrounded by text on both sides keeps its [...] marker."""
+        self.document.extracted_text = "The suspect John was arrested."
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=12,
+            end_char=16,
+            text="John",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        self.assertIn("[...]", html)
+        self.assertNotIn("John", html)
+
+    def test_build_document_html_removal_mode_leading_inline_marker_kept(self):
+        """A redaction at the start of a sentence (text follows on the same line) keeps [...]."""
+        self.document.extracted_text = "John was arrested."
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="John",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        # The marker is inline with " was arrested." on the same line → keep it
+        self.assertIn("[...]", html)
+        self.assertIn("was arrested", html)
+
+    def test_build_document_html_removal_mode_own_line_marker_suppressed(self):
+        """A redaction that occupies its own line (no surrounding text on that line) is dropped."""
+        self.document.extracted_text = (
+            "Involved persons:\nJohn Smith\nOccurrence log:"
+        )
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=18,
+            end_char=28,
+            text="John Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        self.assertNotIn("[...]", html)
+        self.assertIn("Involved persons", html)
+        self.assertIn("Occurrence log", html)
+
+    def test_build_document_html_removal_mode_bullet_only_line_suppressed(
+        self,
+    ):
+        """A bullet point whose only content is a redaction is dropped entirely."""
+        self.document.extracted_text = (
+            "Involved persons:\n• John Smith\n• Jane Doe\nOccurrence log:"
+        )
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=20,
+            end_char=30,
+            text="John Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        Redaction.objects.create(
+            document=self.document,
+            start_char=33,
+            end_char=41,
+            text="Jane Doe",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        # Both bullet lines are fully redacted — no [...] should appear
+        self.assertNotIn("[...]", html)
+        self.assertIn("Involved persons", html)
+        self.assertIn("Occurrence log", html)
+
+    def test_build_document_html_removal_mode_isolated_mid_segment_suppressed(
+        self,
+    ):
+        """A lone [...] appearing mid-segment on its own line is dropped."""
+        self.document.extracted_text = (
+            "Some text here.\nJohn Smith\nMore text below."
+        )
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=16,
+            end_char=26,
+            text="John Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        self.assertNotIn("[...]", html)
+        self.assertIn("Some text here", html)
+        self.assertIn("More text below", html)
+
+    def test_build_document_html_removal_mode_fully_redacted_block_suppressed(
+        self,
+    ):
+        """A text block that is entirely redacted is omitted in removal mode."""
+        self.document.extracted_text = "John Smith"
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=10,
+            text="John Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        self.assertNotIn("[...]", html)
+
+    def test_build_document_html_removal_mode_merges_adjacent_inline(self):
+        """Adjacent redactions at the start of a sentence merge to one and are kept inline."""
+        self.document.extracted_text = "John Smith was arrested."
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="John",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        Redaction.objects.create(
+            document=self.document,
+            start_char=5,
+            end_char=10,
+            text="Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        # Merged into one inline marker; " was arrested" follows on the same line → kept
+        self.assertEqual(html.count("[...]"), 1)
+        self.assertIn("was arrested", html)
+
+    def test_build_document_html_removal_mode_separate_inline_redactions(self):
+        """Two non-adjacent inline redactions in a sentence both produce [...] markers."""
+        self.document.extracted_text = "John went to London yesterday."
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="John",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        Redaction.objects.create(
+            document=self.document,
+            start_char=13,
+            end_char=19,
+            text="London",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+        )
+        html, _ = _build_document_html(self.document, mode="removal")
+        # Both redactions are inline within the same sentence → both markers kept
+        self.assertEqual(html.count("[...]"), 2)
+
+    def test_cell_fully_redacted_true(self):
+        """A cell whose entire non-whitespace content is covered returns True."""
+        text = "John Smith"
+        r1 = SimpleNamespace(start_char=0, end_char=4)
+        r2 = SimpleNamespace(start_char=5, end_char=10)
+        self.assertTrue(_cell_fully_redacted(text, 0, len(text), [r1, r2]))
+
+    def test_cell_fully_redacted_false(self):
+        """A cell with unredacted non-whitespace content returns False."""
+        text = "John went home"
+        r = SimpleNamespace(start_char=0, end_char=4)
+        self.assertFalse(_cell_fully_redacted(text, 0, len(text), [r]))
+
+    def test_render_table_removal_all_redacted_suppressed(self):
+        """A fully-redacted table in removal mode returns empty string."""
+        text = "Name\tDOB\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "Name", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "DOB", "start": 5, "end": 8},
+            ],
+        }
+        redactions = [
+            SimpleNamespace(start_char=0, end_char=4),
+            SimpleNamespace(start_char=5, end_char=8),
+        ]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertEqual(result, "")
+
+    def test_render_table_removal_partial_redaction_keeps_table(self):
+        """A partially-redacted table in removal mode keeps the table structure."""
+        text = "Name\tDOB\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "Name", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "DOB", "start": 5, "end": 8},
+            ],
+        }
+        redactions = [SimpleNamespace(start_char=0, end_char=4)]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertIn("<table", result)
+
+    def test_render_table_removal_mixed_rows_collapses_redacted_rows(self):
+        """Fully-redacted rows collapse to a single [...] cell; partial rows render normally."""
+        # Row 0: col0="Name" (redacted), col1="Notes" (not redacted)
+        # Row 1: col0="John" (redacted), col1="Smith" (redacted) — should collapse
+        text = "Name\tNotes\nJohn\tSmith\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "Name", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "Notes", "start": 5, "end": 10},
+                {"row": 1, "col": 0, "text": "John", "start": 11, "end": 15},
+                {"row": 1, "col": 1, "text": "Smith", "start": 16, "end": 21},
+            ],
+        }
+        redactions = [
+            SimpleNamespace(start_char=0, end_char=4),  # "Name"
+            SimpleNamespace(start_char=11, end_char=15),  # "John"
+            SimpleNamespace(start_char=16, end_char=21),  # "Smith"
+        ]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertIn("<table", result)
+        # Row 0: col 0 redacted → [...], col 1 unredacted → text
+        # Row 1: all redacted, prev row not all-redacted → first cell [...], second cell empty
+        self.assertNotIn("colspan=", result)
+        self.assertEqual(result.count("[...]"), 2)
+
+    def test_render_table_removal_cell_run_first_gets_marker_rest_empty(self):
+        """In a row with consecutive redacted cells, only the first gets [...]; the rest are empty."""
+        text = "John\tSmith\tDOB\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "John", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "Smith", "start": 5, "end": 10},
+                {"row": 0, "col": 2, "text": "DOB", "start": 11, "end": 14},
+            ],
+        }
+        redactions = [
+            SimpleNamespace(start_char=0, end_char=4),
+            SimpleNamespace(start_char=5, end_char=10),
+        ]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertIn("<table", result)
+        self.assertEqual(result.count("[...]"), 1)
+        self.assertIn("DOB", result)
+
+    def test_render_table_removal_all_rows_redacted_suppressed(self):
+        """A table where every row is fully redacted returns empty string."""
+        text = "John\tSmith\nJane\tDoe\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "John", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "Smith", "start": 5, "end": 10},
+                {"row": 1, "col": 0, "text": "Jane", "start": 11, "end": 15},
+                {"row": 1, "col": 1, "text": "Doe", "start": 16, "end": 19},
+            ],
+        }
+        redactions = [
+            SimpleNamespace(start_char=0, end_char=4),
+            SimpleNamespace(start_char=5, end_char=10),
+            SimpleNamespace(start_char=11, end_char=15),
+            SimpleNamespace(start_char=16, end_char=19),
+        ]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertEqual(result, "")
+
+    def test_render_table_removal_partial_table_first_redacted_row_shows_marker(
+        self,
+    ):
+        """In a mixed table, the first all-redacted row shows [...] in col 0; a second
+        consecutive all-redacted row is skipped."""
+        text = "John\tSmith\nJane\tDoe\nNotes\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "John", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "Smith", "start": 5, "end": 10},
+                {"row": 1, "col": 0, "text": "Jane", "start": 11, "end": 15},
+                {"row": 1, "col": 1, "text": "Doe", "start": 16, "end": 19},
+                {"row": 2, "col": 0, "text": "Notes", "start": 20, "end": 25},
+                {"row": 2, "col": 1, "text": "", "start": 25, "end": 25},
+            ],
+        }
+        # Only rows 0 and 1 are redacted; row 2 has unredacted content
+        redactions = [
+            SimpleNamespace(start_char=0, end_char=4),
+            SimpleNamespace(start_char=5, end_char=10),
+            SimpleNamespace(start_char=11, end_char=15),
+            SimpleNamespace(start_char=16, end_char=19),
+        ]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertIn("<table", result)
+        # Two consecutive all-redacted rows → only one [...] emitted for the first
+        self.assertEqual(result.count("[...]"), 1)
+        self.assertIn("Notes", result)
+
+    @patch("cases.services._generate_pdf_from_document")
+    def test_export_uses_removal_mode_when_configured(self, mock_generate_pdf):
+        """When disclosure_style is 'removal', the disclosure PDF uses removal mode."""
+        mock_generate_pdf.return_value = b"mock pdf content"
+        settings = DocumentExportSettings.get()
+        settings.disclosure_style = (
+            DocumentExportSettings.DisclosureStyle.REMOVAL
+        )
+        settings.save()
+
+        export_case_documents(self.case.id)
+
+        calls = mock_generate_pdf.call_args_list
+        disclosure_calls = [
+            c for c in calls if c.kwargs.get("mode") == "removal"
+        ]
+        self.assertTrue(len(disclosure_calls) >= 1)
+
+        self.case.refresh_from_db()
+        if self.case.export_file:
+            import os
+
+            if os.path.exists(self.case.export_file.path):
+                os.remove(self.case.export_file.path)
 
     def test_build_document_html_no_text_returns_none(self):
         """Returns (None, None) when the document has no extracted text."""

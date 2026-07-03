@@ -222,6 +222,7 @@ class DocumentExportSettingsSerializer(serializers.ModelSerializer):
             "watermark_include_case_ref",
             "page_numbers_enabled",
             "font_family",
+            "disclosure_style",
         ]
 
 
