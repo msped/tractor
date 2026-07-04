@@ -197,6 +197,10 @@ class TrainingDocumentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         uploaded_file = self.request.FILES.get("original_file")
+        if uploaded_file is None:
+            raise serializers.ValidationError(
+                "No file was provided in the request."
+            )
         if not uploaded_file.name.lower().endswith(".docx"):
             raise serializers.ValidationError(
                 "Only .docx files are supported."
