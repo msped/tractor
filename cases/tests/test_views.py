@@ -92,6 +92,20 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(self.case.export_status, Case.ExportStatus.PROCESSING)
         self.assertEqual(self.case.export_task_id, "test-task-id")
 
+    @patch("cases.models.async_task")
+    def test_case_export_already_processing_returns_409(self, mock_async_task):
+        """A second export request while one is running must not enqueue."""
+        self.document.status = Document.Status.COMPLETED
+        self.document.save()
+        self.case.export_status = Case.ExportStatus.PROCESSING
+        self.case.save()
+
+        url = reverse("case-export", kwargs={"case_id": self.case.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        mock_async_task.assert_not_called()
+
     def test_case_export_not_found(self):
         """Test CaseExportView with a non-existent case ID returns 404."""
         non_existent_uuid = uuid.uuid4()
@@ -547,6 +561,33 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertIsNone(self.document.extracted_structure)
         self.assertEqual(self.document.redactions.count(), 0)
 
+    def test_cancel_processing_dequeues_task(self):
+        """Cancelling removes the queued django-q task from the broker."""
+        from django_q.models import OrmQ
+        from django_q.tasks import async_task
+
+        OrmQ.objects.all().delete()
+        task_id = async_task(
+            "cases.tasks.process_document_and_create_redactions",
+            self.document.id,
+        )
+        self.document.status = Document.Status.PROCESSING
+        self.document.processing_task_id = task_id
+        self.document.save()
+        self.assertTrue(
+            any(q.task_id() == task_id for q in OrmQ.objects.all())
+        )
+
+        url = reverse(
+            "document-cancel", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            any(q.task_id() == task_id for q in OrmQ.objects.all())
+        )
+
     def test_cancel_processing_wrong_status(self):
         """Test cancelling a document that is not processing returns 400."""
         self.document.status = Document.Status.READY_FOR_REVIEW
@@ -779,6 +820,28 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 0)
+
+    def test_bulk_update_missing_is_accepted_returns_400(self):
+        """Omitting is_accepted must 400, not 500 on a null DB update."""
+        url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.patch(
+            url, {"ids": [str(self.r1.id)]}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.r1.refresh_from_db()
+        self.assertFalse(self.r1.is_accepted)
+
+    def test_bulk_update_invalid_ids_returns_400(self):
+        """Non-UUID ids are rejected by validation."""
+        url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.patch(
+            url, {"ids": ["not-a-uuid"], "is_accepted": True}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_bulk_update_unauthenticated(self):
         """Unauthenticated requests are rejected."""
