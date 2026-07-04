@@ -137,7 +137,9 @@ class Case(models.Model):
         return today + relativedelta(years=retention_years)
 
     def save(self, *args, **kwargs):
-        if not self.pk:  # On creation
+        # UUID pks are assigned at instantiation, so check _state.adding
+        # rather than pk to detect creation.
+        if self._state.adding:
             self.retention_review_date = self._calculate_retention_date()
         super().save(*args, **kwargs)
 
@@ -192,7 +194,7 @@ class Document(models.Model):
     )
 
     def save(self, *args, **kwargs):
-        if not self.pk:
+        if self._state.adding:
             self.filename = self.original_file.name
             if "." in self.filename:
                 self.file_type = self.filename.split(".")[-1].upper()
