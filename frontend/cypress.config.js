@@ -8,7 +8,7 @@ module.exports = defineConfig({
       exclude: ['cypress/**/*.*'],
     },
   },
-  experimentalSingleTabRunMode: true,
+  experimentalSingleTabRunMode: false,
   component: {
     devServer: {
       framework: "next",

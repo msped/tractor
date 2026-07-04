@@ -70,8 +70,11 @@ describe('<TrainingUpload />', () => {
       ], { force: true });
 
       cy.wait('@uploadTrainingDoc')
-      cy.contains('Some selected files were not .docx and have been ignored.').should('be.visible');
+      // Check the success toast first: it auto-dismisses (2s) faster than the
+      // "ignored" error toast (4s), so asserting on it second risks a flaky
+      // timeout if the earlier assertion eats into its window.
       cy.contains('1 document(s) uploaded successfully.').should('be.visible');
+      cy.contains('Some selected files were not .docx and have been ignored.').should('be.visible');
     });
 
     it('shows an error toast if the upload fails', () => {
