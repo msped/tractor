@@ -163,8 +163,15 @@ describe('<CaseExportManager />', () => {
 
             cy.fullMount(<CaseExportManager caseData={completedCase} />, mountOptions);
 
+            // Stub the programmatic anchor click so the browser doesn't write
+            // the file into cypress/downloads.
+            cy.window().then((win) => {
+                cy.stub(win.HTMLAnchorElement.prototype, 'click').as('anchorClick');
+            });
+
             cy.contains('button', 'Download Package').should('be.visible').click();
             cy.wait('@downloadPackage');
+            cy.get('@anchorClick').should('have.been.calledOnce');
         });
 
         it('shows an error toast when the download fails', () => {

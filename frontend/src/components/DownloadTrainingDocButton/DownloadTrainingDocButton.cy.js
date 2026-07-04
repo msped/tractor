@@ -22,8 +22,15 @@ describe('<DownloadTrainingDocButton />', () => {
 
         cy.fullMount(<DownloadTrainingDocButton {...defaultProps} />);
 
+        // Stub the programmatic anchor click so the browser doesn't write
+        // the file into cypress/downloads.
+        cy.window().then((win) => {
+            cy.stub(win.HTMLAnchorElement.prototype, 'click').as('anchorClick');
+        });
+
         cy.get('button').click();
         cy.wait('@downloadFile');
+        cy.get('@anchorClick').should('have.been.calledOnce');
     });
 
     it('shows an error toast when the download fails', () => {
