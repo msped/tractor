@@ -4,7 +4,7 @@ import apiClient from '@/api/apiClient';
 
 const mockCaseOpen = {
     id: 1,
-    case_reference: 'CASE-001',
+    case_reference: '202501',
     status: 'OPEN',
     status_display: 'Open',
     data_subject_name: 'John Doe',
@@ -42,7 +42,7 @@ describe('<CaseInformation />', () => {
         );
 
         cy.contains('Case Details').should('be.visible');
-        cy.contains('CASE-001').should('be.visible');
+        cy.contains('202501').should('be.visible');
         cy.contains('Open').should('be.visible');
         cy.contains('John Doe').should('be.visible');
         cy.contains('15/01/1990').should('be.visible');
@@ -78,19 +78,19 @@ describe('<CaseInformation />', () => {
 
         it('opens the edit dialog with pre-filled data', () => {
             cy.contains('Edit Case Details').should('be.visible');
-            cy.get('input[name="case_reference"]').should('have.value', 'CASE-001');
+            cy.get('input[name="case_reference"]').should('have.value', '202501');
             cy.get('input[name="data_subject_name"]').should('have.value', 'John Doe');
             cy.get('input[name="data_subject_dob"]').should('have.value', '1990-01-15');
             cy.get('input[name="retention_review_date"]').should('have.value', '2025-10-27');
         });
 
         it('allows updating case details and calls onUpdate', () => {
-            cy.get('input[name="case_reference"]').clear().type('CASE-001-UPDATED');
+            cy.get('input[name="case_reference"]').clear().type('202599');
             cy.get('button').contains('Save').click();
 
             cy.get('@updateCase').should('have.been.calledWith',
                 `/cases/${mockCaseOpen.id}`,
-                Cypress.sinon.match.has('case_reference', 'CASE-001-UPDATED'),
+                Cypress.sinon.match.has('case_reference', '202599'),
             );
 
             cy.contains('Case updated.').should('be.visible');
@@ -147,7 +147,7 @@ describe('<CaseInformation />', () => {
         );
 
         cy.get('button[aria-label="settings"]').click();
-        cy.get('input[name="case_reference"]').clear().type('NEW-REF');
+        cy.get('input[name="case_reference"]').clear().type('NEW-01');
         cy.get('button').contains('Save').click();
 
         cy.get('@router:refresh').should('have.been.calledOnce');

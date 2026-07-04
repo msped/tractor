@@ -168,6 +168,8 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
                                 variant="outlined"
                                 value={editableCase.case_reference}
                                 onChange={handleInputChange}
+                                slotProps={{ htmlInput: { maxLength: 6 } }}
+                                helperText="Max 6 characters, e.g. 202501"
                             />
                             <TextField
                                 margin="dense"

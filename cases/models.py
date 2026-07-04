@@ -60,7 +60,7 @@ class Case(models.Model):
     case_reference = models.CharField(
         max_length=6,
         unique=True,
-        help_text="The human-readable, unique identifier for this case (e.g., 2025-0114).",
+        help_text="The human-readable, unique identifier for this case, max 6 characters (e.g., 202501).",
     )
 
     data_subject_name = models.CharField(
@@ -138,8 +138,13 @@ class Case(models.Model):
 
     def save(self, *args, **kwargs):
         # UUID pks are assigned at instantiation, so check _state.adding
-        # rather than pk to detect creation.
-        if self._state.adding:
+        # rather than pk to detect creation. Only derive the DOB-aware
+        # retention date when the caller left the field at its default —
+        # an explicitly provided date must be preserved.
+        if (
+            self._state.adding
+            and self.retention_review_date == retention_review_date_default()
+        ):
             self.retention_review_date = self._calculate_retention_date()
         super().save(*args, **kwargs)
 
