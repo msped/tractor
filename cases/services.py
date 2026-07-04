@@ -1191,7 +1191,15 @@ def delete_original_files_past_threshold():
         case__updated_at__lt=threshold,
     ).exclude(original_file="")
 
-    count = documents.update(original_file="")
+    # Delete each file from storage explicitly — a bulk .update() would only
+    # clear the DB reference and leave the sensitive originals orphaned on
+    # disk (django-cleanup relies on save/delete signals).
+    count = 0
+    for document in documents.iterator():
+        document.original_file.delete(save=False)
+        document.original_file = ""
+        document.save(update_fields=["original_file"])
+        count += 1
 
     logger.info(
         "Deleted original files for %d document(s) (case terminal > %d days).",

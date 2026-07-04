@@ -1608,10 +1608,14 @@ class DeleteOriginalFilesTests(NetworkBlockerMixin, TestCase):
         DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0
     )
     def test_past_threshold_deletes_original_file(self):
+        file_path = self.document.original_file.path
+        self.assertTrue(os.path.exists(file_path))
         result = delete_original_files_past_threshold()
         self.assertEqual(result, "Deleted original files for 1 document(s).")
         self.document.refresh_from_db()
         self.assertFalse(bool(self.document.original_file))
+        # The file must be removed from storage, not just unlinked in the DB.
+        self.assertFalse(os.path.exists(file_path))
 
     @override_settings(
         DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0
