@@ -10,28 +10,38 @@ describe('<DownloadTrainingDocButton />', () => {
     it('renders the download button', () => {
         cy.fullMount(<DownloadTrainingDocButton {...defaultProps} />);
 
-        cy.get('a[download]').should('be.visible');
+        cy.get('button').should('be.visible');
         cy.get('[data-testid="DownloadIcon"]').should('be.visible');
     });
 
-    it('has the correct href attribute', () => {
+    it('fetches the file through the API client on click', () => {
+        cy.intercept('GET', '**/media/training_docs/test-document.docx', {
+            statusCode: 200,
+            body: 'file-bytes',
+        }).as('downloadFile');
+
         cy.fullMount(<DownloadTrainingDocButton {...defaultProps} />);
 
-        cy.get('a[download]')
-            .should('have.attr', 'href', defaultProps.fileUrl);
+        cy.get('button').click();
+        cy.wait('@downloadFile');
     });
 
-    it('has the correct download attribute with filename', () => {
+    it('shows an error toast when the download fails', () => {
+        cy.intercept('GET', '**/media/training_docs/test-document.docx', {
+            statusCode: 401,
+        }).as('downloadFile');
+
         cy.fullMount(<DownloadTrainingDocButton {...defaultProps} />);
 
-        cy.get('a[download]')
-            .should('have.attr', 'download', defaultProps.filename);
+        cy.get('button').click();
+        cy.wait('@downloadFile');
+        cy.contains('Failed to download the document.').should('be.visible');
     });
 
     it('shows tooltip on hover', () => {
         cy.fullMount(<DownloadTrainingDocButton {...defaultProps} />);
 
-        cy.get('a[download]').trigger('mouseover');
+        cy.get('button').trigger('mouseover');
         cy.contains('Download').should('be.visible');
     });
 });

@@ -5,6 +5,7 @@ import { Box, Button, ButtonGroup, CircularProgress, Menu, MenuItem } from '@mui
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { createCaseExport, updateCase } from '@/services/caseService';
+import { downloadFile } from '@/utils/downloadFile';
 import toast from 'react-hot-toast';
 
 export const CaseExportManager = ({ caseData, onUpdate }) => {
@@ -28,6 +29,17 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
         } catch (error) {
             toast.error('Failed to start export process.', { id: 'export-toast' });
             setIsProcessing(false);
+        }
+    };
+
+    const handleDownloadPackage = async () => {
+        try {
+            await downloadFile(
+                caseData.export_file,
+                `disclosure_package_${caseData.case_reference}.zip`
+            );
+        } catch (error) {
+            toast.error('Failed to download the export package.', { id: 'export-toast' });
         }
     };
 
@@ -93,8 +105,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
                         variant="contained"
                         color="success"
                         startIcon={<DownloadIcon />}
-                        href={caseData.export_file}
-                        download
+                        onClick={handleDownloadPackage}
                     >
                         Download Package
                     </Button>

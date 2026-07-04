@@ -149,18 +149,34 @@ describe('<CaseExportManager />', () => {
     });
 
     context('when case is locked and export status is COMPLETED', () => {
-        it('renders a download link', () => {
-            const completedCase = {
-                ...baseCaseData,
-                export_status: 'COMPLETED',
-                export_file: '/downloads/case-123.zip',
-            };
+        const completedCase = {
+            ...baseCaseData,
+            export_status: 'COMPLETED',
+            export_file: '/media/exports/case-123/package.zip',
+        };
+
+        it('downloads the package through the API client on click', () => {
+            cy.intercept('GET', '**/media/exports/case-123/package.zip', {
+                statusCode: 200,
+                body: 'zip-bytes',
+            }).as('downloadPackage');
+
             cy.fullMount(<CaseExportManager caseData={completedCase} />, mountOptions);
 
-            cy.contains('a', 'Download Package')
-                .should('be.visible')
-                .and('have.attr', 'href', completedCase.export_file)
-                .and('have.attr', 'download');
+            cy.contains('button', 'Download Package').should('be.visible').click();
+            cy.wait('@downloadPackage');
+        });
+
+        it('shows an error toast when the download fails', () => {
+            cy.intercept('GET', '**/media/exports/case-123/package.zip', {
+                statusCode: 401,
+            }).as('downloadPackage');
+
+            cy.fullMount(<CaseExportManager caseData={completedCase} />, mountOptions);
+
+            cy.contains('button', 'Download Package').click();
+            cy.wait('@downloadPackage');
+            cy.contains('Failed to download the export package.').should('be.visible');
         });
     });
 
