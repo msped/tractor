@@ -119,9 +119,10 @@ def process_document_and_create_redactions(document_id):
     document.save(update_fields=["spacy_model"])
 
     model_display = gliner_manager.model_name or DEFAULT_GLINER_MODEL
-    print(
-        f"Starting text extraction and AI analysis for {document.filename} \
-        using model '{model_display}'..."
+    logger.info(
+        "Starting text extraction and AI analysis for %s using model '%s'...",
+        document.filename,
+        model_display,
     )
 
     case = document.case
@@ -185,9 +186,9 @@ def process_document_and_create_redactions(document_id):
 
     document.status = Document.Status.READY_FOR_REVIEW
     document.save(update_fields=["status"])
-    print(
-        f"Successfully processed {document.filename}. \
-            Status: READY_FOR_REVIEW"
+    logger.info(
+        "Successfully processed %s. Status: READY_FOR_REVIEW",
+        document.filename,
     )
 
 
@@ -425,10 +426,11 @@ def find_and_flag_matching_text_in_case(redaction_id):
         + r")\b"
     )
 
-    print(
-        f"Searching for variations of '{search_term}' in \
-        {other_documents.count()} other documents for case \
-        {case.case_reference}."
+    logger.info(
+        "Searching for variations of '%s' in %d other documents for case %s.",
+        search_term,
+        other_documents.count(),
+        case.case_reference,
     )
 
     for document in other_documents:
@@ -1028,6 +1030,22 @@ def _generate_pdf_from_document(
     )
 
 
+def _dedupe_name(name, used_names):
+    """Return name, suffixed with a counter if already taken in used_names.
+
+    Prevents two documents with the same (sanitised) filename from silently
+    overwriting each other inside the export package.
+    """
+    candidate = name
+    stem, ext = os.path.splitext(name)
+    counter = 1
+    while candidate.lower() in used_names:
+        candidate = f"{stem}_{counter}{ext}"
+        counter += 1
+    used_names.add(candidate.lower())
+    return candidate
+
+
 def export_case_documents(case_id):
     """Background task: generate a ZIP export package for all documents in a case."""
     try:
@@ -1060,20 +1078,25 @@ def export_case_documents(case_id):
     )
 
     try:
+        used_names = set()
+        used_orig_names = set()
         for doc in documents:
             doc_name = doc.filename or (
-                os.path.splitext(os.path.basename(doc.original_file.name))[0]
+                os.path.basename(doc.original_file.name)
                 if doc.original_file
                 else str(doc.id)
             )
-            safe_doc_name = re.sub(
-                r"[^\w\-. ]", "_", os.path.basename(doc_name)
-            )
+            # Strip the source extension — ".pdf" is appended below, and
+            # keeping it would produce names like "report.docx.pdf".
+            doc_name = os.path.splitext(os.path.basename(doc_name))[0]
+            safe_doc_name = re.sub(r"[^\w\-. ]", "_", doc_name)
+            safe_doc_name = _dedupe_name(safe_doc_name, used_names)
 
             if doc.original_file:
                 safe_orig_name = re.sub(
                     r"[^\w\-. ]", "_", os.path.basename(doc.original_file.name)
                 )
+                safe_orig_name = _dedupe_name(safe_orig_name, used_orig_names)
                 shutil.copy(
                     doc.original_file.path,
                     os.path.join(unedited_dir, safe_orig_name),
