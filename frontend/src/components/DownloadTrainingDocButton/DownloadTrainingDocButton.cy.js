@@ -33,6 +33,27 @@ describe('<DownloadTrainingDocButton />', () => {
         cy.get('@anchorClick').should('have.been.calledOnce');
     });
 
+    it('downloads absolute URLs natively without the API client', () => {
+        // Presigned cloud-storage URLs carry their own auth; they must not
+        // be fetched through apiClient (which would attach the JWT).
+        cy.intercept('GET', '**/package.docx').as('apiFetch');
+
+        cy.fullMount(
+            <DownloadTrainingDocButton
+                fileUrl="https://storage.example.com/media/package.docx?sig=abc"
+                filename="package.docx"
+            />
+        );
+
+        cy.window().then((win) => {
+            cy.stub(win.HTMLAnchorElement.prototype, 'click').as('anchorClick');
+        });
+
+        cy.get('button').click();
+        cy.get('@anchorClick').should('have.been.calledOnce');
+        cy.get('@apiFetch.all').should('have.length', 0);
+    });
+
     it('shows an error toast when the download fails', () => {
         cy.intercept('GET', '**/media/training_docs/test-document.docx', {
             statusCode: 401,
