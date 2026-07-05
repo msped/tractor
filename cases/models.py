@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from auditlog.registry import auditlog
@@ -199,10 +200,15 @@ class Document(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        # Derive filename/file_type on creation only when the caller hasn't
+        # set them, using the same format as DocumentSerializer.create
+        # (extension with leading dot, e.g. ".pdf") — the frontend matches
+        # on that form.
         if self._state.adding:
-            self.filename = self.original_file.name
-            if "." in self.filename:
-                self.file_type = self.filename.split(".")[-1].upper()
+            if not self.filename:
+                self.filename = self.original_file.name
+            if not self.file_type and self.filename:
+                self.file_type = os.path.splitext(self.filename)[1]
         super().save(*args, **kwargs)
 
     def start_processing(self):

@@ -195,6 +195,25 @@ class DocumentModelTests(NetworkBlockerMixin, TestCase):
         )
         self.assertIn(".pdf", return_test_file_name(doc.original_file.name))
 
+    def test_document_model_save_sets_serializer_format_file_type(self):
+        """Model-level creation must match DocumentSerializer's file_type
+        format (extension with leading dot), which the frontend matches on."""
+        file = SimpleUploadedFile("occurrence.pdf", b"file_content")
+        doc = Document.objects.create(case=self.case, original_file=file)
+        self.assertEqual(doc.filename, "occurrence.pdf")
+        self.assertEqual(doc.file_type, ".pdf")
+
+    def test_document_model_save_preserves_caller_set_fields(self):
+        file = SimpleUploadedFile("raw-upload.pdf", b"file_content")
+        doc = Document.objects.create(
+            case=self.case,
+            original_file=file,
+            filename="Friendly name.pdf",
+            file_type=".pdf",
+        )
+        self.assertEqual(doc.filename, "Friendly name.pdf")
+        self.assertEqual(doc.file_type, ".pdf")
+
     def test_document_status_default(self):
         file = SimpleUploadedFile("default.txt", b"file_content")
         doc = Document.objects.create(case=self.case, original_file=file)
