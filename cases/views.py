@@ -30,6 +30,7 @@ from .models import (
 from .serializers import (
     BulkByTextSerializer,
     BulkCaseDeleteSerializer,
+    BulkRedactionUpdateSerializer,
     CaseDetailSerializer,
     CaseSerializer,
     DocumentExportSettingsSerializer,
@@ -120,6 +121,12 @@ class CaseExportView(APIView):
 
     def post(self, request, case_id, *args, **kwargs):
         case = get_object_or_404(Case, id=case_id)
+
+        if case.export_status == Case.ExportStatus.PROCESSING:
+            return Response(
+                {"detail": "An export is already being generated."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         if not case.documents.exists():
             return Response(
@@ -297,9 +304,13 @@ class DocumentCancelProcessingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Remove from the queue
+        # Remove from the queue. OrmQ.key is the cluster name, not the task
+        # id, so the queued task has to be found via its decoded payload.
         if document.processing_task_id:
-            OrmQ.objects.filter(key=document.processing_task_id).delete()
+            for queued in OrmQ.objects.all():
+                if queued.task_id() == document.processing_task_id:
+                    queued.delete()
+                    break
         document.redactions.all().delete()
         document.extracted_text = None
         document.extracted_tables = []
@@ -369,9 +380,11 @@ class BulkRedactionUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, document_id):
-        ids = request.data.get("ids", [])
-        is_accepted = request.data.get("is_accepted")
-        justification = request.data.get("justification", None)
+        serializer = BulkRedactionUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data["ids"]
+        is_accepted = serializer.validated_data["is_accepted"]
+        justification = serializer.validated_data["justification"]
 
         Redaction.objects.filter(
             document_id=document_id,

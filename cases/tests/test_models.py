@@ -92,6 +92,20 @@ class CaseModelTests(NetworkBlockerMixin, TestCase):
         calculated_date = case._calculate_retention_date(today=fixed_today)
         self.assertEqual(calculated_date, date(2039, 9, 27))
 
+    @freeze_time("2024-09-27")
+    def test_retention_review_date_for_minor_applied_on_save(self):
+        # Regression: save() must apply the minor rule on creation. The old
+        # `if not self.pk` check never fired because UUID pks are assigned
+        # at instantiation, leaving the flat 6-year field default in place.
+        case = Case.objects.create(
+            case_reference="20253C",
+            data_subject_name="Minor Saved",
+            data_subject_dob=date(2015, 9, 27),
+        )
+        case.refresh_from_db()
+        # 18th birthday is 2033-09-27; retention is 6 years after.
+        self.assertEqual(case.retention_review_date, date(2039, 9, 27))
+
     def test_retention_review_date_for_eighteen_year_old(self):
         # Test edge case: someone who is exactly 18
         fixed_today = date(2025, 9, 27)
@@ -180,6 +194,25 @@ class DocumentModelTests(NetworkBlockerMixin, TestCase):
             return_test_file_name(doc.original_file.name), "report.pdf"
         )
         self.assertIn(".pdf", return_test_file_name(doc.original_file.name))
+
+    def test_document_model_save_sets_serializer_format_file_type(self):
+        """Model-level creation must match DocumentSerializer's file_type
+        format (extension with leading dot), which the frontend matches on."""
+        file = SimpleUploadedFile("occurrence.pdf", b"file_content")
+        doc = Document.objects.create(case=self.case, original_file=file)
+        self.assertEqual(doc.filename, "occurrence.pdf")
+        self.assertEqual(doc.file_type, ".pdf")
+
+    def test_document_model_save_preserves_caller_set_fields(self):
+        file = SimpleUploadedFile("raw-upload.pdf", b"file_content")
+        doc = Document.objects.create(
+            case=self.case,
+            original_file=file,
+            filename="Friendly name.pdf",
+            file_type=".pdf",
+        )
+        self.assertEqual(doc.filename, "Friendly name.pdf")
+        self.assertEqual(doc.file_type, ".pdf")
 
     def test_document_status_default(self):
         file = SimpleUploadedFile("default.txt", b"file_content")

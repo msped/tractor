@@ -64,6 +64,8 @@ export default function NewCasePage() {
                         value={caseReference}
                         onChange={(e) => setCaseReference(e.target.value)}
                         disabled={isSubmitting}
+                        slotProps={{ htmlInput: { maxLength: 6 } }}
+                        helperText="Max 6 characters, e.g. 202501"
                     />
                     <TextField
                         margin="normal"

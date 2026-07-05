@@ -949,6 +949,41 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         if os.path.exists(zip_path):
             os.remove(zip_path)
 
+    @patch("cases.services._generate_pdf_from_document")
+    def test_export_deduplicates_colliding_filenames(self, mock_generate_pdf):
+        """Documents sharing a filename must not overwrite each other in the ZIP."""
+        mock_generate_pdf.return_value = b"mock pdf content"
+
+        clash1 = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("report.txt", b"one"),
+            extracted_text="Some text",
+        )
+        clash2 = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("report.txt", b"two"),
+            extracted_text="Other text",
+        )
+        # Force identical stored filenames regardless of storage suffixing
+        Document.objects.filter(pk__in=[clash1.pk, clash2.pk]).update(
+            filename="report.txt"
+        )
+
+        export_case_documents(self.case.id)
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.export_status, Case.ExportStatus.COMPLETED)
+        zip_path = self.case.export_file.path
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            filenames = zf.namelist()
+            self.assertIn("redacted/report.pdf", filenames)
+            self.assertIn("redacted/report_1.pdf", filenames)
+            self.assertIn("disclosure/report.pdf", filenames)
+            self.assertIn("disclosure/report_1.pdf", filenames)
+
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+
     def test_export_case_not_found(self):
         """Test that the export function handles a non-existent case ID."""
         non_existent_id = uuid.uuid4()
@@ -1608,10 +1643,14 @@ class DeleteOriginalFilesTests(NetworkBlockerMixin, TestCase):
         DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0
     )
     def test_past_threshold_deletes_original_file(self):
+        file_path = self.document.original_file.path
+        self.assertTrue(os.path.exists(file_path))
         result = delete_original_files_past_threshold()
         self.assertEqual(result, "Deleted original files for 1 document(s).")
         self.document.refresh_from_db()
         self.assertFalse(bool(self.document.original_file))
+        # The file must be removed from storage, not just unlinked in the DB.
+        self.assertFalse(os.path.exists(file_path))
 
     @override_settings(
         DELETE_ORIGINAL_FILES=True, DELETE_ORIGINAL_FILES_AFTER_DAYS=0

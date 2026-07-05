@@ -192,6 +192,17 @@ class TrainingDocumentViewTests(BaseTrainingAPITestCase):
         self.assertEqual(doc.created_by, self.admin_user)
         self.assertTrue(doc.original_file.name.endswith("test.docx"))
 
+    def test_create_training_doc_without_file_returns_400(self):
+        """Omitting the file must return 400, not crash with a 500."""
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse("training-document-list")
+        response = self.client.post(
+            url, {"name": "test.docx"}, format="multipart"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(TrainingDocument.objects.count(), 0)
+
     def test_create_training_doc_wrong_file_type(self):
         """Uploading a non-docx file should fail with a 400 error."""
         self.client.force_authenticate(user=self.admin_user)

@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from auditlog.registry import auditlog
@@ -60,7 +61,7 @@ class Case(models.Model):
     case_reference = models.CharField(
         max_length=6,
         unique=True,
-        help_text="The human-readable, unique identifier for this case (e.g., 2025-0114).",
+        help_text="The human-readable, unique identifier for this case, max 6 characters (e.g., 202501).",
     )
 
     data_subject_name = models.CharField(
@@ -137,7 +138,14 @@ class Case(models.Model):
         return today + relativedelta(years=retention_years)
 
     def save(self, *args, **kwargs):
-        if not self.pk:  # On creation
+        # UUID pks are assigned at instantiation, so check _state.adding
+        # rather than pk to detect creation. Only derive the DOB-aware
+        # retention date when the caller left the field at its default —
+        # an explicitly provided date must be preserved.
+        if (
+            self._state.adding
+            and self.retention_review_date == retention_review_date_default()
+        ):
             self.retention_review_date = self._calculate_retention_date()
         super().save(*args, **kwargs)
 
@@ -192,10 +200,15 @@ class Document(models.Model):
     )
 
     def save(self, *args, **kwargs):
-        if not self.pk:
-            self.filename = self.original_file.name
-            if "." in self.filename:
-                self.file_type = self.filename.split(".")[-1].upper()
+        # Derive filename/file_type on creation only when the caller hasn't
+        # set them, using the same format as DocumentSerializer.create
+        # (extension with leading dot, e.g. ".pdf") — the frontend matches
+        # on that form.
+        if self._state.adding:
+            if not self.filename:
+                self.filename = self.original_file.name
+            if not self.file_type and self.filename:
+                self.file_type = os.path.splitext(self.filename)[1]
         super().save(*args, **kwargs)
 
     def start_processing(self):

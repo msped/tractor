@@ -184,6 +184,14 @@ class RedactionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "auto_accepted", "created_at"]
 
 
+class BulkRedactionUpdateSerializer(serializers.Serializer):
+    ids = serializers.ListField(child=serializers.UUIDField(), default=list)
+    is_accepted = serializers.BooleanField()
+    justification = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=None
+    )
+
+
 class BulkByTextSerializer(serializers.Serializer):
     STATUS_ACCEPTED = "ACCEPTED"
     STATUS_REJECTED = "REJECTED"

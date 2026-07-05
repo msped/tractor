@@ -18,7 +18,9 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+
+from .views import MediaServeView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -31,3 +33,13 @@ if settings.DEBUG:
     urlpatterns += static(
         settings.MEDIA_URL, document_root=settings.MEDIA_ROOT
     )
+else:
+    # Authenticated media serving — nginx proxies /media/ to the backend,
+    # and Django does not serve MEDIA_URL itself when DEBUG is off.
+    urlpatterns += [
+        re_path(
+            r"^media/(?P<path>.*)$",
+            MediaServeView.as_view(),
+            name="media-serve",
+        )
+    ]
