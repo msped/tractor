@@ -5,6 +5,27 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 
+def _close_thread_connections(stage):
+    """Wrap a stage so the worker thread's DB connections are closed after it runs.
+
+    Stages execute on short-lived ThreadPoolExecutor threads; any ORM query in a
+    stage (e.g. loading custom recognizers) opens a per-thread connection that
+    Django never closes for bare threads. With persistent connections
+    (CONN_MAX_AGE) those sessions leak on every pipeline run — and block
+    dropping the test database in CI.
+    """
+
+    def wrapper(text):
+        from django.db import connections
+
+        try:
+            return stage(text)
+        finally:
+            connections.close_all()
+
+    return wrapper
+
+
 def _deduplicate_entities(
     primary_entities, secondary_entities, allow_superset=False
 ):
@@ -93,7 +114,10 @@ class ExtractionPipeline:
 
     def run(self, text: str) -> list[dict]:
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(stage, text) for stage in self.stages]
+            futures = [
+                executor.submit(_close_thread_connections(stage), text)
+                for stage in self.stages
+            ]
         stage_results = [fut.result() for fut in futures]
 
         combined = []
