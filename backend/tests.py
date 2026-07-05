@@ -55,3 +55,9 @@ class MediaServeViewTests(TestCase):
     def test_path_traversal_returns_404(self):
         response = self._get("../../etc/passwd", user=self.user)
         self.assertEqual(response.status_code, 404)
+
+    def test_directory_path_returns_404(self):
+        # A directory (or empty) path must 404, not 500 on IsADirectoryError.
+        for path in ("exports/test-case", "exports/test-case/", ""):
+            response = self._get(path, user=self.user)
+            self.assertEqual(response.status_code, 404)

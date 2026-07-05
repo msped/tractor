@@ -21,12 +21,18 @@ class MediaServeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, path):
+        # A single open() call: missing files, directory paths, and
+        # traversal attempts (SuspiciousOperation from safe_join) all
+        # surface as 404 rather than 500, and remote storage backends
+        # get one round-trip instead of exists() + open().
         try:
-            if not default_storage.exists(path):
-                raise Http404
             file_handle = default_storage.open(path, "rb")
-        except SuspiciousOperation:
-            # Path traversal attempt — present as a plain not-found.
+        except (
+            SuspiciousOperation,
+            FileNotFoundError,
+            IsADirectoryError,
+            PermissionError,
+        ):
             raise Http404
         return FileResponse(
             file_handle,
