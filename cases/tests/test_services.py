@@ -279,97 +279,6 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             Redaction.RedactionType.DS_INFORMATION,
         )
 
-    def test_find_and_flag_updates_existing_redaction(self):
-        """Test that an existing redaction is updated to DS_INFO."""
-        doc2_text = "This text contains a name."
-        doc2 = Document.objects.create(
-            case=self.case,
-            original_file=SimpleUploadedFile("doc2.txt", doc2_text.encode()),
-            extracted_text=doc2_text,
-            status=Document.Status.COMPLETED,
-        )
-        # An existing, different redaction for the word "name"
-        existing_redaction = Redaction.objects.create(
-            document=doc2,
-            start_char=21,
-            end_char=25,
-            text="name",
-            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
-            is_suggestion=False,
-            is_accepted=True,
-        )
-
-        # The trigger redaction
-        source_redaction = Redaction.objects.create(
-            document=self.document,
-            start_char=0,
-            end_char=4,
-            text="name",
-            redaction_type=Redaction.RedactionType.DS_INFORMATION,
-        )
-
-        find_and_flag_matching_text_in_case(source_redaction.id)
-
-        existing_redaction.refresh_from_db()
-        self.assertEqual(
-            existing_redaction.redaction_type,
-            Redaction.RedactionType.DS_INFORMATION,
-        )
-        self.assertTrue(existing_redaction.is_suggestion)
-        self.assertTrue(existing_redaction.is_accepted)
-        self.assertIsNone(existing_redaction.justification)
-
-        # Completed documents stay completed — matches are auto-accepted
-        doc2.refresh_from_db()
-        self.assertEqual(doc2.status, Document.Status.COMPLETED)
-
-    def test_find_and_flag_removes_duplicate_redaction_at_same_position(self):
-        """When a THIRD_PARTY and a DS_INFO exist at the same position, the
-        THIRD_PARTY duplicate is deleted and the DS_INFO is kept accepted."""
-        doc2_text = "This text contains a name."
-        doc2 = Document.objects.create(
-            case=self.case,
-            original_file=SimpleUploadedFile("doc2b.txt", doc2_text.encode()),
-            extracted_text=doc2_text,
-            status=Document.Status.READY_FOR_REVIEW,
-        )
-        # Simulate the pre-existing duplicate: same position, different types
-        third_party = Redaction.objects.create(
-            document=doc2,
-            start_char=21,
-            end_char=25,
-            text="name",
-            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
-            is_accepted=True,
-        )
-        ds_info = Redaction.objects.create(
-            document=doc2,
-            start_char=21,
-            end_char=25,
-            text="name",
-            redaction_type=Redaction.RedactionType.DS_INFORMATION,
-            is_accepted=True,
-        )
-
-        source_redaction = Redaction.objects.create(
-            document=self.document,
-            start_char=0,
-            end_char=4,
-            text="name",
-            redaction_type=Redaction.RedactionType.DS_INFORMATION,
-        )
-
-        find_and_flag_matching_text_in_case(source_redaction.id)
-
-        # Only the DS_INFO should remain; the THIRD_PARTY duplicate is deleted
-        self.assertEqual(doc2.redactions.count(), 1)
-        self.assertFalse(Redaction.objects.filter(id=third_party.id).exists())
-        ds_info.refresh_from_db()
-        self.assertEqual(
-            ds_info.redaction_type, Redaction.RedactionType.DS_INFORMATION
-        )
-        self.assertTrue(ds_info.is_accepted)
-
     def test_build_document_html_contains_redaction_span(self):
         """Accepted redacted text produces a redaction span in both modes."""
         self.document.extracted_text = "This is some text with PII to redact."
@@ -989,33 +898,6 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         non_existent_id = uuid.uuid4()
         export_case_documents(non_existent_id)
         self.assertFalse(Case.objects.filter(id=non_existent_id).exists())
-
-    def test_find_and_flag_pluralization(self):
-        """Test that plural/singular forms are correctly identified."""
-        doc2_text = "The party needs to contact other parties."
-        doc2 = Document.objects.create(
-            case=self.case,
-            original_file=SimpleUploadedFile("doc2.txt", doc2_text.encode()),
-            extracted_text=doc2_text,
-            status=Document.Status.READY_FOR_REVIEW,
-        )
-
-        # Trigger with the singular form "party"
-        source_redaction = Redaction.objects.create(
-            document=self.document,
-            start_char=0,
-            end_char=5,
-            text="party",
-            redaction_type=Redaction.RedactionType.DS_INFORMATION,
-        )
-
-        find_and_flag_matching_text_in_case(source_redaction.id)
-
-        doc2.refresh_from_db()
-        self.assertEqual(doc2.redactions.count(), 2)
-        redactions = doc2.redactions.order_by("start_char")
-        self.assertEqual(redactions[0].text, "party")
-        self.assertEqual(redactions[1].text, "parties")
 
     @patch("cases.services.extract_entities_from_text")
     @patch("cases.services.SpanCatModelManager")
@@ -1847,40 +1729,6 @@ class ApplyCaseDsInfoToDocumentTests(NetworkBlockerMixin, TestCase):
         )
         self.assertTrue(r.is_accepted)
 
-    def test_upgrades_existing_redaction_at_same_position(self):
-        # A THIRD_PARTY redaction already exists at the position of "Alice"
-        existing = Redaction.objects.create(
-            document=self.new_doc,
-            start_char=0,
-            end_char=5,
-            text="Alice",
-            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
-            is_accepted=False,
-        )
-        self._ds_info(self.existing_doc, "Alice")
-
-        _apply_case_ds_info_to_document(self.new_doc)
-
-        existing.refresh_from_db()
-        self.assertEqual(
-            existing.redaction_type, Redaction.RedactionType.DS_INFORMATION
-        )
-        self.assertTrue(existing.is_accepted)
-        self.assertIsNone(existing.justification)
-
-    def test_propagates_plural_and_singular_variants(self):
-        self.new_doc.extracted_text = (
-            "The party discussed with the other parties."
-        )
-        self.new_doc.save(update_fields=["extracted_text"])
-        self._ds_info(self.existing_doc, "party")
-
-        _apply_case_ds_info_to_document(self.new_doc)
-
-        texts = set(self.new_doc.redactions.values_list("text", flat=True))
-        self.assertIn("party", texts)
-        self.assertIn("parties", texts)
-
     def test_does_not_create_redactions_when_no_case_ds_info(self):
         _apply_case_ds_info_to_document(self.new_doc)
 
@@ -1901,23 +1749,3 @@ class ApplyCaseDsInfoToDocumentTests(NetworkBlockerMixin, TestCase):
         _apply_case_ds_info_to_document(self.new_doc)
 
         self.assertEqual(self.new_doc.redactions.count(), 0)
-
-    def test_does_not_double_create_for_already_accepted_ds_info_position(
-        self,
-    ):
-        """A position already correctly marked DS_INFO and accepted is left alone."""
-        self._ds_info(self.existing_doc, "Alice")
-        already_correct = Redaction.objects.create(
-            document=self.new_doc,
-            start_char=0,
-            end_char=5,
-            text="Alice",
-            redaction_type=Redaction.RedactionType.DS_INFORMATION,
-            is_accepted=True,
-        )
-
-        _apply_case_ds_info_to_document(self.new_doc)
-
-        self.assertEqual(self.new_doc.redactions.count(), 1)
-        already_correct.refresh_from_db()
-        self.assertTrue(already_correct.is_accepted)

@@ -7,7 +7,6 @@ import zipfile
 from datetime import timedelta
 from html import escape as html_escape
 
-import inflect
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -21,6 +20,10 @@ from training.loader import (
 )
 from training.services import extract_entities_from_text
 
+from .ds_info_propagation import (
+    propagate_term_across_case,
+    propagate_terms_to_document,
+)
 from .models import (
     Case,
     Document,
@@ -259,11 +262,9 @@ def _apply_case_ds_info_to_document(document):
     if not document.extracted_text:
         return
 
-    case = document.case
-
-    ds_info_texts = list(
+    terms = (
         Redaction.objects.filter(
-            document__case=case,
+            document__case=document.case,
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=True,
         )
@@ -271,106 +272,7 @@ def _apply_case_ds_info_to_document(document):
         .values_list("text", flat=True)
         .distinct()
     )
-
-    if not ds_info_texts:
-        return
-
-    p = inflect.engine()
-
-    existing_by_position: dict[tuple, list] = {}
-    for r in document.redactions.all():
-        existing_by_position.setdefault((r.start_char, r.end_char), []).append(
-            r
-        )
-
-    redactions_to_create = []
-    redactions_to_update = []
-    ids_to_delete = []
-    seen_positions = set()
-
-    for search_term in ds_info_texts:
-        search_variations = {search_term}
-        plural_form = p.plural(search_term)
-        if plural_form and plural_form != search_term:
-            search_variations.add(plural_form)
-        singular_form = p.singular_noun(search_term)
-        if singular_form and singular_form != search_term:
-            search_variations.add(singular_form)
-
-        sorted_variations = sorted(search_variations, key=len, reverse=True)
-        pattern = (
-            r"\b("
-            + "|".join(re.escape(term) for term in sorted_variations)
-            + r")\b"
-        )
-
-        for match in re.finditer(
-            pattern, document.extracted_text, re.IGNORECASE
-        ):
-            start, end = match.span()
-            pos = (start, end)
-
-            if pos in seen_positions:
-                continue
-            seen_positions.add(pos)
-
-            text = match.group(0)
-            existing = existing_by_position.get(pos, [])
-            ds_info = [
-                r
-                for r in existing
-                if r.redaction_type == Redaction.RedactionType.DS_INFORMATION
-            ]
-            others = [
-                r
-                for r in existing
-                if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
-            ]
-
-            if ds_info:
-                primary = ds_info[0]
-                if not primary.is_accepted:
-                    primary.is_accepted = True
-                    primary.justification = None
-                    redactions_to_update.append(primary)
-                ids_to_delete.extend(r.id for r in ds_info[1:])
-                ids_to_delete.extend(r.id for r in others)
-            elif others:
-                primary = others[0]
-                primary.redaction_type = Redaction.RedactionType.DS_INFORMATION
-                primary.is_suggestion = True
-                primary.is_accepted = True
-                primary.justification = None
-                redactions_to_update.append(primary)
-                ids_to_delete.extend(r.id for r in others[1:])
-            else:
-                redactions_to_create.append(
-                    Redaction(
-                        document=document,
-                        start_char=start,
-                        end_char=end,
-                        text=text,
-                        redaction_type=Redaction.RedactionType.DS_INFORMATION,
-                        is_suggestion=True,
-                        is_accepted=True,
-                    )
-                )
-
-    with transaction.atomic():
-        if ids_to_delete:
-            Redaction.objects.filter(id__in=ids_to_delete).delete()
-        if redactions_to_create:
-            Redaction.objects.bulk_create(redactions_to_create)
-        if redactions_to_update:
-            Redaction.objects.bulk_update(
-                redactions_to_update,
-                [
-                    "redaction_type",
-                    "is_suggestion",
-                    "is_accepted",
-                    "justification",
-                ],
-            )
+    propagate_terms_to_document(document, terms)
 
 
 def find_and_flag_matching_text_in_case(redaction_id):
@@ -386,136 +288,7 @@ def find_and_flag_matching_text_in_case(redaction_id):
         )
         return
 
-    search_term = source_redaction.text
-    source_document = source_redaction.document
-    case = source_document.case
-
-    other_documents = Document.objects.filter(
-        case=case,
-        status__in=[
-            Document.Status.READY_FOR_REVIEW,
-            Document.Status.COMPLETED,
-        ],
-    ).exclude(id=source_document.id)
-
-    if not search_term.strip():
-        return
-
-    p = inflect.engine()
-    search_variations = {search_term}
-
-    # Generate plural form (e.g., "party" -> "parties")
-    plural_form = p.plural(search_term)
-    if plural_form and plural_form != search_term:
-        search_variations.add(plural_form)
-
-    # Generate singular form (e.g., "parties" -> "party")
-    singular_form = p.singular_noun(search_term)
-    if singular_form and singular_form != search_term:
-        search_variations.add(singular_form)
-
-    # Sort variations by length (desc) to match longer phrases first,
-    # e.g., "data subjects" before "data".
-    sorted_variations = sorted(search_variations, key=len, reverse=True)
-
-    # Create a regex pattern that matches variations as a whole word.
-    # The \b ensures we only match whole words/phrases.
-    pattern = (
-        r"\b("
-        + "|".join(re.escape(term) for term in sorted_variations)
-        + r")\b"
-    )
-
-    logger.info(
-        "Searching for variations of '%s' in %d other documents for case %s.",
-        search_term,
-        other_documents.count(),
-        case.case_reference,
-    )
-
-    for document in other_documents:
-        if not document.extracted_text:
-            continue
-
-        # Group all existing redactions by position — a position may have
-        # duplicates (e.g. a THIRD_PARTY and a DS_INFO at the same span).
-        existing_by_position: dict[tuple, list] = {}
-        for r in document.redactions.all():
-            existing_by_position.setdefault(
-                (r.start_char, r.end_char), []
-            ).append(r)
-
-        redactions_to_create = []
-        redactions_to_update = []
-        ids_to_delete = []
-
-        for match in re.finditer(
-            pattern, document.extracted_text, re.IGNORECASE
-        ):
-            start, end = match.span()
-            text = match.group(0)
-            pos = (start, end)
-
-            existing = existing_by_position.get(pos, [])
-            ds_info = [
-                r
-                for r in existing
-                if r.redaction_type == Redaction.RedactionType.DS_INFORMATION
-            ]
-            others = [
-                r
-                for r in existing
-                if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
-            ]
-
-            if ds_info:
-                # Ensure the DS_INFO is accepted; delete any stale other-type
-                # duplicates at the same position.
-                primary = ds_info[0]
-                if not primary.is_accepted:
-                    primary.is_accepted = True
-                    primary.justification = None
-                    redactions_to_update.append(primary)
-                ids_to_delete.extend(r.id for r in ds_info[1:])
-                ids_to_delete.extend(r.id for r in others)
-            elif others:
-                # Upgrade the first non-DS_INFO to DS_INFO+accepted; delete
-                # any remaining duplicates at the same position.
-                primary = others[0]
-                primary.redaction_type = Redaction.RedactionType.DS_INFORMATION
-                primary.is_suggestion = True
-                primary.is_accepted = True
-                primary.justification = None
-                redactions_to_update.append(primary)
-                ids_to_delete.extend(r.id for r in others[1:])
-            else:
-                redactions_to_create.append(
-                    Redaction(
-                        document=document,
-                        start_char=start,
-                        end_char=end,
-                        text=text,
-                        redaction_type=Redaction.RedactionType.DS_INFORMATION,
-                        is_suggestion=True,
-                        is_accepted=True,
-                    )
-                )
-
-        with transaction.atomic():
-            if ids_to_delete:
-                Redaction.objects.filter(id__in=ids_to_delete).delete()
-            if redactions_to_create:
-                Redaction.objects.bulk_create(redactions_to_create)
-            if redactions_to_update:
-                Redaction.objects.bulk_update(
-                    redactions_to_update,
-                    [
-                        "redaction_type",
-                        "is_suggestion",
-                        "is_accepted",
-                        "justification",
-                    ],
-                )
+    propagate_term_across_case(source_redaction)
 
 
 _REMOVAL_MARKER = '<span style="white-space: nowrap;">[...]</span>'
