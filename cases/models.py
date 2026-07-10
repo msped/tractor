@@ -237,31 +237,76 @@ class Document(models.Model):
         ]
 
 
+class ProvenanceError(TypeError):
+    """A decision-state write was attempted without provenance."""
+
+
+# Fields that together encode an accept/reject decision.  They may only be
+# written through the decision methods below, never via a generic update().
+_DECISION_FIELDS = frozenset({"is_accepted", "justification", "decided_by"})
+
+
 class RedactionQuerySet(models.QuerySet):
-    def pending(self):
-        """Redactions that have not yet been accepted or explicitly rejected."""
-        return self.filter(is_accepted=False).filter(
-            Q(justification__isnull=True) | Q(justification="")
+    # ---- writes: provenance is keyword-only with no default ----
+    def accept(self, *, by):
+        """
+        Accept everything in the queryset as decided by `by`.
+
+        Overwrites prior provenance — a HUMAN accept over a machine-accepted
+        row flips it to human-decided — and clears any stale rejection
+        justification.  Scope with .pending() first if prior decisions must
+        be preserved.  Single UPDATE.
+        """
+        return super().update(
+            is_accepted=True, justification=None, decided_by=by
         )
 
-    def decided(self):
-        """Redactions that have been accepted or explicitly rejected."""
-        return self.exclude(
-            Q(is_accepted=False)
-            & (Q(justification__isnull=True) | Q(justification=""))
+    def reject(self, justification="", *, by):
+        """Reject everything in the queryset as decided by `by`."""
+        return super().update(
+            is_accepted=False, justification=justification, decided_by=by
         )
-
-    def accept(self):
-        """Mark all redactions in the queryset as accepted."""
-        return self.update(is_accepted=True)
-
-    def reject(self, justification=""):
-        """Mark all redactions in the queryset as rejected with the given justification."""
-        return self.update(is_accepted=False, justification=justification)
 
     def reset(self):
         """Return all redactions in the queryset to pending (no decision)."""
-        return self.update(is_accepted=False, justification=None)
+        return super().update(
+            is_accepted=False, justification=None, decided_by=None
+        )
+
+    # ---- reads: pending/decided derived from provenance ----
+    def pending(self):
+        """Redactions that have not yet been accepted or explicitly rejected."""
+        return self.filter(decided_by__isnull=True)
+
+    def decided(self):
+        """Redactions that have been accepted or explicitly rejected."""
+        return self.filter(decided_by__isnull=False)
+
+    def trainable(self):
+        """
+        The canonical SpanCat training selection: human-accepted redactions,
+        excluding data-subject information.
+        """
+        return self.filter(
+            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
+        ).exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+
+    # ---- enforcement: no naked writes to decision state ----
+    def update(self, **kwargs):
+        if _DECISION_FIELDS & kwargs.keys():
+            raise ProvenanceError(
+                "Decision fields may not be written directly — use "
+                ".accept(by=)/.reject(by=)/.reset()."
+            )
+        return super().update(**kwargs)
+
+    def bulk_update(self, objs, fields, **kwargs):
+        if _DECISION_FIELDS & set(fields):
+            raise ProvenanceError(
+                "Decision fields may not be written directly — use "
+                ".accept(by=)/.reject(by=)/.reset()."
+            )
+        return super().bulk_update(objs, fields, **kwargs)
 
 
 class Redaction(models.Model):
@@ -278,6 +323,12 @@ class Redaction(models.Model):
     class Source(models.TextChoices):
         NER = "NER", "NER"
         LLM = "LLM", "LLM"
+
+    class DecidedBy(models.TextChoices):
+        HUMAN = "HUMAN", "Human reviewer"
+        AUTO_ACCEPT = "AUTO", "Auto-accept review mode"
+        CASE_PROPAGATION = "CASE_PROP", "Unanimous case-decision propagation"
+        DS_INFO_PROPAGATION = "DS_PROP", "DS information propagation"
 
     objects = RedactionQuerySet.as_manager()
 
@@ -308,9 +359,12 @@ class Redaction(models.Model):
         default=False,
         help_text="True if the user has confirmed this redaction should be applied.",
     )
-    auto_accepted = models.BooleanField(
-        default=False,
-        help_text="True if accepted automatically by the system (not by a human reviewer).",
+    decided_by = models.CharField(
+        max_length=9,
+        choices=DecidedBy.choices,
+        null=True,
+        blank=True,
+        help_text="Who/what made the accept/reject decision. NULL = pending.",
     )
     source = models.CharField(
         max_length=3,
@@ -320,11 +374,28 @@ class Redaction(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def auto_accepted(self):
+        """True if accepted by a system mechanism rather than a human reviewer."""
+        return bool(
+            self.is_accepted
+            and self.decided_by
+            and self.decided_by != self.DecidedBy.HUMAN
+        )
+
     def __str__(self):
         return f"Redaction in {self.document.filename}: '{self.text[:30]}...'"
 
     class Meta:
         ordering = ["start_char"]
+        constraints = [
+            # Impossible to accept without provenance, from any code path
+            # (ORM, bulk_create, raw SQL, admin).
+            models.CheckConstraint(
+                name="redaction_accept_requires_decided_by",
+                check=Q(is_accepted=False) | Q(decided_by__isnull=False),
+            ),
+        ]
         indexes = [
             models.Index(
                 fields=["text", "redaction_type"],

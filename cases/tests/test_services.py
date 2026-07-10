@@ -22,6 +22,7 @@ from ..models import (
     DocumentExportSettings,
     Redaction,
     RedactionContext,
+    ReviewWorkflowSettings,
 )
 from ..services import (
     _apply_case_ds_info_to_document,
@@ -164,6 +165,68 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     @patch("cases.services.extract_entities_from_text")
     @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
+    def test_machine_decisions_during_processing_never_trainable(
+        self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
+    ):
+        """End-to-end regression test for the propagation training leak:
+        with auto-accept on and case propagation firing, no redaction from
+        processing may enter the SpanCat training selection."""
+        settings = ReviewWorkflowSettings.get()
+        settings.auto_accept_enabled = True
+        settings.save()
+
+        # A prior human accept in another document of the same case, so
+        # case-decision propagation fires for "operational data".
+        prior_doc = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "prior.pdf", b"prior", "application/pdf"
+            ),
+            status=Document.Status.COMPLETED,
+        )
+        Redaction.objects.create(
+            document=prior_doc,
+            start_char=0,
+            end_char=16,
+            text="operational data",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=self.spacy_model)
+        )
+        mock_extract_entities.return_value = (
+            "This text contains operational data.",
+            [
+                {
+                    "start_char": 19,
+                    "end_char": 35,
+                    "text": "operational data",
+                    "label": "OPERATIONAL",
+                },
+            ],
+            [],
+            None,
+        )
+
+        process_document_and_create_redactions(self.document.id)
+
+        new_redactions = self.document.redactions.all()
+        self.assertTrue(new_redactions.exists())
+        for redaction in new_redactions:
+            self.assertTrue(redaction.is_accepted)
+            self.assertTrue(redaction.auto_accepted)
+            self.assertNotEqual(
+                redaction.decided_by, Redaction.DecidedBy.HUMAN
+            )
+        self.assertQuerySetEqual(new_redactions.trainable(), [])
+
+    @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
+    @patch("cases.services.GLiNERModelManager")
     def test_process_document_unknown_label_uses_fallback(
         self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
     ):
@@ -290,6 +353,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="PII",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         html_disclosure, _ = _build_document_html(
@@ -315,6 +379,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John Doe",
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         html, _ = _build_document_html(self.document, mode="disclosure")
@@ -333,6 +398,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John Doe",
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         html, _ = _build_document_html(self.document, mode="redacted")
@@ -349,6 +415,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             end_char=28,
             text="PII",
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
         )
         context_text = "a type of cheese"
@@ -370,6 +437,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="42/12345/24",
             redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         html, _ = _build_document_html(self.document, mode="disclosure")
@@ -435,6 +503,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         self.assertIsNotNone(html)
@@ -452,6 +521,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         self.assertIsNotNone(html)
@@ -472,6 +542,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John Smith",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         self.assertIsNotNone(html)
@@ -494,6 +565,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John Smith",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         Redaction.objects.create(
             document=self.document,
@@ -502,6 +574,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="Jane Doe",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         self.assertIsNotNone(html)
@@ -525,6 +598,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John Smith",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         self.assertIsNotNone(html)
@@ -545,6 +619,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John Smith",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         self.assertIsNotNone(html)
@@ -561,6 +636,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         Redaction.objects.create(
             document=self.document,
@@ -569,6 +645,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="Smith",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         # Merged into one inline marker; " was arrested" follows on the same line → kept
@@ -586,6 +663,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="John",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         Redaction.objects.create(
             document=self.document,
@@ -594,6 +672,7 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             text="London",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         html, _ = _build_document_html(self.document, mode="removal")
         # Both redactions are inline within the same sentence → both markers kept
@@ -1588,6 +1667,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
             self.old_doc, "John Doe", Redaction.RedactionType.THIRD_PARTY_PII
         )
         r_old.is_accepted = True
+        r_old.decided_by = Redaction.DecidedBy.HUMAN
         r_old.save()
 
         r_new = self._pending(
@@ -1598,6 +1678,13 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertTrue(r_new.is_accepted)
+        # The machine decision is recorded as such and must never feed
+        # SpanCat training (regression test for the propagation leak).
+        self.assertEqual(
+            r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
+        )
+        self.assertTrue(r_new.auto_accepted)
+        self.assertNotIn(r_new, Redaction.objects.trainable())
 
     def test_propagates_unanimous_reject_to_new_document(self):
         r_old = self._pending(
@@ -1605,6 +1692,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         )
         r_old.is_accepted = False
         r_old.justification = "Not relevant"
+        r_old.decided_by = Redaction.DecidedBy.HUMAN
         r_old.save()
 
         r_new = self._pending(
@@ -1616,12 +1704,16 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
         self.assertEqual(r_new.justification, "Not relevant")
+        self.assertEqual(
+            r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
+        )
 
     def test_mixed_decisions_leave_new_redaction_pending(self):
         r1 = self._pending(
             self.old_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
         )
         r1.is_accepted = True
+        r1.decided_by = Redaction.DecidedBy.HUMAN
         r1.save()
 
         file3 = SimpleUploadedFile("mid.pdf", b"z", "application/pdf")
@@ -1630,6 +1722,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
             mid_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
         )
         r2.justification = "Rejected for different reason"
+        r2.decided_by = Redaction.DecidedBy.HUMAN
         r2.save()
 
         r_new = self._pending(
@@ -1667,6 +1760,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
             other_doc, "John Doe", Redaction.RedactionType.THIRD_PARTY_PII
         )
         r_other.is_accepted = True
+        r_other.decided_by = Redaction.DecidedBy.HUMAN
         r_other.save()
 
         r_new = self._pending(
@@ -1713,6 +1807,7 @@ class ApplyCaseDsInfoToDocumentTests(NetworkBlockerMixin, TestCase):
             text=text,
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=accepted,
+            decided_by=Redaction.DecidedBy.HUMAN if accepted else None,
         )
 
     def test_creates_accepted_ds_info_for_matching_text(self):

@@ -166,6 +166,7 @@ def plan_document(document, patterns):
                     redaction_type=Redaction.RedactionType.DS_INFORMATION,
                     is_suggestion=True,
                     is_accepted=True,
+                    decided_by=Redaction.DecidedBy.DS_INFO_PROPAGATION,
                 )
             )
 
@@ -183,30 +184,23 @@ def apply_plan(plan):
     if plan.is_empty:
         return
 
-    for redaction in plan.to_accept:
-        redaction.is_accepted = True
-        redaction.justification = None
     for redaction in plan.to_upgrade:
         redaction.redaction_type = Redaction.RedactionType.DS_INFORMATION
         redaction.is_suggestion = True
-        redaction.is_accepted = True
-        redaction.justification = None
 
     with transaction.atomic():
         if plan.ids_to_delete:
             Redaction.objects.filter(id__in=plan.ids_to_delete).delete()
         if plan.to_create:
             Redaction.objects.bulk_create(plan.to_create)
-        to_update = plan.to_accept + plan.to_upgrade
-        if to_update:
+        if plan.to_upgrade:
             Redaction.objects.bulk_update(
-                to_update,
-                [
-                    "redaction_type",
-                    "is_suggestion",
-                    "is_accepted",
-                    "justification",
-                ],
+                plan.to_upgrade, ["redaction_type", "is_suggestion"]
+            )
+        ids_to_accept = [r.id for r in plan.to_accept + plan.to_upgrade]
+        if ids_to_accept:
+            Redaction.objects.filter(id__in=ids_to_accept).accept(
+                by=Redaction.DecidedBy.DS_INFO_PROPAGATION
             )
 
 

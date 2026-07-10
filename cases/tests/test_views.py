@@ -1081,6 +1081,7 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
             text="John Doe",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         # Already rejected — must not be touched
         self.r_rejected = Redaction.objects.create(
@@ -1090,6 +1091,7 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
             text="John Doe",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
             justification="Previously reviewed",
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
     def tearDown(self):
