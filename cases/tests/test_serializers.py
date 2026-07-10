@@ -252,6 +252,8 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertFalse(instance.is_suggestion)
         self.assertTrue(instance.is_accepted)
         self.assertEqual(instance.justification, "Manual redaction.")
+        # Manual redactions are born human-decided.
+        self.assertEqual(instance.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_redaction_serializer_update(self):
         """Test updating a Redaction instance."""
@@ -269,6 +271,86 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(
             instance.justification, "User accepted this suggestion."
         )
+        self.assertEqual(instance.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_redaction_serializer_human_accept_overrides_machine(self):
+        """A human re-confirming an auto-accepted redaction makes it trainable."""
+        machine_accepted = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="This",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.AUTO_ACCEPT,
+        )
+        self.assertTrue(machine_accepted.auto_accepted)
+
+        serializer = RedactionSerializer(
+            instance=machine_accepted,
+            data={"is_accepted": True},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        instance = serializer.save()
+
+        self.assertEqual(instance.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertFalse(instance.auto_accepted)
+        self.assertIn(instance, Redaction.objects.trainable())
+
+    def test_redaction_serializer_reject_records_human_provenance(self):
+        serializer = RedactionSerializer(
+            instance=self.redaction,
+            data={"is_accepted": False, "justification": "S.40"},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        instance = serializer.save()
+
+        self.assertFalse(instance.is_accepted)
+        self.assertEqual(instance.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertIn(instance, Redaction.objects.decided())
+
+    def test_redaction_serializer_withdrawing_decision_returns_to_pending(
+        self,
+    ):
+        self.redaction.is_accepted = True
+        self.redaction.decided_by = Redaction.DecidedBy.HUMAN
+        self.redaction.save()
+
+        serializer = RedactionSerializer(
+            instance=self.redaction,
+            data={"is_accepted": False, "justification": None},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        instance = serializer.save()
+
+        self.assertFalse(instance.is_accepted)
+        self.assertIsNone(instance.decided_by)
+        self.assertIn(instance, Redaction.objects.pending())
+
+    def test_redaction_serializer_auto_accepted_is_read_only(self):
+        machine_accepted = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="This",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.CASE_PROPAGATION,
+        )
+        data = RedactionSerializer(instance=machine_accepted).data
+        self.assertTrue(data["auto_accepted"])
+        # Writes to auto_accepted are ignored, not applied.
+        serializer = RedactionSerializer(
+            instance=machine_accepted,
+            data={"auto_accepted": False},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        instance = serializer.save()
+        self.assertTrue(instance.auto_accepted)
 
     def test_document_review_serializer_read(self):
         """Test serialization for the document review view."""

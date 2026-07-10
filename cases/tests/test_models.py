@@ -7,6 +7,7 @@ from unittest.mock import patch
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
@@ -14,6 +15,7 @@ from cases.models import (
     Case,
     Document,
     DocumentExportSettings,
+    ProvenanceError,
     Redaction,
     RedactionContext,
 )
@@ -257,6 +259,7 @@ class RedactionModelTests(NetworkBlockerMixin, TestCase):
             is_suggestion=False,
             is_accepted=True,
             justification=justification_text,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
         self.assertEqual(redaction.justification, justification_text)
 
@@ -318,62 +321,185 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
         defaults.update(kwargs)
         return Redaction.objects.create(**defaults)
 
-    def test_accept_sets_is_accepted_true(self):
+    def test_accept_sets_is_accepted_and_provenance(self):
         r = self._make_redaction()
-        Redaction.objects.filter(pk=r.pk).accept()
+        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
         r.refresh_from_db()
         self.assertTrue(r.is_accepted)
+        self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertFalse(r.auto_accepted)
+
+    def test_accept_records_each_machine_mechanism(self):
+        for mechanism in (
+            Redaction.DecidedBy.AUTO_ACCEPT,
+            Redaction.DecidedBy.CASE_PROPAGATION,
+            Redaction.DecidedBy.DS_INFO_PROPAGATION,
+        ):
+            with self.subTest(mechanism=mechanism):
+                r = self._make_redaction()
+                Redaction.objects.filter(pk=r.pk).accept(by=mechanism)
+                r.refresh_from_db()
+                self.assertTrue(r.is_accepted)
+                self.assertEqual(r.decided_by, mechanism)
+                self.assertTrue(r.auto_accepted)
+
+    def test_accept_without_by_raises_type_error(self):
+        r = self._make_redaction()
+        with self.assertRaises(TypeError):
+            Redaction.objects.filter(pk=r.pk).accept()
+
+    def test_reject_without_by_raises_type_error(self):
+        r = self._make_redaction()
+        with self.assertRaises(TypeError):
+            Redaction.objects.filter(pk=r.pk).reject("reason")
+
+    def test_accept_clears_stale_rejection_justification(self):
+        r = self._make_redaction(
+            justification="old rejection reason",
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
+        r.refresh_from_db()
+        self.assertTrue(r.is_accepted)
+        self.assertIsNone(r.justification)
 
     def test_reject_sets_is_accepted_false_and_justification(self):
-        r = self._make_redaction(is_accepted=True)
-        Redaction.objects.filter(pk=r.pk).reject("S.40 - Personal Information")
+        r = self._make_redaction(
+            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
+        )
+        Redaction.objects.filter(pk=r.pk).reject(
+            "S.40 - Personal Information", by=Redaction.DecidedBy.HUMAN
+        )
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
         self.assertEqual(r.justification, "S.40 - Personal Information")
+        self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
 
-    def test_reject_with_empty_string_sets_justification_but_stays_pending(
-        self,
-    ):
-        """An empty justification satisfies the field write but doesn't count as decided."""
+    def test_reject_with_blank_justification_still_counts_as_decided(self):
+        """Provenance makes an unjustified rejection representable."""
         r = self._make_redaction()
-        Redaction.objects.filter(pk=r.pk).reject("")
+        Redaction.objects.filter(pk=r.pk).reject(
+            "", by=Redaction.DecidedBy.CASE_PROPAGATION
+        )
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
         self.assertEqual(r.justification, "")
-        self.assertIn(r, Redaction.objects.pending())
+        self.assertNotIn(r, Redaction.objects.pending())
+        self.assertIn(r, Redaction.objects.decided())
 
-    def test_reset_clears_both_fields(self):
-        r = self._make_redaction(is_accepted=True, justification="old reason")
+    def test_reset_returns_to_pending_and_clears_provenance(self):
+        r = self._make_redaction(
+            is_accepted=True,
+            justification="old reason",
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
         Redaction.objects.filter(pk=r.pk).reset()
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
         self.assertIsNone(r.justification)
+        self.assertIsNone(r.decided_by)
         self.assertIn(r, Redaction.objects.pending())
 
     def test_accept_moves_out_of_pending(self):
         r = self._make_redaction()
         self.assertIn(r, Redaction.objects.pending())
-        Redaction.objects.filter(pk=r.pk).accept()
-        self.assertNotIn(r, Redaction.objects.pending())
-        self.assertIn(r, Redaction.objects.decided())
-
-    def test_reject_moves_into_decided(self):
-        r = self._make_redaction()
-        self.assertIn(r, Redaction.objects.pending())
-        Redaction.objects.filter(pk=r.pk).reject("reason")
+        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
         self.assertNotIn(r, Redaction.objects.pending())
         self.assertIn(r, Redaction.objects.decided())
 
     def test_accept_returns_count(self):
         self._make_redaction()
         self._make_redaction(start_char=5, end_char=9)
-        count = Redaction.objects.all().accept()
+        count = Redaction.objects.all().accept(by=Redaction.DecidedBy.HUMAN)
         self.assertEqual(count, 2)
 
     def test_reject_returns_count(self):
         self._make_redaction()
-        count = Redaction.objects.all().reject("reason")
+        count = Redaction.objects.all().reject(
+            "reason", by=Redaction.DecidedBy.HUMAN
+        )
         self.assertEqual(count, 1)
+
+    def test_update_of_decision_fields_raises_provenance_error(self):
+        self._make_redaction()
+        for kwargs in (
+            {"is_accepted": True},
+            {"justification": "reason"},
+            {"decided_by": Redaction.DecidedBy.HUMAN},
+        ):
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaises(ProvenanceError):
+                    Redaction.objects.all().update(**kwargs)
+
+    def test_update_of_non_decision_fields_still_allowed(self):
+        r = self._make_redaction()
+        Redaction.objects.filter(pk=r.pk).update(
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        r.refresh_from_db()
+        self.assertEqual(
+            r.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+
+    def test_bulk_update_of_decision_fields_raises_provenance_error(self):
+        r = self._make_redaction()
+        r.is_accepted = True
+        with self.assertRaises(ProvenanceError):
+            Redaction.objects.bulk_update([r], ["is_accepted"])
+
+    def test_bulk_create_accepted_without_provenance_violates_constraint(
+        self,
+    ):
+        with self.assertRaises(IntegrityError):
+            Redaction.objects.bulk_create(
+                [
+                    Redaction(
+                        document=self.document,
+                        start_char=0,
+                        end_char=4,
+                        text="test",
+                        redaction_type=(
+                            Redaction.RedactionType.THIRD_PARTY_PII
+                        ),
+                        is_accepted=True,
+                    )
+                ]
+            )
+
+    def test_human_accept_overrides_machine_provenance(self):
+        r = self._make_redaction(
+            is_accepted=True, decided_by=Redaction.DecidedBy.AUTO_ACCEPT
+        )
+        self.assertNotIn(r, Redaction.objects.trainable())
+        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
+        r.refresh_from_db()
+        self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertFalse(r.auto_accepted)
+        self.assertIn(r, Redaction.objects.trainable())
+
+    def test_trainable_selects_only_human_accepted_non_ds_info(self):
+        human_accepted = self._make_redaction(
+            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
+        )
+        machine_accepted = self._make_redaction(
+            is_accepted=True, decided_by=Redaction.DecidedBy.AUTO_ACCEPT
+        )
+        ds_info = self._make_redaction(
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+        )
+        rejected = self._make_redaction(
+            justification="reason", decided_by=Redaction.DecidedBy.HUMAN
+        )
+        pending = self._make_redaction()
+
+        trainable = Redaction.objects.trainable()
+        self.assertIn(human_accepted, trainable)
+        self.assertNotIn(machine_accepted, trainable)
+        self.assertNotIn(ds_info, trainable)
+        self.assertNotIn(rejected, trainable)
+        self.assertNotIn(pending, trainable)
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)

@@ -93,6 +93,7 @@ class RedactionSignalTests(NetworkBlockerMixin, TestCase):
 
         # Accept without changing type — should not re-trigger
         redaction.is_accepted = True
+        redaction.decided_by = Redaction.DecidedBy.HUMAN
         redaction.save()
 
         mock_async_task.assert_not_called()
@@ -114,6 +115,7 @@ class RedactionSignalTests(NetworkBlockerMixin, TestCase):
         # Simulate DRF's serializer.save() — no update_fields kwarg
         redaction.redaction_type = Redaction.RedactionType.DS_INFORMATION
         redaction.is_accepted = True
+        redaction.decided_by = Redaction.DecidedBy.HUMAN
         redaction.is_suggestion = False
         redaction.save()  # no update_fields
 

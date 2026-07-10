@@ -80,6 +80,7 @@ class PlanApplyTestCase(NetworkBlockerMixin, TestCase):
             text=text,
             redaction_type=redaction_type,
             is_accepted=accepted,
+            decided_by=Redaction.DecidedBy.HUMAN if accepted else None,
         )
 
 
@@ -237,8 +238,9 @@ class ApplyPlanTests(PlanApplyTestCase):
             self.document, build_term_patterns(["Alice", "Bob", "party"])
         )
 
-        # Savepoint + one bulk_create + one bulk_update + release.
-        with self.assertNumQueries(4):
+        # Savepoint + one bulk_create + one bulk_update + one accept
+        # UPDATE + release.
+        with self.assertNumQueries(5):
             apply_plan(plan)
 
     def test_failure_rolls_back_whole_document(self):
@@ -254,7 +256,7 @@ class ApplyPlanTests(PlanApplyTestCase):
         )
 
         with patch(
-            "cases.ds_info_propagation.Redaction.objects.bulk_update",
+            "cases.models.RedactionQuerySet.accept",
             side_effect=RuntimeError("boom"),
         ):
             with self.assertRaises(RuntimeError):
@@ -297,6 +299,7 @@ class ScopeConvenienceTests(PlanApplyTestCase):
             text="Alice",
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         propagate_term_across_case(source)
@@ -320,6 +323,7 @@ class ScopeConvenienceTests(PlanApplyTestCase):
             text="Alice",
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         propagate_term_across_case(source)
@@ -334,6 +338,7 @@ class ScopeConvenienceTests(PlanApplyTestCase):
             text=" ",
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
 
         with self.assertNumQueries(0):

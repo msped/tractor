@@ -99,6 +99,7 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
             end_char=23,
             text="accepted",
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
             redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
         )
         # This one should be ignored (not accepted)
@@ -152,6 +153,34 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(end, 23)
         self.assertEqual(label, "OPERATIONAL")
 
+    def test_machine_accepted_redactions_excluded_from_case_training(self):
+        """Only human-decided accepts feed SpanCat — machine-accepted rows
+        (auto-accept, case propagation) must be excluded."""
+        machine_doc = CaseDocument.objects.create(
+            case=self.case,
+            extracted_text="Crime ref 42/12345/24 recorded at the station.",
+            status=CaseDocument.Status.COMPLETED,
+        )
+        for start, end, text, mechanism in (
+            (10, 21, "42/12345/24", Redaction.DecidedBy.AUTO_ACCEPT),
+            (34, 41, "station", Redaction.DecidedBy.CASE_PROPAGATION),
+        ):
+            Redaction.objects.create(
+                document=machine_doc,
+                start_char=start,
+                end_char=end,
+                text=text,
+                is_accepted=True,
+                decided_by=mechanism,
+                redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            )
+        train_data, _, c_docs = collect_training_data_detailed(
+            source="redactions"
+        )
+        self.assertNotIn(machine_doc, c_docs)
+        doc_texts = [text for text, _ in train_data]
+        self.assertNotIn(machine_doc.extracted_text, doc_texts)
+
     def test_pii_redactions_excluded_from_case_training(self):
         """PII redactions from case documents must not feed into SpanCat training."""
         pii_doc = CaseDocument.objects.create(
@@ -165,6 +194,7 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
             end_char=10,
             text="John Smith",
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
         )
         train_data, _, c_docs = collect_training_data_detailed(
@@ -756,6 +786,7 @@ class CollectTrainingDataDetailedEdgeCasesTests(NetworkBlockerMixin, TestCase):
             end_char=7,
             text="DS info",
             is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
         )
 
