@@ -9,22 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auto-accept review mode**: admin toggle (Settings → Review Workflow) that automatically accepts all NER redaction suggestions when a document is processed. Reviewers must scroll through the full document before marking it complete, and auto-accepted redactions are excluded from SpanCat training
+- **Data subject information propagation**: accepting a DS_INFO redaction automatically finds and accepts matching text (including plural/singular variations) across all other reviewable documents in the case; newly uploaded documents inherit the case's accepted DS_INFO terms on processing
+- **Retention management**: Settings page for global automatic case deletion, lists of cases past or approaching their retention review date, and bulk case deletion
+- **Disclosure style option** on document export settings: redactions in disclosure PDFs rendered as black bars or removed entirely (adjacent removals merge into a single `[...]` marker; fully redacted rows, cells, and lines are suppressed)
+- Case list search and filtering
+- Drag-and-drop document upload
 - `Document.start_processing()` method to transition a document into processing state and dispatch the async task
 - Paste Text tab (alpha) on the Add Document dialog — allows creating a document by pasting plain text directly, without uploading a file. The pasted content is stored as a `.txt` file and processed through the same NER pipeline as uploaded documents. Table formatting is not preserved.
+- Makefile with backend and frontend targets for run, test, lint, format, and migrations
+
+### Security
+
+- Media files are now served through an authenticated backend view instead of directly by the web server; the view returns 404 for directory paths and files missing from storage
+- Case API endpoints hardened: bulk redaction update payloads are validated (400 on missing/invalid fields), export requests return 409 while an export is already processing, and `case_reference` length limits are enforced in forms
+- Blank entries filtered from `ALLOWED_HOSTS`
 
 ### Fixed
 
+- Case-decision propagation no longer leaks machine-accepted redactions into SpanCat training data — propagated decisions were previously indistinguishable from human accepts and contaminated every training run since auto-accept shipped
+- A human re-confirming an auto-accepted redaction is now recorded as a human decision and included in SpanCat training (previously it stayed excluded)
 - Admin-only UI elements (Retention Review nav item, API Keys, LLM Prompt Settings, and Retention Settings cards) not appearing until a hard page refresh after logging in. Root causes: (1) the `customSession` plugin renamed `isAdmin` → `is_admin`, causing a mismatch with the raw field name stored in better-auth's JWE cookie cache; (2) better-auth's `atomListeners` does not include the custom `/sign-in/username` endpoint, so `useSession()` was never notified to re-fetch after login. Fixed by keeping the field as `isAdmin` throughout and explicitly calling `authClient.$store.notify("$sessionSignal")` after a successful login.
 - SpanCat training now extracts highlighted text from table cells in training documents, not just body paragraphs. Previously, any annotations in occurrence report tables (e.g. Link/No columns, involved-officer blocks) were silently ignored.
 - Data subject name filter now handles inverted name formats (e.g. "COOPER, ALEX" in a document matching the stored name "Alex Cooper") using word-set subset comparison.
+- Cancel document processing now actually removes the queued task — `OrmQ.key` holds the cluster name, not the task id, so the old lookup never matched
+- Retention cleanup now deletes original files from storage rather than only clearing the database reference
+- Export package generation no longer silently overwrites documents with identical sanitised filenames
+- File downloads use absolute storage URLs natively (cloud storage backends) and defer blob URL revocation until after the download starts
+- Per-thread database connections closed after parallel pipeline extractor stages, preventing connection exhaustion in the worker
+- better-auth endpoints routed to the frontend in the nginx production config
+- Training document upload returns 400 when no file is provided
+- Explicitly provided case retention dates are preserved instead of being overwritten by the DOB-derived default; model creation detected via `_state.adding` for UUID-pk models
+- `Document.save()` derives `file_type` in the same format as the serializer (leading dot) and no longer overwrites caller-set fields
+- `OLLAMA_ENABLED` environment variable boolean conversion
 - Training Documents now use media settings overide to stop test data being uploaded to the directroy.
 
 ### Changed
 
+- **Redaction decision provenance**: the `auto_accepted` boolean is replaced by a `decided_by` column recording who made each decision (human reviewer, auto-accept mode, case-decision propagation, or DS_INFO propagation). All accept/reject operations must state their provenance — enforced at the API, ORM, and database-constraint level — and SpanCat training selection is now owned by a single canonical `trainable()` queryset. The `auto_accepted` API field is preserved read-only, so the frontend contract is unchanged
+- Custom Presidio recognizers now run as the highest-priority extraction stage, so admin-configured patterns can no longer be overridden by learned SpanCat predictions
+- DS_INFO propagation consolidated into a plan/apply module (`cases/ds_info_propagation.py`) with a read-only planning phase and a single writer of propagation acceptance state
 - `training/services.py` split into `training/extraction.py` (document structure extraction and `DocumentStructure` dataclass) and `training/pipeline.py` (`ExtractionPipeline` and `build_default_pipeline`)
 - `GLiNERModelManager` and `SpanCatModelManager` now inherit from `_ModelManagerBase`, giving each subclass independent singleton state and eliminating shared class-level `_instance`/`_lock`
 - Task routing for the `cases` app centralised in `cases/tasks.py`; unhandled exceptions during document processing now log the traceback and mark the document `ERROR` rather than propagating silently
-- Frontend services now use a shared `extractApiError` utility for consistent API error handling
+- Frontend services now use a shared `throwApiError` utility for consistent API error handling
 - `RedactionComponent` state logic extracted into `useRedactionState` hook; mark-all-in-case logic extracted into `useMarkAllInCase` hook
 - SpanCat superset extension rule: when SpanCat predicts a span that strictly contains a same-label custom Presidio span (e.g. it captures "OIC / HUGHES, R. #0723222" while Presidio only matched "HUGHES, R. #0723222"), SpanCat's wider span replaces the narrower one instead of being dropped. This is intentionally limited to the SpanCat stage.
 - SpanCat training task timeout increased from the cluster-wide 1800 s to 7200 s; ngram candidate sizes capped at 1–20 (was 1–50) to reduce memory pressure on large document sets; case document input capped at 500 most-recent documents per training run
