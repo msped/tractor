@@ -10,7 +10,7 @@ from docx import Document as DocxDocument
 from spacy.training import Example
 from spacy.util import compounding, minibatch
 
-from cases.models import Document, Redaction
+from cases.models import Document
 
 from .models import (
     Model,
@@ -210,9 +210,7 @@ def collect_training_data_detailed(source="both"):
                 continue
 
             entities = []
-            for redaction in doc.redactions.filter(
-                is_accepted=True, auto_accepted=False
-            ).exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION):
+            for redaction in doc.redactions.trainable():
                 label = REDACTION_TYPE_TO_ENTITY_LABEL.get(
                     redaction.redaction_type
                 )

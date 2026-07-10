@@ -386,10 +386,18 @@ class BulkRedactionUpdateView(APIView):
         is_accepted = serializer.validated_data["is_accepted"]
         justification = serializer.validated_data["justification"]
 
-        Redaction.objects.filter(
+        target_qs = Redaction.objects.filter(
             document_id=document_id,
             id__in=ids,
-        ).update(is_accepted=is_accepted, justification=justification)
+        )
+        if is_accepted:
+            target_qs.accept(by=Redaction.DecidedBy.HUMAN)
+        elif justification:
+            target_qs.reject(justification, by=Redaction.DecidedBy.HUMAN)
+        else:
+            # No justification means the decision is being withdrawn, not a
+            # blank rejection — mirrors the frontend's pending classification.
+            target_qs.reset()
 
         updated = Redaction.objects.filter(
             id__in=ids, document_id=document_id
@@ -437,8 +445,8 @@ class BulkByTextRedactionView(APIView):
     across every document in a case as ACCEPTED or REJECTED in a single
     atomic operation. Returns the count of updated redactions.
 
-    A redaction is considered PENDING when is_accepted=False and justification
-    is null or empty, mirroring the frontend's pending-section filter.
+    A redaction is PENDING when no decision has been recorded for it
+    (decided_by is null).
     """
 
     permission_classes = [IsAuthenticated]
@@ -456,9 +464,12 @@ class BulkByTextRedactionView(APIView):
 
         with transaction.atomic():
             if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:
-                count = pending_qs.accept()
+                count = pending_qs.accept(by=Redaction.DecidedBy.HUMAN)
             else:
-                count = pending_qs.reject(data.get("rejection_reason", ""))
+                count = pending_qs.reject(
+                    data.get("rejection_reason", ""),
+                    by=Redaction.DecidedBy.HUMAN,
+                )
 
         return Response({"updated": count}, status=status.HTTP_200_OK)
 

@@ -163,6 +163,34 @@ class RedactionSerializer(serializers.ModelSerializer):
         queryset=Document.objects.all(), write_only=True
     )
     context = RedactionContextSerializer(read_only=True)
+    # Model property, serialized read-only for API compatibility.
+    auto_accepted = serializers.BooleanField(read_only=True)
+
+    @staticmethod
+    def _decided_by_for(is_accepted, justification):
+        """
+        Provenance implied by a decision write through this (human-facing)
+        serializer: any accept or justified rejection is a human decision;
+        an unjustified non-accept means the decision is withdrawn (pending).
+        """
+        if is_accepted or justification:
+            return Redaction.DecidedBy.HUMAN
+        return None
+
+    def create(self, validated_data):
+        validated_data["decided_by"] = self._decided_by_for(
+            validated_data.get("is_accepted", False),
+            validated_data.get("justification"),
+        )
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if {"is_accepted", "justification"} & validated_data.keys():
+            validated_data["decided_by"] = self._decided_by_for(
+                validated_data.get("is_accepted", instance.is_accepted),
+                validated_data.get("justification", instance.justification),
+            )
+        return super().update(instance, validated_data)
 
     class Meta:
         model = Redaction

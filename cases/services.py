@@ -178,9 +178,9 @@ def process_document_and_create_redactions(document_id):
         Redaction.objects.bulk_create(redactions_to_create)
 
     if ReviewWorkflowSettings.get().auto_accept_enabled:
-        document.redactions.filter(
-            auto_accepted=False, is_accepted=False
-        ).update(is_accepted=True, auto_accepted=True)
+        document.redactions.pending().accept(
+            by=Redaction.DecidedBy.AUTO_ACCEPT
+        )
 
     # Run case-decision propagation in its own transaction so a failure here
     # does not roll back the committed redactions above.
@@ -239,7 +239,7 @@ def _apply_existing_case_decisions(document):
         )
 
         if accepted_count == total:
-            target_qs.accept()
+            target_qs.accept(by=Redaction.DecidedBy.CASE_PROPAGATION)
         elif rejected_count == total:
             top = (
                 existing_decided.values("justification")
@@ -247,7 +247,10 @@ def _apply_existing_case_decisions(document):
                 .order_by("-n")
                 .first()
             )
-            target_qs.reject(top["justification"] if top else "")
+            target_qs.reject(
+                top["justification"] if top else "",
+                by=Redaction.DecidedBy.CASE_PROPAGATION,
+            )
 
 
 def _apply_case_ds_info_to_document(document):
