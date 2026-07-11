@@ -421,20 +421,6 @@ class LLMPromptSettingsViewTests(BaseTrainingAPITestCase):
 
 
 class CustomRecognizerViewTests(BaseTrainingAPITestCase):
-    def setUp(self):
-        super().setUp()
-        import training.extractors.presidio_extractor as mod
-
-        mod._analyzer = None
-        mod._operational_analyzer = None
-
-    def tearDown(self):
-        super().tearDown()
-        import training.extractors.presidio_extractor as mod
-
-        mod._analyzer = None
-        mod._operational_analyzer = None
-
     def _create_payload(self, **overrides):
         data = {
             "name": "Test Recognizer",

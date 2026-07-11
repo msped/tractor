@@ -34,9 +34,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -105,9 +107,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.extractors.spancat_extractor.extract_with_spancat")
     @patch("training.loader.SpanCatModelManager")
@@ -167,9 +171,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -220,9 +226,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -256,9 +264,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -311,9 +321,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
 
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -344,9 +356,11 @@ class ServicesTests(NetworkBlockerMixin, TestCase):
     @patch("training.extractors.gemma_extractor.extract_with_gemma")
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -824,9 +838,11 @@ class ExpandPrefixSymbolsTests(NetworkBlockerMixin, TestCase):
 class ExtractEntitiesDocxPathTests(NetworkBlockerMixin, TestCase):
     @patch("training.services.extract_document_structure")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -1226,9 +1242,11 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
     @patch("training.extractors.gemma_extractor.extract_with_gemma")
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -1267,9 +1285,11 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
     @patch("training.extractors.gemma_extractor.extract_with_gemma")
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
@@ -1321,9 +1341,11 @@ class GemmaIntegrationTests(NetworkBlockerMixin, TestCase):
     @patch("training.extractors.gemma_extractor.extract_with_gemma")
     @patch("training.services._extract_text_from_pdf")
     @patch(
-        "training.extractors.presidio_extractor.extract_operational_with_presidio"
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_operational"
     )
-    @patch("training.extractors.presidio_extractor.extract_with_presidio")
+    @patch(
+        "training.extractors.presidio_provider.PresidioSnapshot.extract_third_party"
+    )
     @patch("training.extractors.gliner_extractor.extract_with_gliner")
     @patch("training.loader.SpanCatModelManager")
     @patch("training.loader.GLiNERModelManager")
