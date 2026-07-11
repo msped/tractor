@@ -1,11 +1,10 @@
 import shutil
 from pathlib import Path
 
-from django.db.models.signals import post_delete, post_save, pre_delete
+from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 
 from .models import (
-    CustomRecognizer,
     Model,
     TrainingDocument,
     TrainingRun,
@@ -20,18 +19,6 @@ def reset_training_docs_on_run_delete(sender, instance, **kwargs):
         training_run=instance
     ).values_list("document_id", flat=True)
     TrainingDocument.objects.filter(id__in=doc_ids).update(processed=False)
-
-
-@receiver(post_save, sender=CustomRecognizer)
-@receiver(post_delete, sender=CustomRecognizer)
-def invalidate_presidio_cache(sender, instance, **kwargs):
-    """Invalidate the Presidio analyzer singletons so the next extraction rebuilds with updated recognizers."""
-    import training.extractors.presidio_extractor as mod
-
-    mod._analyzer = None
-    mod._operational_analyzer = None
-    mod._custom_third_party_analyzer = None
-    mod._custom_operational_analyzer = None
 
 
 @receiver(pre_delete, sender=Model)

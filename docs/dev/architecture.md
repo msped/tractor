@@ -184,7 +184,7 @@ GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in t
 | Custom pattern | Crime reference numbers (e.g. `42/12345/24`) |
 | Custom pattern | Police collar numbers (e.g. `PC 1234`)       |
 
-Both analyzers are instantiated lazily and cached as module-level singletons.
+Analyzer engines are built lazily inside an immutable `PresidioSnapshot` (`training/extractors/presidio_provider.py`). One snapshot is acquired per document via `PresidioEngineProvider.get_instance().acquire_snapshot()`, which fingerprints the custom-recognizer tables (a content hash) and swaps in a fresh snapshot whenever the config has changed — in every process, with no signals involved.
 
 #### Custom Recognizers
 
@@ -193,7 +193,7 @@ Administrators can extend the Presidio analyzers with organisation-specific patt
 - **Pattern**: a regex with a confidence score, validated against the Presidio scoring rules
 - **Deny list**: a fixed list of strings to match exactly (e.g. known officer names or case codes)
 
-Custom recognizers are stored in the `CustomRecognizer`, `CustomPattern`, and `CustomDenyListItem` models in the `training` app and managed via the CRUD API at `/api/model-management/custom-recognizers/`. A `post_save`/`post_delete` signal on `CustomRecognizer` invalidates the Presidio analyzer singletons so changes take effect on the next document processed without requiring a server restart.
+Custom recognizers are stored in the `CustomRecognizer`, `CustomPattern`, and `CustomDenyListItem` models in the `training` app and managed via the CRUD API at `/api/model-management/custom-recognizers/`. Freshness is comparison-based: each document acquires a Presidio snapshot whose fingerprint is a content hash of the recognizer tables, so any edit — including bulk updates that bypass `save()` — takes effect on the next document processed in both the web and qcluster worker processes, with no restart required.
 
 ### Gemma (Contextual AI — LLM)
 

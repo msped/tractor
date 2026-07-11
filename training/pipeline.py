@@ -130,22 +130,26 @@ class ExtractionPipeline:
         return combined
 
 
-def build_default_pipeline(data_subject_name=None, data_subject_dob=None):
+def build_default_pipeline(
+    data_subject_name=None, data_subject_dob=None, *, presidio_snapshot=None
+):
     """Build the standard four-extractor pipeline from singleton model managers.
 
     Priority order: Custom Presidio > SpanCat > Presidio > GLiNER > Gemma.
     Custom recognizers run first so admin-configured rules always override learned
     model predictions. SpanCat is omitted if no model is trained. Gemma is non-fatal.
     Raises ValueError if no GLiNER model is available.
+
+    One Presidio snapshot is acquired per pipeline (per document), so all
+    Presidio stages of a document share identical recognizer config even if
+    an admin edits custom recognizers mid-run. Pass ``presidio_snapshot`` to
+    inject a substitute (any object with extract_custom / extract_third_party
+    / extract_operational methods) in tests.
     """
     # Lazy imports — keep Django models and heavy extractor deps away from module load time
     from .extractors.gemma_extractor import extract_with_gemma
     from .extractors.gliner_extractor import extract_with_gliner
-    from .extractors.presidio_extractor import (
-        extract_custom_with_presidio,
-        extract_operational_with_presidio,
-        extract_with_presidio,
-    )
+    from .extractors.presidio_provider import PresidioEngineProvider
     from .extractors.spancat_extractor import extract_with_spancat
     from .loader import GLiNERModelManager, SpanCatModelManager
 
@@ -155,12 +159,17 @@ def build_default_pipeline(data_subject_name=None, data_subject_dob=None):
 
     spancat_nlp = SpanCatModelManager.get_instance().get_model()
 
+    snapshot = (
+        presidio_snapshot
+        or PresidioEngineProvider.get_instance().acquire_snapshot()
+    )
+
     stages = []
     spancat_stage_index = None
 
     # Custom recognizers take absolute priority — runs before SpanCat so that
     # admin-configured patterns cannot be overridden by learned model predictions.
-    stages.append(extract_custom_with_presidio)
+    stages.append(snapshot.extract_custom)
 
     if spancat_nlp:
 
@@ -171,9 +180,9 @@ def build_default_pipeline(data_subject_name=None, data_subject_dob=None):
         stages.append(_spancat_stage)
 
     def _presidio_stage(text):
-        return extract_with_presidio(text) + extract_operational_with_presidio(
+        return snapshot.extract_third_party(
             text
-        )
+        ) + snapshot.extract_operational(text)
 
     stages.append(_presidio_stage)
 
