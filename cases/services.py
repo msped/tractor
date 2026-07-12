@@ -31,6 +31,7 @@ from .models import (
     Redaction,
     ReviewWorkflowSettings,
 )
+from .span_merging import absorb_prefix_symbols, merge_spans_for_removal
 
 logger = logging.getLogger(__name__)
 
@@ -296,52 +297,12 @@ def find_and_flag_matching_text_in_case(redaction_id):
 
 _REMOVAL_MARKER = '<span style="white-space: nowrap;">[...]</span>'
 
-# Characters that count as "nothing" between two adjacent redactions and
-# cause them to be merged into a single [...].  Whitespace plus common
-# punctuation separators (commas, colons, semicolons, hyphens, slashes…)
-# so that e.g. "[name], [address]" becomes a single [...].
-_REMOVAL_GAP_CHARS = frozenset(" \t\n\r\f\v,.:;-/&|()'\"")
-
-
-def _is_separator_gap(text):
-    return bool(text) and all(c in _REMOVAL_GAP_CHARS for c in text)
-
-
-def _merge_spans_for_removal(full_text, seg_start, seg_end, sorted_redactions):
-    """Collapse overlapping/adjacent redaction spans into merged (start, end) pairs.
-
-    Two spans are merged when the gap between them is empty, pure whitespace,
-    or consists solely of punctuation/separator characters (so that constructs
-    like "[name], [address]" collapse to a single [...]).
-    """
-    spans = []
-    for r in sorted_redactions:
-        if r.end_char <= seg_start or r.start_char >= seg_end:
-            continue
-        r_start = max(r.start_char, seg_start)
-        r_end = min(r.end_char, seg_end)
-        while r_start > seg_start and full_text[r_start - 1] in {"#"}:
-            r_start -= 1
-        if not spans:
-            spans.append([r_start, r_end])
-        else:
-            gap = full_text[spans[-1][1] : r_start]
-            if (
-                r_start <= spans[-1][1]
-                or not gap.strip()
-                or _is_separator_gap(gap)
-            ):
-                spans[-1][1] = max(spans[-1][1], r_end)
-            else:
-                spans.append([r_start, r_end])
-    return spans
-
 
 def _cell_fully_redacted(full_text, seg_start, seg_end, sorted_redactions):
     """Return True if every non-whitespace character in [seg_start, seg_end) is covered by a redaction."""
     if seg_start >= seg_end:
         return False  # empty cell — nothing to redact, treat as unredacted
-    merged = _merge_spans_for_removal(
+    merged = merge_spans_for_removal(
         full_text, seg_start, seg_end, sorted_redactions
     )
     prev = seg_start
@@ -357,7 +318,7 @@ def _apply_redactions_to_segment(
 ):
     """Apply accepted redactions to a text segment and return an HTML string with redaction spans."""
     if mode == "removal":
-        merged = _merge_spans_for_removal(
+        merged = merge_spans_for_removal(
             full_text, start, end, sorted_redactions
         )
         parts = []
@@ -385,8 +346,7 @@ def _apply_redactions_to_segment(
         # Expand backwards to include any immediately preceding prefix symbol (e.g. '#')
         # that was not captured in the stored span (handles documents processed before
         # the extraction-layer fix).
-        while r_start > prev and full_text[r_start - 1] in {"#"}:
-            r_start -= 1
+        r_start = absorb_prefix_symbols(full_text, r_start, prev)
 
         parts.append(html_escape(full_text[prev:r_start]))
 
