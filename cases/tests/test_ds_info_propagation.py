@@ -49,6 +49,28 @@ class BuildTermPatternsTests(SimpleTestCase):
         self.assertIsNone(pattern.regex.search("her surname was"))
         self.assertIsNotNone(pattern.regex.search("her name was"))
 
+    def test_matches_term_with_leading_punctuation(self):
+        (pattern,) = build_term_patterns(["#071234"])
+        self.assertIsNotNone(pattern.regex.search("officer #071234 attended"))
+        self.assertIsNone(pattern.regex.search("ref #0712345 attended"))
+
+    def test_matches_term_with_trailing_punctuation(self):
+        (pattern,) = build_term_patterns(["O'Brien (Jr.)"])
+        self.assertIsNotNone(
+            pattern.regex.search("seen by O'Brien (Jr.) today")
+        )
+
+    def test_matches_punctuation_edged_term_at_string_boundaries(self):
+        (pattern,) = build_term_patterns(["#071234"])
+        self.assertIsNotNone(pattern.regex.search("#071234"))
+
+    def test_punctuation_edged_term_still_respects_word_edges(self):
+        (pattern,) = build_term_patterns(["Smith & Co."])
+        self.assertIsNotNone(
+            pattern.regex.search("sold to Smith & Co. in May")
+        )
+        self.assertIsNone(pattern.regex.search("Blacksmith & Co. in May"))
+
     def test_case_insensitive_match_returns_original_case(self):
         (pattern,) = build_term_patterns(["alice"])
         match = pattern.regex.search("Then ALICE spoke")
