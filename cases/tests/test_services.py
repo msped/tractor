@@ -32,7 +32,6 @@ from ..services import (
     _cell_fully_redacted,
     _generate_pdf_from_document,
     _matches_data_subject,
-    _merge_spans_for_removal,
     _render_table_with_redactions,
     delete_cases_past_retention_date,
     delete_original_files_past_threshold,
@@ -445,52 +444,6 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         # The crime ref text should not appear outside a redaction span
         self.assertNotIn(">42/12345/24<", html)
         self.assertNotIn(">#42/12345/24<", html)
-
-    def test_merge_spans_for_removal_single(self):
-        """A single redaction produces one (start, end) pair."""
-        text = "Hello world foo bar"
-        r = SimpleNamespace(start_char=6, end_char=11)
-        spans = _merge_spans_for_removal(text, 0, len(text), [r])
-        self.assertEqual(spans, [[6, 11]])
-
-    def test_merge_spans_for_removal_adjacent_merged(self):
-        """Two redactions separated only by whitespace collapse into one span."""
-        text = "John Smith was here"
-        r1 = SimpleNamespace(start_char=0, end_char=4)
-        r2 = SimpleNamespace(start_char=5, end_char=10)
-        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
-        self.assertEqual(spans, [[0, 10]])
-
-    def test_merge_spans_for_removal_non_adjacent_separate(self):
-        """Two redactions with non-whitespace word text between them remain separate."""
-        text = "John went to London"
-        r1 = SimpleNamespace(start_char=0, end_char=4)
-        r2 = SimpleNamespace(start_char=13, end_char=19)
-        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
-        self.assertEqual(spans, [[0, 4], [13, 19]])
-
-    def test_merge_spans_for_removal_comma_separator_merged(self):
-        """Two redactions separated only by ', ' (comma+space) are merged."""
-        text = "John, Smith"
-        r1 = SimpleNamespace(start_char=0, end_char=4)
-        r2 = SimpleNamespace(start_char=6, end_char=11)
-        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
-        self.assertEqual(spans, [[0, 11]])
-
-    def test_merge_spans_for_removal_colon_separator_merged(self):
-        """Two redactions separated only by ': ' are merged."""
-        text = "LPU: Chester"
-        r1 = SimpleNamespace(start_char=0, end_char=3)
-        r2 = SimpleNamespace(start_char=5, end_char=12)
-        spans = _merge_spans_for_removal(text, 0, len(text), [r1, r2])
-        self.assertEqual(spans, [[0, 12]])
-
-    def test_merge_spans_for_removal_hash_expansion(self):
-        """A '#' immediately before a span is pulled into the merged region."""
-        text = "ref #42/12345 noted"
-        r = SimpleNamespace(start_char=5, end_char=13)
-        spans = _merge_spans_for_removal(text, 0, len(text), [r])
-        self.assertEqual(spans, [[4, 13]])
 
     def test_build_document_html_removal_mode_inline(self):
         """A redaction surrounded by text on both sides keeps its [...] marker."""

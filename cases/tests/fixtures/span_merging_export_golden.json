@@ -1,0 +1,217 @@
+{
+  "text": "Report ref #071234 filed by SMITH, J. #0755555 at the station.\nContact: John Doe, 12 High Street, AB1 2CD - phone 07700 900123.\nWitness O'Brien (Jr.) saw the incident; nothing else follows here.",
+  "cases": [
+    {
+      "name": "single",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          11,
+          18,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          11,
+          18
+        ]
+      ],
+      "removal_html": "Report ref <span style=\"white-space: nowrap;\">[...]</span> filed by SMITH, J. #0755555 at the station.\nContact: John Doe, 12 High Street, AB1 2CD - phone 07700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    },
+    {
+      "name": "hash_absorption",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          12,
+          18,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          11,
+          18
+        ]
+      ],
+      "removal_html": "Report ref <span style=\"white-space: nowrap;\">[...]</span> filed by SMITH, J. #0755555 at the station.\nContact: John Doe, 12 High Street, AB1 2CD - phone 07700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    },
+    {
+      "name": "adjacent_merge",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          28,
+          37,
+          "PII"
+        ],
+        [
+          38,
+          46,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          28,
+          46
+        ]
+      ],
+      "removal_html": "Report ref #071234 filed by <span style=\"white-space: nowrap;\">[...]</span> at the station.\nContact: John Doe, 12 High Street, AB1 2CD - phone 07700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    },
+    {
+      "name": "comma_separated",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          73,
+          81,
+          "PII"
+        ],
+        [
+          83,
+          97,
+          "PII"
+        ],
+        [
+          99,
+          106,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          73,
+          81
+        ],
+        [
+          83,
+          97
+        ],
+        [
+          99,
+          106
+        ]
+      ],
+      "removal_html": "Report ref #071234 filed by SMITH, J. #0755555 at the station.\nContact: J<span style=\"white-space: nowrap;\">[...]</span> 1<span style=\"white-space: nowrap;\">[...]</span> A<span style=\"white-space: nowrap;\">[...]</span>- phone 07700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    },
+    {
+      "name": "word_gap_no_merge",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          0,
+          6,
+          "PII"
+        ],
+        [
+          11,
+          18,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          0,
+          6
+        ],
+        [
+          11,
+          18
+        ]
+      ],
+      "removal_html": "<span style=\"white-space: nowrap;\">[...]</span> ref <span style=\"white-space: nowrap;\">[...]</span> filed by SMITH, J. #0755555 at the station.\nContact: John Doe, 12 High Street, AB1 2CD - phone 07700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    },
+    {
+      "name": "cross_type",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          28,
+          37,
+          "OP_DATA"
+        ],
+        [
+          38,
+          46,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          28,
+          46
+        ]
+      ],
+      "removal_html": "Report ref #071234 filed by <span style=\"white-space: nowrap;\">[...]</span> at the station.\nContact: John Doe, 12 High Street, AB1 2CD - phone 07700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    },
+    {
+      "name": "clipped_segment",
+      "seg_start": 30,
+      "seg_end": 100,
+      "redactions": [
+        [
+          28,
+          37,
+          "PII"
+        ],
+        [
+          38,
+          46,
+          "PII"
+        ],
+        [
+          83,
+          97,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          30,
+          46
+        ],
+        [
+          83,
+          97
+        ]
+      ],
+      "removal_html": "<span style=\"white-space: nowrap;\">[...]</span> at the station.\nContact: John Doe, 1<span style=\"white-space: nowrap;\">[...]</span> AB"
+    },
+    {
+      "name": "long_separator_run",
+      "seg_start": 0,
+      "seg_end": 194,
+      "redactions": [
+        [
+          97,
+          106,
+          "PII"
+        ],
+        [
+          110,
+          116,
+          "PII"
+        ]
+      ],
+      "merged_spans": [
+        [
+          97,
+          106
+        ],
+        [
+          110,
+          116
+        ]
+      ],
+      "removal_html": "Report ref #071234 filed by SMITH, J. #0755555 at the station.\nContact: John Doe, 12 High Street,<span style=\"white-space: nowrap;\">[...]</span>- ph<span style=\"white-space: nowrap;\">[...]</span>700 900123.\nWitness O&#x27;Brien (Jr.) saw the incident; nothing else follows here."
+    }
+  ]
+}
