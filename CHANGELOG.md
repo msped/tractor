@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Backend-owned span merging**: all span-merge rules now live in one backend module (`cases/span_merging.py`) covering both the review sidebar and export removal collapse. The review API ships a status-independent `merge_structure` block of merge pairs; the frontend merge implementation is replaced by rule-free partition mechanics, so accept/reject decisions still re-render instantly with no extra requests. Behaviour-identical relocation (phase 1 of the unification); display and export merge rules are unchanged
 - **Redaction decision provenance**: the `auto_accepted` boolean is replaced by a `decided_by` column recording who made each decision (human reviewer, auto-accept mode, case-decision propagation, or DS_INFO propagation). All accept/reject operations must state their provenance — enforced at the API, ORM, and database-constraint level — and SpanCat training selection is now owned by a single canonical `trainable()` queryset. The `auto_accepted` API field is preserved read-only, so the frontend contract is unchanged
 - Custom Presidio recognizers now run as the highest-priority extraction stage, so admin-configured patterns can no longer be overridden by learned SpanCat predictions
 - DS_INFO propagation consolidated into a plan/apply module (`cases/ds_info_propagation.py`) with a read-only planning phase and a single writer of propagation acceptance state
