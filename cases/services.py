@@ -649,7 +649,7 @@ def _build_document_html(
     prefetched = getattr(document, "accepted_redactions_prefetched", None)
     if prefetched is not None:
         redactions = prefetched
-        if mode == "disclosure":
+        if mode in ("disclosure", "removal"):
             redactions = [
                 r
                 for r in redactions
@@ -659,7 +659,7 @@ def _build_document_html(
         redactions = document.redactions.filter(
             is_accepted=True
         ).select_related("context")
-        if mode == "disclosure":
+        if mode in ("disclosure", "removal"):
             redactions = redactions.exclude(
                 redaction_type=Redaction.RedactionType.DS_INFORMATION
             )

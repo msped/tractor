@@ -380,7 +380,12 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                 }
             }
         } else {
-            marksToRender = redactions.map(r => ({ ...r, mark_type: 'accepted' }));
+            // In final mode, DS_INFO is the data subject's own information — the
+            // disclosure export keeps it visible, so the preview must not black it out.
+            const visibleRedactions = viewMode === 'final'
+                ? redactions.filter(r => r.redaction_type !== 'DS_INFO')
+                : redactions;
+            marksToRender = visibleRedactions.map(r => ({ ...r, mark_type: 'accepted' }));
         }
 
         return marksToRender.sort((a, b) => a.start_char - b.start_char);

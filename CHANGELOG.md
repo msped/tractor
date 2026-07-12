@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Data subject information is no longer removed from removal-style disclosure exports — with the disclosure style set to Removal, accepted DS_INFO redactions were collapsed into `[...]` markers exactly like third-party PII, defeating the purpose of the disclosure document. The document view page had the same blind spot: its final preview blacked out DS_INFO along with everything else, and now leaves it readable (the color-coded view keeps its purple highlight)
+- DS_INFO terms edged with punctuation (e.g. collar numbers like `#071234`, or `O'Brien (Jr.)`) now propagate across case documents — the word-boundary regex around each term never matched when the term started or ended with a non-word character
 - Custom recognizer changes now take effect on the next processed document in all processes — including qcluster workers — without a restart. Presidio analyzers are served from an immutable per-document snapshot whose freshness is a content fingerprint of the recognizer tables, replacing the signal-based cache invalidation that only worked in the web process and missed bulk/queryset edits. Engine builds are also now thread-safe and load half as many spaCy instances.
 - Case-decision propagation no longer leaks machine-accepted redactions into SpanCat training data — propagated decisions were previously indistinguishable from human accepts and contaminated every training run since auto-accept shipped
 - A human re-confirming an auto-accepted redaction is now recorded as a human decision and included in SpanCat training (previously it stayed excluded)
