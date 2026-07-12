@@ -13,6 +13,16 @@ export const createRedaction = async (documentId, createData) => {
     }
 };
 
+export const getMergeStructure = async (documentId) => {
+    // No throwApiError wrapper: callers revalidate in the background and
+    // keep the last known merge structure on failure.
+    const response = await apiClient.get(
+        `cases/document/${documentId}/redaction`,
+        { params: { include: 'merge_structure' } },
+    );
+    return response.data.merge_structure;
+};
+
 export const updateRedaction = async (redactionId, updateData) => {
     try {
         const response = await apiClient.patch(

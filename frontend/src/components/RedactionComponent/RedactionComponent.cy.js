@@ -103,10 +103,27 @@ const mockRedactionsWithDuplicates = [
     },
 ];
 
-const mountRedactionComponent = (document = mockDocument, redactions = mockRedactions) => {
+// Server-computed merge pairs for the fixtures above (merge rules live on the
+// backend now; the client only receives pairs). Only the adjacent fixture has
+// spans within the merge rule.
+const mergePairsFor = (redactions) => {
+    if (redactions === mockRedactionsWithAdjacent) {
+        return [{ a: 'adj1', b: 'adj2', type: 'PII', joiner: ' ', blockers: [] }];
+    }
+    return [];
+};
+
+const mountRedactionComponent = (document = mockDocument, redactions = mockRedactions, mergePairs = mergePairsFor(redactions)) => {
+    const merge_structure = { version: 1, pairs: mergePairs };
+    // Background revalidation after span geometry changes re-fetches the
+    // merge structure; keep it stable so display behaviour matches the mount.
+    cy.intercept('GET', '**/cases/document/*/redaction?include=merge_structure*', {
+        statusCode: 200,
+        body: { redactions: [], merge_structure },
+    }).as('getMergeStructure');
     return cy.fullMount(
         <PathnameContext.Provider value="/cases/case-1/document/doc-1/review">
-            <RedactionComponent document={document} initialRedactions={redactions} />
+            <RedactionComponent document={{ ...document, merge_structure }} initialRedactions={redactions} />
         </PathnameContext.Provider>,
         mountOpts
     );
@@ -395,6 +412,27 @@ describe('<RedactionComponent />', () => {
                 is_accepted: false,
                 justification: 'Not relevant',
             });
+        });
+
+        it('accepting one merged-pair member re-renders sections with no call besides the PATCH', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/adj1', (req) => {
+                const base = mockRedactionsWithAdjacent.find(r => r.id === 'adj1');
+                req.reply({ statusCode: 200, body: { ...base, ...req.body } });
+            }).as('acceptAdj1');
+
+            cy.get('button[aria-label="split merged redaction"]').click();
+            cy.contains('li', '"John"').contains('button', 'Accept').click();
+            cy.wait('@acceptAdj1');
+
+            // The pair partitions locally: pending keeps Doe, accepted gains John.
+            cy.contains('pending (1)').should('be.visible');
+            cy.contains('"Doe"').should('be.visible');
+            cy.contains('accepted (1)').should('be.visible');
+
+            // Decisions never change span geometry, so the merge structure
+            // is not refetched (wait past the revalidation debounce).
+            cy.wait(400);
+            cy.get('@getMergeStructure.all').should('have.length', 0);
         });
     });
 
