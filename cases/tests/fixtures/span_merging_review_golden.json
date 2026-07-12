@@ -1,0 +1,45 @@
+{
+  "comment": "Shared golden fixture for review span merging. The Django test asserts redactions -> pairs (compute_review_merge_pairs); the Cypress component test asserts pairs -> per-section display groups (partitionMergeGroups + groupByTextAndType). Their composition must equal the old mergeRedactionSpans end-to-end behaviour.",
+  "redactions": [
+    {"id": "r1", "start_char": 0, "end_char": 5, "redaction_type": "PII", "text": "Alpha", "is_suggestion": true, "is_accepted": false, "justification": null},
+    {"id": "r2", "start_char": 7, "end_char": 12, "redaction_type": "PII", "text": "Bravo", "is_suggestion": true, "is_accepted": false, "justification": null},
+    {"id": "r3", "start_char": 12, "end_char": 17, "redaction_type": "OP_DATA", "text": "Charl", "is_suggestion": true, "is_accepted": false, "justification": null},
+    {"id": "r4", "start_char": 20, "end_char": 25, "redaction_type": "PII", "text": "Delta", "is_suggestion": true, "is_accepted": false, "justification": null},
+    {"id": "r5", "start_char": 25, "end_char": 27, "redaction_type": "OP_DATA", "text": "x,", "is_suggestion": true, "is_accepted": false, "justification": "not sensitive"},
+    {"id": "r6", "start_char": 27, "end_char": 32, "redaction_type": "PII", "text": "Echo", "is_suggestion": true, "is_accepted": false, "justification": null},
+    {"id": "m1", "start_char": 40, "end_char": 43, "redaction_type": "OP_DATA", "text": "Fox", "is_suggestion": false, "is_accepted": true, "justification": null},
+    {"id": "m2", "start_char": 43, "end_char": 46, "redaction_type": "OP_DATA", "text": "trot", "is_suggestion": false, "is_accepted": true, "justification": null},
+    {"id": "a1", "start_char": 50, "end_char": 55, "redaction_type": "PII", "text": "Golf", "is_suggestion": true, "is_accepted": true, "justification": null},
+    {"id": "a2", "start_char": 60, "end_char": 65, "redaction_type": "PII", "text": "Golf", "is_suggestion": true, "is_accepted": true, "justification": null}
+  ],
+  "pairs": [
+    {"a": "r1", "b": "r2", "type": "PII", "joiner": " ", "blockers": []},
+    {"a": "r4", "b": "r6", "type": "PII", "joiner": " ", "blockers": ["r5"]},
+    {"a": "m1", "b": "m2", "type": "OP_DATA", "joiner": "", "blockers": []}
+  ],
+  "sections": {
+    "pending": [
+      {"id": "r1", "start_char": 0, "end_char": 12, "redaction_type": "PII", "text": "Alpha Bravo", "is_suggestion": true, "is_accepted": false, "justification": null, "ids": ["r1", "r2"], "isMerged": true, "constituents": [{"id": "r1", "text": "Alpha"}, {"id": "r2", "text": "Bravo"}], "isGroup": false},
+      {"id": "r3", "start_char": 12, "end_char": 17, "redaction_type": "OP_DATA", "text": "Charl", "is_suggestion": true, "is_accepted": false, "justification": null, "ids": ["r3"], "isMerged": false, "constituents": [{"id": "r3", "text": "Charl"}], "isGroup": false},
+      {"id": "r4", "start_char": 20, "end_char": 32, "redaction_type": "PII", "text": "Delta Echo", "is_suggestion": true, "is_accepted": false, "justification": null, "ids": ["r4", "r6"], "isMerged": true, "constituents": [{"id": "r4", "text": "Delta"}, {"id": "r6", "text": "Echo"}], "isGroup": false}
+    ],
+    "accepted": [
+      {
+        "key": "golf::PII",
+        "isGroup": true,
+        "text": "Golf",
+        "redaction_type": "PII",
+        "items": [
+          {"id": "a1", "start_char": 50, "end_char": 55, "redaction_type": "PII", "text": "Golf", "is_suggestion": true, "is_accepted": true, "justification": null, "ids": ["a1"], "isMerged": false, "constituents": [{"id": "a1", "text": "Golf"}]},
+          {"id": "a2", "start_char": 60, "end_char": 65, "redaction_type": "PII", "text": "Golf", "is_suggestion": true, "is_accepted": true, "justification": null, "ids": ["a2"], "isMerged": false, "constituents": [{"id": "a2", "text": "Golf"}]}
+        ]
+      }
+    ],
+    "rejected": [
+      {"id": "r5", "start_char": 25, "end_char": 27, "redaction_type": "OP_DATA", "text": "x,", "is_suggestion": true, "is_accepted": false, "justification": "not sensitive", "ids": ["r5"], "isMerged": false, "constituents": [{"id": "r5", "text": "x,"}], "isGroup": false}
+    ],
+    "manual": [
+      {"id": "m1", "start_char": 40, "end_char": 46, "redaction_type": "OP_DATA", "text": "Foxtrot", "is_suggestion": false, "is_accepted": true, "justification": null, "ids": ["m1", "m2"], "isMerged": true, "constituents": [{"id": "m1", "text": "Fox"}, {"id": "m2", "text": "trot"}], "isGroup": false}
+    ]
+  }
+}

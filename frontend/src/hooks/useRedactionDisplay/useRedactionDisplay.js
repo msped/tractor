@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { mergeAdjacentSpans, groupByTextAndType } from '@/utils/mergeRedactionSpans';
+import { partitionMergeGroups, groupByTextAndType } from '@/utils/partitionMergeGroups';
 
-export function useRedactionDisplay({ redactions }) {
+export function useRedactionDisplay({ redactions, mergePairs }) {
     const [splitMerges, setSplitMerges] = useState(new Set());
     const [isolatedIds, setIsolatedIds] = useState(new Set());
     const [hoveredSuggestionId, setHoveredSuggestionId] = useState(null);
@@ -25,7 +25,7 @@ export function useRedactionDisplay({ redactions }) {
 
         const processSection = (items) => ({
             total: items.length,
-            items: groupByTextAndType(mergeAdjacentSpans(items, splitMerges, 2, isolatedIds)),
+            items: groupByTextAndType(partitionMergeGroups(items, mergePairs, splitMerges, isolatedIds)),
         });
 
         return {
@@ -34,7 +34,7 @@ export function useRedactionDisplay({ redactions }) {
             rejected: processSection(rejected),
             manual: processSection(manual),
         };
-    }, [redactions, splitMerges, isolatedIds]);
+    }, [redactions, mergePairs, splitMerges, isolatedIds]);
 
     const handleSuggestionMouseEnter = useCallback((suggestionId) => {
         setHoveredSuggestionId(suggestionId);

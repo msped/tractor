@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { getMergeStructure } from '@/services/redactionService';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useRedactionDisplay } from '@/hooks/useRedactionDisplay';
 import { useDocumentControls } from '@/hooks/useDocumentControls';
@@ -9,9 +10,35 @@ import { useMarkAllInCase } from '@/hooks/useMarkAllInCase';
 
 export function useRedactionState({ document: currentDocument, initialRedactions, router }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
+    const [mergePairs, setMergePairs] = useState(currentDocument?.merge_structure?.pairs || []);
     const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
     const [rejectionTarget, setRejectionTarget] = useState(null);
     const [bulkRejectIds, setBulkRejectIds] = useState([]);
+
+    // Merge pairs depend only on span geometry (positions + types), so
+    // accept/reject decisions never require a fetch. When geometry changes
+    // (manual create, delete, trim, split, undo/redo of those), revalidate
+    // the server-computed pairs in the background; until it lands, new spans
+    // simply render unmerged.
+    const geometryKey = useMemo(
+        () => redactions.map(r => `${r.id}:${r.start_char}:${r.end_char}`).sort().join('|'),
+        [redactions]
+    );
+    const lastGeometryKey = useRef(geometryKey);
+    useEffect(() => {
+        if (geometryKey === lastGeometryKey.current) return;
+        lastGeometryKey.current = geometryKey;
+        const timer = setTimeout(async () => {
+            try {
+                const structure = await getMergeStructure(currentDocument.id);
+                setMergePairs(structure?.pairs || []);
+            } catch {
+                // Keep the last known pairs; a failed background revalidate
+                // only delays merge display for changed spans.
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [geometryKey, currentDocument.id]);
 
     const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
 
@@ -27,7 +54,7 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         handleHighlightClick,
         handleRemoveScrollId,
         handleCardClick,
-    } = useRedactionDisplay({ redactions });
+    } = useRedactionDisplay({ redactions, mergePairs });
 
     const {
         isLoading,

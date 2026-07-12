@@ -239,6 +239,8 @@ Adjacent or near-adjacent spans of the **same type** (within a 2-character gap b
 
 Merged items show all underlying span IDs and can be split back into individual items by the user from the sidebar.
 
+All merge *rules* live on the backend in `cases/span_merging.py` — the single source of truth for both the review display rule and the export removal-collapse rule. The review API ships a status-independent `merge_structure` block of pair links (`{a, b, type, joiner, blockers}`); the frontend (`frontend/src/utils/partitionMergeGroups.js`) contains only partition mechanics — a pair is activated when both endpoints share a review section, no blocker is in that section, and neither member has been isolated or split by the user. Because pairs depend only on span positions and types, accept/reject decisions re-partition locally without a round-trip; span geometry changes (create/delete/trim) trigger a background revalidation via `GET .../redaction?include=merge_structure`.
+
 ### Data Subject Filtering
 
 Entities matching the case's `data_subject_name` or `data_subject_dob` are automatically excluded from redaction suggestions. This includes:

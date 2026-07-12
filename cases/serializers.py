@@ -12,6 +12,7 @@ from .models import (
     RedactionContext,
     ReviewWorkflowSettings,
 )
+from .span_merging import serialize_merge_structure
 
 
 class CaseSerializer(serializers.ModelSerializer):
@@ -271,6 +272,10 @@ class BulkCaseDeleteSerializer(serializers.Serializer):
 
 class DocumentReviewSerializer(serializers.ModelSerializer):
     redactions = RedactionSerializer(many=True, read_only=True)
+    merge_structure = serializers.SerializerMethodField()
+
+    def get_merge_structure(self, obj):
+        return serialize_merge_structure(obj.redactions.all())
 
     class Meta:
         model = Document
@@ -283,6 +288,7 @@ class DocumentReviewSerializer(serializers.ModelSerializer):
             "extracted_tables",
             "extracted_structure",
             "redactions",
+            "merge_structure",
         ]
         read_only_fields = [
             "id",
