@@ -41,6 +41,7 @@ from .serializers import (
     RedactionSerializer,
     ReviewWorkflowSettingsSerializer,
 )
+from .span_merging import serialize_merge_structure
 
 
 class DocumentExportSettingsView(APIView):
@@ -351,13 +352,33 @@ class DocumentReviewView(RetrieveAPIView):
 class RedactionListCreateView(ListCreateAPIView):
     """
     API view to list and create redactions for a specific document.
+
+    `GET ?include=merge_structure` wraps the list in an envelope that also
+    carries the document's review merge pairs, so the client can revalidate
+    its merge display after span geometry changes without refetching the
+    full review payload.
     """
 
     permission_classes = [IsAuthenticated]
     serializer_class = RedactionSerializer
-    queryset = Redaction.objects.all()
     lookup_field = "document"
     lookup_url_kwarg = "document_id"
+
+    def get_queryset(self):
+        return Redaction.objects.filter(
+            document_id=self.kwargs["document_id"]
+        ).select_related("context")
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if request.query_params.get("include") == "merge_structure":
+            response.data = {
+                "redactions": response.data,
+                "merge_structure": serialize_merge_structure(
+                    self.get_queryset()
+                ),
+            }
+        return response
 
 
 class RedactionDetailView(RetrieveUpdateDestroyAPIView):
