@@ -52,8 +52,12 @@ def build_term_patterns(terms):
             variations.add(singular_form)
 
         sorted_variations = sorted(variations, key=len, reverse=True)
+        # Lookarounds instead of \b so terms edged with punctuation
+        # (e.g. "#071234", "O'Brien (Jr.)") still match whole-word.
         pattern = (
-            r"\b(" + "|".join(re.escape(v) for v in sorted_variations) + r")\b"
+            r"(?<!\w)("
+            + "|".join(re.escape(v) for v in sorted_variations)
+            + r")(?!\w)"
         )
         patterns.append(
             TermPattern(term=term, regex=re.compile(pattern, re.IGNORECASE))
