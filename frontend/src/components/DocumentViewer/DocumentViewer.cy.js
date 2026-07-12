@@ -171,6 +171,45 @@ describe('<DocumentViewer />', () => {
             cy.contains('span', 'data subject').should('not.exist');
             cy.contains('span', 'rejected suggestion').should('not.exist');
         });
+
+        it('leaves accepted DS_INFO visible instead of blacking it out', () => {
+            const acceptedWithDsInfo = [
+                ...redactions.filter(r => r.is_accepted),
+                { id: 'redaction-5', start_char: 73, end_char: 85, text: 'data subject', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={acceptedWithDsInfo}
+                    viewMode="final"
+                />
+            );
+
+            // DS_INFO text is readable, not rendered as a black-bar span
+            cy.contains('data subject').should('be.visible');
+            cy.contains('span', 'data subject').should('not.exist');
+
+            // Other accepted redactions are still blacked out
+            cy.contains('span', 'PII')
+                .should('have.css', 'background-color', 'rgb(0, 0, 0)');
+        });
+
+        it('still highlights accepted DS_INFO in color-coded mode', () => {
+            const acceptedWithDsInfo = [
+                { id: 'redaction-5', start_char: 73, end_char: 85, text: 'data subject', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={acceptedWithDsInfo}
+                    viewMode="color-coded"
+                />
+            );
+
+            cy.contains('span', 'data subject')
+                .should('be.visible')
+                .and('have.css', 'background-color', 'rgba(177, 156, 217, 0.8)');
+        });
     });
 
     context('Table Border Rendering', () => {
