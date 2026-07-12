@@ -386,6 +386,71 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIn("John Doe", html)
         self.assertNotIn('class="redaction', html)
 
+    def test_build_document_html_removal_excludes_ds_information(self):
+        """DS_INFORMATION text survives removal mode; other redactions are removed."""
+        self.document.extracted_text = (
+            "John Doe attended the event with Jane Smith."
+        )
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=8,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        Redaction.objects.create(
+            document=self.document,
+            start_char=33,
+            end_char=43,
+            text="Jane Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        self.assertIn("John Doe", html)
+        self.assertNotIn("Jane Smith", html)
+        self.assertIn("[...]", html)
+
+    def test_build_document_html_removal_excludes_ds_information_prefetched(
+        self,
+    ):
+        """The prefetched-redactions branch also keeps DS_INFORMATION in removal mode."""
+        self.document.extracted_text = (
+            "John Doe attended the event with Jane Smith."
+        )
+        self.document.save()
+        ds_info = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=8,
+            text="John Doe",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        pii = Redaction.objects.create(
+            document=self.document,
+            start_char=33,
+            end_char=43,
+            text="Jane Smith",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        self.document.accepted_redactions_prefetched = [ds_info, pii]
+
+        html, _ = _build_document_html(self.document, mode="removal")
+        self.assertIsNotNone(html)
+        self.assertIn("John Doe", html)
+        self.assertNotIn("Jane Smith", html)
+        self.assertIn("[...]", html)
+
     def test_build_document_html_redacted_includes_ds_information(self):
         """DS_INFORMATION spans should still be marked up in redacted (review) mode."""
         self.document.extracted_text = "John Doe attended the event."
