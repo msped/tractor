@@ -426,6 +426,42 @@ class RedactionContext(models.Model):
     )
 
 
+class RedactionSnapshot(models.Model):
+    """
+    An immutable, complete, restorable capture of the entire redaction set
+    for a case's documents at a single point in time.
+
+    Taken on every export completion, this is the "as-disclosed" record: the
+    source for disclosed-vs-current diffing and for rolling the live set back
+    when an Internal Review is abandoned. The capture is *complete* (every
+    field of every redaction plus any RedactionContext), not decision-only,
+    because a review may add, delete, or re-bound redactions and restore must
+    reconstruct the live set exactly.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey(
+        Case,
+        on_delete=models.CASCADE,
+        related_name="redaction_snapshots",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    payload = models.JSONField(
+        default=list,
+        editable=False,
+        help_text=(
+            "Frozen list of every redaction (all fields) plus associated "
+            "RedactionContext for the case's documents at capture time."
+        ),
+    )
+
+    def __str__(self):
+        return f"Snapshot of {self.case.case_reference} at {self.created_at}"
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class ExemptionTemplate(models.Model):
     """
     A reusable rejection reason (e.g. "S.40 - Personal Information") that
