@@ -164,7 +164,9 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
             is_accepted=False,
             decided_by=None,
         )
-        RedactionContext.objects.create(redaction=r_rebound, text="the suspect")
+        RedactionContext.objects.create(
+            redaction=r_rebound, text="the suspect"
+        )
 
         deleted_pk = r_deleted.pk
         original = self._live_fingerprint()
