@@ -22,6 +22,7 @@ from ..models import (
     DocumentExportSettings,
     Redaction,
     RedactionContext,
+    RedactionSnapshot,
     ReviewWorkflowSettings,
 )
 from ..services import (
@@ -1323,6 +1324,98 @@ class ExportCaseDocumentsPassesSettingsTests(NetworkBlockerMixin, TestCase):
         for c in calls:
             self.assertEqual(c.kwargs["export_settings"], mock_settings)
             self.assertEqual(c.kwargs["case_reference"], "EXP01")
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class ExportPreservationTests(NetworkBlockerMixin, TestCase):
+    """Every disclosure is preserved as its own Export + linked snapshot."""
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="250099", data_subject_name="Jane Roe"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("doc.txt", b"Some text"),
+            extracted_text="Some operational text here",
+            status=Document.Status.COMPLETED,
+        )
+        self.redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=5,
+            end_char=16,
+            text="operational",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        RedactionContext.objects.create(
+            redaction=self.redaction, text="Some operational text"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    @patch(
+        "cases.services._generate_pdf_from_document",
+        return_value=b"mock pdf content",
+    )
+    def test_export_creates_export_and_linked_snapshot(self, _mock_pdf):
+        export_case_documents(self.case.id)
+
+        exports = self.case.exports.all()
+        self.assertEqual(exports.count(), 1)
+        export = exports.first()
+        self.assertEqual(export.sequence, 1)
+        self.assertEqual(export.label, "Original disclosure")
+        self.assertTrue(export.export_file.name.endswith(".zip"))
+        self.assertIsNone(export.review)
+
+        # The snapshot is frozen and tied to this export.
+        snapshot = export.snapshot
+        self.assertIsInstance(snapshot, RedactionSnapshot)
+        self.assertEqual(snapshot.case_id, self.case.id)
+        self.assertEqual(len(snapshot.payload), 1)
+        self.assertEqual(snapshot.payload[0]["id"], str(self.redaction.id))
+
+        # Case.export_file points at the new export's stored file.
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.export_status, Case.ExportStatus.COMPLETED)
+        self.assertEqual(self.case.export_file.name, export.export_file.name)
+
+    @patch(
+        "cases.services._generate_pdf_from_document",
+        return_value=b"mock pdf content",
+    )
+    def test_re_export_preserves_prior_export(self, _mock_pdf):
+        export_case_documents(self.case.id)
+        first = self.case.exports.get(sequence=1)
+        first_file = first.export_file.name
+
+        export_case_documents(self.case.id)
+
+        exports = list(self.case.exports.order_by("sequence"))
+        self.assertEqual(len(exports), 2)
+        self.assertEqual([e.sequence for e in exports], [1, 2])
+        self.assertEqual(
+            [e.label for e in exports],
+            ["Original disclosure", "Disclosure 2"],
+        )
+        # First export is untouched; the two files are distinct.
+        first.refresh_from_db()
+        self.assertEqual(first.export_file.name, first_file)
+        self.assertNotEqual(exports[1].export_file.name, first_file)
+        self.assertTrue(os.path.exists(first.export_file.path))
+        self.assertTrue(os.path.exists(exports[1].export_file.path))
+
+        # Each export carries its own snapshot.
+        self.assertTrue(all(e.snapshot is not None for e in exports))
+
+        # Case pointer follows the latest export.
+        self.case.refresh_from_db()
+        self.assertEqual(
+            self.case.export_file.name, exports[1].export_file.name
+        )
 
 
 def _make_redaction(start, end, redaction_type="PII"):

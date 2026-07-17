@@ -15,6 +15,8 @@ from cases.models import (
     Case,
     Document,
     DocumentExportSettings,
+    Export,
+    InternalReview,
     ProvenanceError,
     Redaction,
     RedactionContext,
@@ -572,3 +574,62 @@ class DocumentExportSettingsModelTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(obj.font_family_css, "Georgia, serif")
         obj.font_family = DocumentExportSettings.FontFamily.VERDANA
         self.assertEqual(obj.font_family_css, "Verdana, sans-serif")
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class ExportModelTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="250099", data_subject_name="Jane Roe"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def test_sequence_unique_per_case(self):
+        Export.objects.create(case=self.case, sequence=1, label="Original")
+        with self.assertRaises(IntegrityError):
+            Export.objects.create(
+                case=self.case, sequence=1, label="Duplicate"
+            )
+
+    def test_same_sequence_allowed_across_cases(self):
+        other = Case.objects.create(
+            case_reference="250100", data_subject_name="John Doe"
+        )
+        Export.objects.create(case=self.case, sequence=1, label="A")
+        Export.objects.create(case=other, sequence=1, label="B")
+        self.assertEqual(Export.objects.filter(sequence=1).count(), 2)
+
+    def test_exports_ordered_by_sequence(self):
+        Export.objects.create(case=self.case, sequence=2, label="Two")
+        Export.objects.create(case=self.case, sequence=1, label="One")
+        self.assertEqual([e.sequence for e in self.case.exports.all()], [1, 2])
+
+    def test_review_link_optional(self):
+        review = InternalReview.objects.create(case=self.case)
+        export = Export.objects.create(
+            case=self.case, sequence=1, label="Original", review=review
+        )
+        self.assertEqual(export.review, review)
+        self.assertIn(export, review.exports.all())
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class InternalReviewModelTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="250099", data_subject_name="Jane Roe"
+        )
+
+    def test_defaults_to_open(self):
+        review = InternalReview.objects.create(case=self.case)
+        self.assertEqual(review.status, InternalReview.Status.OPEN)
+        self.assertIsNotNone(review.opened_at)
+        self.assertIsNone(review.closed_at)
+        self.assertEqual(review.outcome, "")
+
+    def test_reviews_ordered_newest_first(self):
+        first = InternalReview.objects.create(case=self.case)
+        second = InternalReview.objects.create(case=self.case)
+        self.assertEqual(list(self.case.reviews.all()), [second, first])
