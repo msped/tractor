@@ -5,6 +5,7 @@ from .views import (
     BulkCaseDeleteView,
     BulkRedactionUpdateView,
     CaseDetailView,
+    CaseExportHistoryView,
     CaseExportView,
     CaseListCreateView,
     DocumentCancelProcessingView,
@@ -59,6 +60,11 @@ urlpatterns = [
         "cases/<uuid:case_id>/export",
         CaseExportView.as_view(),
         name="case-export",
+    ),
+    path(
+        "cases/<uuid:case_id>/exports",
+        CaseExportHistoryView.as_view(),
+        name="case-exports",
     ),
     path(
         "cases/<uuid:case_id>/documents",

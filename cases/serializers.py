@@ -8,6 +8,7 @@ from .models import (
     Document,
     DocumentExportSettings,
     ExemptionTemplate,
+    Export,
     Redaction,
     RedactionContext,
     ReviewWorkflowSettings,
@@ -146,6 +147,25 @@ class CaseDetailSerializer(CaseSerializer):
             "export_task_id",
         ]
         read_only_fields = ["export_status", "export_file", "export_task_id"]
+
+
+class ExportSerializer(serializers.ModelSerializer):
+    created_by = serializers.CharField(
+        source="created_by.username", read_only=True, default=None
+    )
+
+    class Meta:
+        model = Export
+        fields = [
+            "id",
+            "sequence",
+            "label",
+            "created_at",
+            "created_by",
+            "review",
+            "export_file",
+        ]
+        read_only_fields = fields
 
 
 class RedactionContextSerializer(serializers.ModelSerializer):
