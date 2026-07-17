@@ -28,9 +28,11 @@ from .models import (
     Case,
     Document,
     DocumentExportSettings,
+    Export,
     Redaction,
     ReviewWorkflowSettings,
 )
+from .snapshots import snapshot_redactions
 from .span_merging import absorb_prefix_symbols, merge_spans_for_removal
 
 logger = logging.getLogger(__name__)
@@ -782,6 +784,43 @@ def _dedupe_name(name, used_names):
     return candidate
 
 
+def _preserve_export(case, zip_content, review=None):
+    """
+    Persist a freshly generated disclosure ZIP as a new, permanent Export row,
+    freeze the case's redaction set into a linked RedactionSnapshot, and point
+    Case.export_file at the new file. Prior exports are never touched.
+    """
+    sequence = case.exports.count() + 1
+    label = (
+        "Original disclosure" if sequence == 1 else f"Disclosure {sequence}"
+    )
+
+    export = Export(
+        case=case,
+        sequence=sequence,
+        label=label,
+        review=review,
+    )
+    export.export_file.save(
+        f"disclosure_package_{case.case_reference}.zip",
+        ContentFile(zip_content),
+        save=False,
+    )
+    export.save()
+
+    # Freeze the as-disclosed decision record and tie it to this export.
+    snapshot = snapshot_redactions(case)
+    snapshot.export = export
+    snapshot.save(update_fields=["export"])
+
+    # Case.export_file is a pointer to the latest export's file — reference the
+    # same stored object rather than writing a second copy.
+    case.export_file.name = export.export_file.name
+    case.export_status = Case.ExportStatus.COMPLETED
+    case.save(update_fields=["export_file", "export_status"])
+    return export
+
+
 def export_case_documents(case_id):
     """Background task: generate a ZIP export package for all documents in a case."""
     try:
@@ -879,14 +918,8 @@ def export_case_documents(case_id):
 
         with open(zip_file_path, "rb") as f:
             zip_content = f.read()
-            case.export_file.save(
-                f"disclosure_package_{case.case_reference}.zip",
-                ContentFile(zip_content),
-                save=False,
-            )
 
-        case.export_status = Case.ExportStatus.COMPLETED
-        case.save(update_fields=["export_file", "export_status"])
+        _preserve_export(case, zip_content)
 
         shutil.rmtree(temp_parent)
 
