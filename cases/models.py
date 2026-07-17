@@ -16,6 +16,10 @@ def case_export_upload_to(instance, filename):
     return f"exports/{instance.id}/{filename}"
 
 
+def export_upload_to(instance, filename):
+    return f"exports/{instance.case_id}/{instance.id}/{filename}"
+
+
 def retention_review_date_default():
     """
     Calculates a date six years from the current time.
@@ -426,6 +430,108 @@ class RedactionContext(models.Model):
     )
 
 
+class InternalReview(models.Model):
+    """
+    A single post-disclosure re-review episode on a case (opened when a data
+    subject challenges a disclosure).
+
+    This slice defines the record only; the open/complete/abandon lifecycle
+    service and the provenance lock that guard it are added in a later slice.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Open"
+        COMPLETED = "COMPLETED", "Completed"
+        ABANDONED = "ABANDONED", "Abandoned"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey(
+        Case, on_delete=models.CASCADE, related_name="reviews"
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.OPEN
+    )
+    opened_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="opened_reviews",
+    )
+    opened_at = models.DateTimeField(auto_now_add=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_reviews",
+    )
+    closed_at = models.DateTimeField(null=True, blank=True)
+    outcome = models.TextField(
+        blank=True,
+        default="",
+        help_text="Required written outcome recorded when the review is closed.",
+    )
+
+    def __str__(self):
+        return f"Review of {self.case.case_reference} ({self.status})"
+
+    class Meta:
+        ordering = ["-opened_at"]
+
+
+class Export(models.Model):
+    """
+    One preserved disclosure package for a case. A case has many; each export
+    keeps its own ZIP and is never overwritten by a later re-export.
+    `Case.export_file` is a pointer to the most recent export's file.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey(
+        Case, on_delete=models.CASCADE, related_name="exports"
+    )
+    export_file = models.FileField(
+        upload_to=export_upload_to,
+        help_text="The preserved ZIP package for this disclosure.",
+    )
+    sequence = models.PositiveIntegerField(
+        help_text="1-based order of this export within the case."
+    )
+    label = models.CharField(
+        max_length=100,
+        help_text='Human label, e.g. "Original disclosure" or "Disclosure 2".',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_exports",
+    )
+    review = models.ForeignKey(
+        InternalReview,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="exports",
+        help_text="The review that produced this export; null for the original disclosure.",
+    )
+
+    def __str__(self):
+        return f"{self.label} for {self.case.case_reference}"
+
+    class Meta:
+        ordering = ["sequence"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["case", "sequence"],
+                name="export_unique_case_sequence",
+            ),
+        ]
+
+
 class RedactionSnapshot(models.Model):
     """
     An immutable, complete, restorable capture of the entire redaction set
@@ -444,6 +550,14 @@ class RedactionSnapshot(models.Model):
         Case,
         on_delete=models.CASCADE,
         related_name="redaction_snapshots",
+    )
+    export = models.OneToOneField(
+        "Export",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="snapshot",
+        help_text="The export this snapshot froze the redaction set for.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     payload = models.JSONField(
@@ -546,3 +660,5 @@ auditlog.register(Case)
 auditlog.register(Document)
 auditlog.register(Redaction)
 auditlog.register(ExemptionTemplate)
+auditlog.register(InternalReview)
+auditlog.register(Export)

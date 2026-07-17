@@ -9,6 +9,7 @@ from django_q.models import OrmQ
 from rest_framework import status
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import (
+    ListAPIView,
     ListCreateAPIView,
     RetrieveAPIView,
     RetrieveUpdateDestroyAPIView,
@@ -37,6 +38,7 @@ from .serializers import (
     DocumentReviewSerializer,
     DocumentSerializer,
     ExemptionTemplateSerializer,
+    ExportSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
     ReviewWorkflowSettingsSerializer,
@@ -149,6 +151,20 @@ class CaseExportView(APIView):
             {"message": "Export process started.", "task_id": task_id},
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class CaseExportHistoryView(ListAPIView):
+    """
+    Lists every preserved disclosure export for a case, ordered by sequence.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ExportSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        case = get_object_or_404(Case, id=self.kwargs["case_id"])
+        return case.exports.select_related("created_by").all()
 
 
 class CasePagination(PageNumberPagination):

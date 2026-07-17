@@ -11,6 +11,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { CaseInformation } from '@/components/CaseInformation';
 import { CaseDocuments } from '@/components/CaseDocuments';
 import { CaseExportManager } from '@/components/CaseExportManager';
+import { CaseExportHistory } from '@/components/CaseExportHistory';
 import { getCase } from '@/services/caseService';
 
 export const CaseDetailClientPage = ({ initialCaseData }) => {
@@ -60,6 +61,7 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
                     onUpdate={handleMutate}
                     isCaseFinalised={isCaseFinalised}
                 />
+                <CaseExportHistory caseData={caseData} />
             </Stack>
         </Container>
     );

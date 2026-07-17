@@ -20,6 +20,7 @@ from ..models import (
     Document,
     DocumentExportSettings,
     ExemptionTemplate,
+    Export,
     Redaction,
     RedactionContext,
 )
@@ -1368,3 +1369,66 @@ class RetentionViewTests(NetworkBlockerMixin, APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class CaseExportHistoryViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="testuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="250099", data_subject_name="Jane Roe"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_export(self, sequence, label):
+        export = Export(case=self.case, sequence=sequence, label=label)
+        export.export_file.save(
+            f"disclosure_{sequence}.zip",
+            SimpleUploadedFile(f"disclosure_{sequence}.zip", b"zip"),
+            save=False,
+        )
+        export.save()
+        return export
+
+    def test_history_returns_exports_ordered_by_sequence(self):
+        self._make_export(2, "Disclosure 2")
+        self._make_export(1, "Original disclosure")
+
+        url = reverse("case-exports", kwargs={"case_id": self.case.id})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        self.assertEqual([e["sequence"] for e in response.data], [1, 2])
+        self.assertEqual(
+            [e["label"] for e in response.data],
+            ["Original disclosure", "Disclosure 2"],
+        )
+        self.assertIsNone(response.data[0]["created_by"])
+        self.assertTrue(response.data[0]["export_file"])
+
+    def test_history_empty_when_no_exports(self):
+        url = reverse("case-exports", kwargs={"case_id": self.case.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_history_requires_authentication(self):
+        anon = APIClient()
+        url = reverse("case-exports", kwargs={"case_id": self.case.id})
+        response = anon.get(url)
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+
+    def test_history_unknown_case_returns_404(self):
+        url = reverse("case-exports", kwargs={"case_id": uuid.uuid4()})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

@@ -73,6 +73,15 @@ export const createCaseExport = async (caseId) => {
     }
 };
 
+export const getCaseExports = async (caseId) => {
+    try {
+        const response = await apiClient.get(`/cases/${caseId}/exports`);
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to retrieve export history. Please try again.');
+    }
+};
+
 export const getRetentionSettings = async () => {
     try {
         const response = await apiClient.get('/cases/settings/retention');
