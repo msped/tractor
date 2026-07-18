@@ -91,6 +91,30 @@ export const openCaseReview = async (caseId) => {
     }
 };
 
+export const completeCaseReview = async (caseId, outcome) => {
+    try {
+        const response = await apiClient.post(
+            `/cases/${caseId}/reviews/complete`,
+            { outcome }
+        );
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to complete the review. Please try again.');
+    }
+};
+
+export const abandonCaseReview = async (caseId, outcome) => {
+    try {
+        const response = await apiClient.post(
+            `/cases/${caseId}/reviews/abandon`,
+            { outcome }
+        );
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to abandon the review. Please try again.');
+    }
+};
+
 export const getRetentionSettings = async () => {
     try {
         const response = await apiClient.get('/cases/settings/retention');
