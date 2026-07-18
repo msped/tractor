@@ -28,6 +28,7 @@ from .models import (
     RedactionContext,
     ReviewWorkflowSettings,
 )
+from .reviews import ReviewError, open_review
 from .serializers import (
     BulkByTextSerializer,
     BulkCaseDeleteSerializer,
@@ -39,6 +40,7 @@ from .serializers import (
     DocumentSerializer,
     ExemptionTemplateSerializer,
     ExportSerializer,
+    InternalReviewSerializer,
     RedactionContextSerializer,
     RedactionSerializer,
     ReviewWorkflowSettingsSerializer,
@@ -165,6 +167,28 @@ class CaseExportHistoryView(ListAPIView):
     def get_queryset(self):
         case = get_object_or_404(Case, id=self.kwargs["case_id"])
         return case.exports.select_related("created_by").all()
+
+
+class CaseReviewView(APIView):
+    """
+    Opens an Internal Review on a disclosed case (idempotent: returns the
+    already-open review if one exists). Available to any authenticated user.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id, *args, **kwargs):
+        case = get_object_or_404(Case, id=case_id)
+        try:
+            review = open_review(case, by=request.user)
+        except ReviewError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(
+            InternalReviewSerializer(review).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class CasePagination(PageNumberPagination):

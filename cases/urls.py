@@ -8,6 +8,7 @@ from .views import (
     CaseExportHistoryView,
     CaseExportView,
     CaseListCreateView,
+    CaseReviewView,
     DocumentCancelProcessingView,
     DocumentDetailView,
     DocumentExportSettingsView,
@@ -65,6 +66,11 @@ urlpatterns = [
         "cases/<uuid:case_id>/exports",
         CaseExportHistoryView.as_view(),
         name="case-exports",
+    ),
+    path(
+        "cases/<uuid:case_id>/reviews",
+        CaseReviewView.as_view(),
+        name="case-review-open",
     ),
     path(
         "cases/<uuid:case_id>/documents",

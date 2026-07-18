@@ -9,6 +9,7 @@ from .models import (
     DocumentExportSettings,
     ExemptionTemplate,
     Export,
+    InternalReview,
     Redaction,
     RedactionContext,
     ReviewWorkflowSettings,
@@ -136,8 +137,42 @@ class DocumentSerializer(serializers.ModelSerializer):
         return instance
 
 
+class InternalReviewSerializer(serializers.ModelSerializer):
+    opened_by = serializers.CharField(
+        source="opened_by.username", read_only=True, default=None
+    )
+    closed_by = serializers.CharField(
+        source="closed_by.username", read_only=True, default=None
+    )
+
+    class Meta:
+        model = InternalReview
+        fields = [
+            "id",
+            "case",
+            "status",
+            "opened_by",
+            "opened_at",
+            "closed_by",
+            "closed_at",
+            "outcome",
+        ]
+        read_only_fields = fields
+
+
 class CaseDetailSerializer(CaseSerializer):
     documents = DocumentSerializer(many=True, read_only=True)
+    is_disclosed = serializers.SerializerMethodField()
+    active_review = serializers.SerializerMethodField()
+
+    def get_is_disclosed(self, obj):
+        """True once the case has at least one preserved disclosure export."""
+        return obj.exports.exists()
+
+    def get_active_review(self, obj):
+        """The currently open Internal Review, or null if none is open."""
+        review = obj.reviews.filter(status=InternalReview.Status.OPEN).first()
+        return InternalReviewSerializer(review).data if review else None
 
     class Meta(CaseSerializer.Meta):
         fields = CaseSerializer.Meta.fields + [
@@ -145,6 +180,8 @@ class CaseDetailSerializer(CaseSerializer):
             "export_status",
             "export_file",
             "export_task_id",
+            "is_disclosed",
+            "active_review",
         ]
         read_only_fields = ["export_status", "export_file", "export_task_id"]
 
