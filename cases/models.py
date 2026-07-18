@@ -245,6 +245,14 @@ class ProvenanceError(TypeError):
     """A decision-state write was attempted without provenance."""
 
 
+class DisclosureLockError(ProvenanceError):
+    """
+    A human decision write was attempted on a case that has a completed
+    disclosure export while no Internal Review is open. Post-disclosure
+    decisions may only change during a sanctioned review.
+    """
+
+
 # Fields that together encode an accept/reject decision.  They may only be
 # written through the decision methods below, never via a generic update().
 _DECISION_FIELDS = frozenset({"is_accepted", "justification", "decided_by"})
@@ -261,21 +269,63 @@ class RedactionQuerySet(models.QuerySet):
         justification.  Scope with .pending() first if prior decisions must
         be preserved.  Single UPDATE.
         """
+        self._assert_disclosure_unlocked(by)
         return super().update(
             is_accepted=True, justification=None, decided_by=by
         )
 
     def reject(self, justification="", *, by):
         """Reject everything in the queryset as decided by `by`."""
+        self._assert_disclosure_unlocked(by)
         return super().update(
             is_accepted=False, justification=justification, decided_by=by
         )
 
     def reset(self):
         """Return all redactions in the queryset to pending (no decision)."""
+        # No actor is passed to reset(); it is only ever a human withdrawal of
+        # a decision, so it is always subject to the post-disclosure lock.
+        self._assert_disclosure_unlocked(None)
         return super().update(
             is_accepted=False, justification=None, decided_by=None
         )
+
+    # ---- post-disclosure lock ----
+    def _assert_disclosure_unlocked(self, by):
+        """
+        Refuse a human decision write to a disclosed case unless an Internal
+        Review is open for it.
+
+        A case is "disclosed" once it has at least one preserved ``Export``.
+        System writes — initial processing, case-decision propagation and
+        DS_INFO propagation, identified by their machine actor — are exempt,
+        as is snapshot restore (which never travels through these methods).
+        A write that touches no disclosed case is always allowed.
+        """
+        system_actors = {
+            Redaction.DecidedBy.AUTO_ACCEPT,
+            Redaction.DecidedBy.CASE_PROPAGATION,
+            Redaction.DecidedBy.DS_INFO_PROPAGATION,
+        }
+        if by in system_actors:
+            return
+
+        case_ids = set(
+            self.values_list("document__case_id", flat=True).distinct()
+        )
+        if not case_ids:
+            return
+
+        locked = (
+            Case.objects.filter(id__in=case_ids, exports__isnull=False)
+            .exclude(reviews__status=InternalReview.Status.OPEN)
+            .exists()
+        )
+        if locked:
+            raise DisclosureLockError(
+                "This case has been disclosed — redaction decisions can only "
+                "be changed while an Internal Review is open."
+            )
 
     # ---- reads: pending/decided derived from provenance ----
     def pending(self):
