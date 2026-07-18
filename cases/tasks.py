@@ -33,10 +33,10 @@ def find_and_flag_matching_text_in_case(redaction_id):
     return _impl(redaction_id)
 
 
-def export_case_documents(case_id):
+def export_case_documents(case_id, review_id=None):
     from .services import export_case_documents as _impl
 
-    return _impl(case_id)
+    return _impl(case_id, review_id=review_id)
 
 
 def delete_cases_past_retention_date():

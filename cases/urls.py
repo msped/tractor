@@ -8,6 +8,7 @@ from .views import (
     CaseExportHistoryView,
     CaseExportView,
     CaseListCreateView,
+    CaseReviewCloseView,
     CaseReviewView,
     DocumentCancelProcessingView,
     DocumentDetailView,
@@ -71,6 +72,18 @@ urlpatterns = [
         "cases/<uuid:case_id>/reviews",
         CaseReviewView.as_view(),
         name="case-review-open",
+    ),
+    path(
+        "cases/<uuid:case_id>/reviews/complete",
+        CaseReviewCloseView.as_view(),
+        {"action": "complete"},
+        name="case-review-complete",
+    ),
+    path(
+        "cases/<uuid:case_id>/reviews/abandon",
+        CaseReviewCloseView.as_view(),
+        {"action": "abandon"},
+        name="case-review-abandon",
     ),
     path(
         "cases/<uuid:case_id>/documents",
