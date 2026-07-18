@@ -87,7 +87,7 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.data["task_id"], "test-task-id")
 
         mock_async_task.assert_called_once_with(
-            "cases.tasks.export_case_documents", self.case.id
+            "cases.tasks.export_case_documents", self.case.id, None
         )
         self.case.refresh_from_db()
         self.assertEqual(self.case.export_status, Case.ExportStatus.PROCESSING)
@@ -1519,3 +1519,94 @@ class CaseReviewViewTests(NetworkBlockerMixin, APITestCase):
         )
         after = self.client.get(url)
         self.assertEqual(after.data["active_review"]["status"], "OPEN")
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class CaseReviewCloseViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="closer", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="250090", data_subject_name="Clo Ser"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("c.txt", b"content"),
+            status=Document.Status.COMPLETED,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _disclose_and_open(self):
+        export = Export(
+            case=self.case, sequence=1, label="Original disclosure"
+        )
+        export.export_file.save(
+            "d.zip", SimpleUploadedFile("d.zip", b"zip"), save=False
+        )
+        export.save()
+        return self.client.post(
+            reverse("case-review-open", kwargs={"case_id": self.case.id})
+        )
+
+    @patch("cases.models.async_task", return_value="task-id")
+    def test_complete_closes_review_and_returns_completed(self, _mock_async):
+        self._disclose_and_open()
+        url = reverse("case-review-complete", kwargs={"case_id": self.case.id})
+
+        response = self.client.post(url, {"outcome": "Amended"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "COMPLETED")
+        self.assertEqual(response.data["outcome"], "Amended")
+        self.assertEqual(response.data["closed_by"], "closer")
+
+    def test_abandon_closes_review_and_returns_abandoned(self):
+        self._disclose_and_open()
+        url = reverse("case-review-abandon", kwargs={"case_id": self.case.id})
+
+        response = self.client.post(
+            url, {"outcome": "Withdrawn"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "ABANDONED")
+
+    def test_close_without_outcome_returns_400(self):
+        self._disclose_and_open()
+        url = reverse("case-review-abandon", kwargs={"case_id": self.case.id})
+
+        response = self.client.post(url, {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_close_without_open_review_returns_404(self):
+        # Disclosed but no review opened.
+        export = Export(
+            case=self.case, sequence=1, label="Original disclosure"
+        )
+        export.export_file.save(
+            "d.zip", SimpleUploadedFile("d.zip", b"zip"), save=False
+        )
+        export.save()
+        url = reverse("case-review-complete", kwargs={"case_id": self.case.id})
+
+        response = self.client.post(url, {"outcome": "x"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_close_requires_authentication(self):
+        self._disclose_and_open()
+        anon = APIClient()
+        url = reverse("case-review-abandon", kwargs={"case_id": self.case.id})
+
+        response = anon.post(url, {"outcome": "x"}, format="json")
+
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
