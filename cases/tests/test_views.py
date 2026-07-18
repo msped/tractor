@@ -1432,3 +1432,90 @@ class CaseExportHistoryViewTests(NetworkBlockerMixin, APITestCase):
         url = reverse("case-exports", kwargs={"case_id": uuid.uuid4()})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class CaseReviewViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="reviewer", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="250088", data_subject_name="Rev Iewer"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("r.txt", b"content"),
+            status=Document.Status.COMPLETED,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _disclose(self):
+        export = Export(
+            case=self.case, sequence=1, label="Original disclosure"
+        )
+        export.export_file.save(
+            "d.zip", SimpleUploadedFile("d.zip", b"zip"), save=False
+        )
+        export.save()
+        return export
+
+    def test_open_review_on_disclosed_case(self):
+        self._disclose()
+        url = reverse("case-review-open", kwargs={"case_id": self.case.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "OPEN")
+        self.assertEqual(response.data["opened_by"], "reviewer")
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, Case.Status.UNDER_REVIEW)
+
+    def test_open_review_undisclosed_case_returns_400(self):
+        url = reverse("case-review-open", kwargs={"case_id": self.case.id})
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(self.case.reviews.exists())
+
+    def test_open_review_is_idempotent(self):
+        self._disclose()
+        url = reverse("case-review-open", kwargs={"case_id": self.case.id})
+        first = self.client.post(url)
+        second = self.client.post(url)
+
+        self.assertEqual(first.data["id"], second.data["id"])
+        self.assertEqual(self.case.reviews.count(), 1)
+
+    def test_open_review_requires_authentication(self):
+        self._disclose()
+        anon = APIClient()
+        url = reverse("case-review-open", kwargs={"case_id": self.case.id})
+        response = anon.post(url)
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+
+    def test_open_review_unknown_case_returns_404(self):
+        url = reverse("case-review-open", kwargs={"case_id": uuid.uuid4()})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_case_detail_exposes_review_state(self):
+        self._disclose()
+        url = reverse("case-detail", kwargs={"case_id": self.case.id})
+
+        before = self.client.get(url)
+        self.assertTrue(before.data["is_disclosed"])
+        self.assertIsNone(before.data["active_review"])
+
+        self.client.post(
+            reverse("case-review-open", kwargs={"case_id": self.case.id})
+        )
+        after = self.client.get(url)
+        self.assertEqual(after.data["active_review"]["status"], "OPEN")
