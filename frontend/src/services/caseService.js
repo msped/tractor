@@ -82,6 +82,15 @@ export const getCaseExports = async (caseId) => {
     }
 };
 
+export const openCaseReview = async (caseId) => {
+    try {
+        const response = await apiClient.post(`/cases/${caseId}/reviews`, {});
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to open the review. Please try again.');
+    }
+};
+
 export const getRetentionSettings = async () => {
     try {
         const response = await apiClient.get('/cases/settings/retention');
