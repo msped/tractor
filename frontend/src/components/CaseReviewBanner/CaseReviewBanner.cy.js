@@ -67,19 +67,99 @@ describe('<CaseReviewBanner />', () => {
         cy.contains('button', 'Open Review').should('be.visible');
     });
 
+    const underReviewCase = {
+        ...disclosedCase,
+        status: 'UNDER_REVIEW',
+        active_review: { id: 'rev-1', status: 'OPEN' },
+    };
+
     it('shows the unlocked banner while a review is open', () => {
         cy.fullMount(
-            <CaseReviewBanner
-                caseData={{
-                    ...disclosedCase,
-                    status: 'UNDER_REVIEW',
-                    active_review: { id: 'rev-1', status: 'OPEN' },
-                }}
-            />,
+            <CaseReviewBanner caseData={underReviewCase} />,
             mountOpts
         );
 
         cy.contains('Under internal review — unlocked').should('be.visible');
         cy.contains('button', 'Open Review').should('not.exist');
+        cy.contains('button', 'Complete Review').should('be.visible');
+        cy.contains('button', 'Abandon Review').should('be.visible');
+    });
+
+    it('requires an outcome before completing a review', () => {
+        cy.fullMount(
+            <CaseReviewBanner caseData={underReviewCase} />,
+            mountOpts
+        );
+
+        cy.contains('button', 'Complete Review').click();
+        cy.contains('Complete review').should('be.visible');
+        // Confirm is disabled until an outcome is written.
+        cy.get('.MuiDialogActions-root')
+            .contains('button', 'Complete')
+            .should('be.disabled');
+        cy.get('#review-outcome').type('Disclosure amended after challenge');
+        cy.get('.MuiDialogActions-root')
+            .contains('button', 'Complete')
+            .should('not.be.disabled');
+    });
+
+    it('completes a review and refreshes', () => {
+        cy.intercept('POST', '**/cases/case-123/reviews/complete', {
+            statusCode: 200,
+            body: { id: 'rev-1', status: 'COMPLETED' },
+        }).as('completeReview');
+        const onUpdate = cy.stub().as('onUpdate');
+
+        cy.fullMount(
+            <CaseReviewBanner caseData={underReviewCase} onUpdate={onUpdate} />,
+            mountOpts
+        );
+
+        cy.contains('button', 'Complete Review').click();
+        cy.get('#review-outcome').type('Amended');
+        cy.get('.MuiDialogActions-root').contains('button', 'Complete').click();
+        cy.wait('@completeReview')
+            .its('request.body')
+            .should('deep.equal', { outcome: 'Amended' });
+        cy.get('@onUpdate').should('have.been.called');
+    });
+
+    it('abandons a review and refreshes', () => {
+        cy.intercept('POST', '**/cases/case-123/reviews/abandon', {
+            statusCode: 200,
+            body: { id: 'rev-1', status: 'ABANDONED' },
+        }).as('abandonReview');
+        const onUpdate = cy.stub().as('onUpdate');
+
+        cy.fullMount(
+            <CaseReviewBanner caseData={underReviewCase} onUpdate={onUpdate} />,
+            mountOpts
+        );
+
+        cy.contains('button', 'Abandon Review').click();
+        cy.contains('Abandon review').should('be.visible');
+        cy.get('#review-outcome').type('Challenge withdrawn');
+        cy.get('.MuiDialogActions-root').contains('button', 'Abandon').click();
+        cy.wait('@abandonReview');
+        cy.get('@onUpdate').should('have.been.called');
+    });
+
+    it('keeps the review open when closing fails', () => {
+        cy.intercept('POST', '**/cases/case-123/reviews/complete', {
+            statusCode: 500,
+            body: { detail: 'boom' },
+        }).as('completeFail');
+        const onUpdate = cy.stub().as('onUpdate');
+
+        cy.fullMount(
+            <CaseReviewBanner caseData={underReviewCase} onUpdate={onUpdate} />,
+            mountOpts
+        );
+
+        cy.contains('button', 'Complete Review').click();
+        cy.get('#review-outcome').type('Amended');
+        cy.get('.MuiDialogActions-root').contains('button', 'Complete').click();
+        cy.wait('@completeFail');
+        cy.get('@onUpdate').should('not.have.been.called');
     });
 });
