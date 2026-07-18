@@ -29,6 +29,7 @@ from .models import (
     Document,
     DocumentExportSettings,
     Export,
+    InternalReview,
     Redaction,
     ReviewWorkflowSettings,
 )
@@ -821,13 +822,24 @@ def _preserve_export(case, zip_content, review=None):
     return export
 
 
-def export_case_documents(case_id):
-    """Background task: generate a ZIP export package for all documents in a case."""
+def export_case_documents(case_id, review_id=None):
+    """Background task: generate a ZIP export package for all documents in a case.
+
+    ``review_id`` attributes the produced Export to the Internal Review whose
+    completion triggered the re-export; it is ``None`` for an ordinary
+    disclosure.
+    """
     try:
         case = Case.objects.get(id=case_id)
     except Case.DoesNotExist:
         logger.error("Case with id %s not found — export aborted.", case_id)
         return
+
+    review = (
+        InternalReview.objects.filter(id=review_id).first()
+        if review_id is not None
+        else None
+    )
 
     # Create an isolated temporary directory for this export
     temp_parent = tempfile.mkdtemp(prefix=f"export_{case_id}_")
@@ -919,7 +931,7 @@ def export_case_documents(case_id):
         with open(zip_file_path, "rb") as f:
             zip_content = f.read()
 
-        _preserve_export(case, zip_content)
+        _preserve_export(case, zip_content, review=review)
 
         shutil.rmtree(temp_parent)
 

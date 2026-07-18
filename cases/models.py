@@ -102,14 +102,20 @@ class Case(models.Model):
     )
     export_task_id = models.CharField(max_length=255, null=True, blank=True)
 
-    def start_export(self):
+    def start_export(self, review=None):
         """
         Sets the case status to PROCESSING and triggers the background
         task to generate the export package.
-        Returns the task_id.
+
+        ``review`` attributes the resulting Export to an Internal Review that a
+        re-export is being generated for; it is ``None`` for an ordinary
+        disclosure. Returns the task_id.
         """
         self.export_status = self.ExportStatus.PROCESSING
-        task_id = async_task("cases.tasks.export_case_documents", self.id)
+        review_id = str(review.id) if review is not None else None
+        task_id = async_task(
+            "cases.tasks.export_case_documents", self.id, review_id
+        )
         self.export_task_id = task_id
         self.save(update_fields=["export_status", "export_task_id"])
         return task_id

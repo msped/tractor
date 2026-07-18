@@ -20,6 +20,7 @@ from ..models import (
     Case,
     Document,
     DocumentExportSettings,
+    InternalReview,
     Redaction,
     RedactionContext,
     RedactionSnapshot,
@@ -1416,6 +1417,22 @@ class ExportPreservationTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(
             self.case.export_file.name, exports[1].export_file.name
         )
+
+    @patch(
+        "cases.services._generate_pdf_from_document",
+        return_value=b"mock pdf content",
+    )
+    def test_export_attributes_package_to_review(self, _mock_pdf):
+        """A completion-triggered re-export links its Export to the review."""
+        export_case_documents(self.case.id)
+        review = InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.COMPLETED
+        )
+
+        export_case_documents(self.case.id, review_id=str(review.id))
+
+        latest = self.case.exports.order_by("-sequence").first()
+        self.assertEqual(latest.review_id, review.id)
 
 
 def _make_redaction(start, end, redaction_type="PII"):

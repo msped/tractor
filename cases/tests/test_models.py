@@ -159,7 +159,7 @@ class CaseModelTests(NetworkBlockerMixin, TestCase):
 
         self.assertEqual(task_id, "model-test-task-id")
         mock_async_task.assert_called_once_with(
-            "cases.tasks.export_case_documents", case.id
+            "cases.tasks.export_case_documents", case.id, None
         )
         self.assertEqual(case.export_status, Case.ExportStatus.PROCESSING)
         self.assertEqual(case.export_task_id, "model-test-task-id")

@@ -24,11 +24,17 @@ from .models import (
     Document,
     DocumentExportSettings,
     ExemptionTemplate,
+    InternalReview,
     Redaction,
     RedactionContext,
     ReviewWorkflowSettings,
 )
-from .reviews import ReviewError, open_review
+from .reviews import (
+    ReviewError,
+    abandon_review,
+    complete_review,
+    open_review,
+)
 from .serializers import (
     BulkByTextSerializer,
     BulkCaseDeleteSerializer,
@@ -181,6 +187,40 @@ class CaseReviewView(APIView):
         case = get_object_or_404(Case, id=case_id)
         try:
             review = open_review(case, by=request.user)
+        except ReviewError as exc:
+            return Response(
+                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(
+            InternalReviewSerializer(review).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class CaseReviewCloseView(APIView):
+    """
+    Closes a case's open Internal Review — either ``complete`` (re-export the
+    amended disclosure) or ``abandon`` (roll the redactions back). Both require
+    a written ``outcome`` and are available to any authenticated user.
+    """
+
+    permission_classes = [IsAuthenticated]
+    _ACTIONS = {"complete": complete_review, "abandon": abandon_review}
+
+    def post(self, request, case_id, action, *args, **kwargs):
+        case = get_object_or_404(Case, id=case_id)
+        review = case.reviews.filter(status=InternalReview.Status.OPEN).first()
+        if review is None:
+            return Response(
+                {"detail": "This case has no open review to close."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            review = self._ACTIONS[action](
+                review,
+                outcome=request.data.get("outcome", ""),
+                by=request.user,
+            )
         except ReviewError as exc:
             return Response(
                 {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
