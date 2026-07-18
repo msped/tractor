@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import uuid
 from datetime import date
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from freezegun import freeze_time
 
 from cases.models import (
     Case,
+    DisclosureLockError,
     Document,
     DocumentExportSettings,
     Export,
@@ -502,6 +504,137 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
         self.assertNotIn(ds_info, trainable)
         self.assertNotIn(rejected, trainable)
         self.assertNotIn(pending, trainable)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class DisclosureLockTests(NetworkBlockerMixin, TestCase):
+    """
+    Post-disclosure lock at the RedactionQuerySet decision choke point: once a
+    case has a preserved Export, human decision writes are refused unless an
+    Internal Review is open. System writes and undisclosed cases are exempt.
+    """
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="202560", data_subject_name="Lock Test"
+        )
+        file = SimpleUploadedFile("lock.txt", b"content")
+        self.document = Document.objects.create(
+            case=self.case, original_file=file
+        )
+        self.redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="test",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _disclose(self, sequence=1):
+        """Preserve a disclosure export so the case counts as disclosed."""
+        return Export.objects.create(
+            case=self.case,
+            export_file=SimpleUploadedFile("d.zip", b"zip"),
+            sequence=sequence,
+            label="Original disclosure",
+        )
+
+    def _open_review(self):
+        return InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.OPEN
+        )
+
+    def _qs(self):
+        return Redaction.objects.filter(pk=self.redaction.pk)
+
+    # ---- undisclosed case: writes always allowed ----
+    def test_human_accept_allowed_when_not_disclosed(self):
+        self._qs().accept(by=Redaction.DecidedBy.HUMAN)
+        self.redaction.refresh_from_db()
+        self.assertTrue(self.redaction.is_accepted)
+
+    # ---- disclosed, no open review: human writes refused ----
+    def test_human_accept_refused_when_disclosed_and_no_review(self):
+        self._disclose()
+        with self.assertRaises(DisclosureLockError):
+            self._qs().accept(by=Redaction.DecidedBy.HUMAN)
+
+    def test_human_reject_refused_when_disclosed_and_no_review(self):
+        self._disclose()
+        with self.assertRaises(DisclosureLockError):
+            self._qs().reject("reason", by=Redaction.DecidedBy.HUMAN)
+
+    def test_reset_refused_when_disclosed_and_no_review(self):
+        self._disclose()
+        with self.assertRaises(DisclosureLockError):
+            self._qs().reset()
+
+    def test_lock_error_is_a_provenance_error(self):
+        """Existing ProvenanceError handlers also catch the lock."""
+        self._disclose()
+        with self.assertRaises(ProvenanceError):
+            self._qs().accept(by=Redaction.DecidedBy.HUMAN)
+
+    # ---- disclosed, review open: full edit scope restored ----
+    def test_human_accept_allowed_while_review_open(self):
+        self._disclose()
+        self._open_review()
+        self._qs().accept(by=Redaction.DecidedBy.HUMAN)
+        self.redaction.refresh_from_db()
+        self.assertTrue(self.redaction.is_accepted)
+
+    def test_human_reject_allowed_while_review_open(self):
+        self._disclose()
+        self._open_review()
+        self._qs().reject("reason", by=Redaction.DecidedBy.HUMAN)
+        self.redaction.refresh_from_db()
+        self.assertFalse(self.redaction.is_accepted)
+        self.assertEqual(self.redaction.justification, "reason")
+
+    def test_reset_allowed_while_review_open(self):
+        self._disclose()
+        self._open_review()
+        self._qs().reset()
+        self.redaction.refresh_from_db()
+        self.assertIsNone(self.redaction.decided_by)
+
+    def test_closed_review_does_not_unlock(self):
+        self._disclose()
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.COMPLETED
+        )
+        with self.assertRaises(DisclosureLockError):
+            self._qs().accept(by=Redaction.DecidedBy.HUMAN)
+
+    # ---- system writes: exempt regardless of disclosure ----
+    def test_system_actors_exempt_when_disclosed(self):
+        self._disclose()
+        for actor in (
+            Redaction.DecidedBy.AUTO_ACCEPT,
+            Redaction.DecidedBy.CASE_PROPAGATION,
+            Redaction.DecidedBy.DS_INFO_PROPAGATION,
+        ):
+            with self.subTest(actor=actor):
+                self._qs().accept(by=actor)
+                self.redaction.refresh_from_db()
+                self.assertTrue(self.redaction.is_accepted)
+
+    def test_system_actor_write_runs_no_lock_queries(self):
+        """System writes short-circuit before touching the database."""
+        self._disclose()
+        with self.assertNumQueries(1):  # only the UPDATE itself
+            self._qs().accept(by=Redaction.DecidedBy.AUTO_ACCEPT)
+
+    def test_empty_queryset_is_allowed_when_disclosed(self):
+        self._disclose()
+        # Matches no rows; must not raise even though the case is disclosed.
+        count = Redaction.objects.filter(pk=uuid.uuid4()).accept(
+            by=Redaction.DecidedBy.HUMAN
+        )
+        self.assertEqual(count, 0)
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)

@@ -12,6 +12,7 @@ import { CaseInformation } from '@/components/CaseInformation';
 import { CaseDocuments } from '@/components/CaseDocuments';
 import { CaseExportManager } from '@/components/CaseExportManager';
 import { CaseExportHistory } from '@/components/CaseExportHistory';
+import { CaseReviewBanner } from '@/components/CaseReviewBanner';
 import { getCase } from '@/services/caseService';
 
 export const CaseDetailClientPage = ({ initialCaseData }) => {
@@ -54,6 +55,7 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
                     </Button>
                     <CaseExportManager caseData={caseData} onUpdate={handleMutate} />
                 </Box>
+                <CaseReviewBanner caseData={caseData} onUpdate={handleMutate} />
                 <CaseInformation caseObject={caseData} onUpdate={handleMutate} />
                 <CaseDocuments
                     caseId={caseData.id}
