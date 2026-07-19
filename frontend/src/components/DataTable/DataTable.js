@@ -134,13 +134,16 @@ export const DataTable = () => {
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
     useEffect(() => {
+        // Nothing to debounce until the input diverges from the applied value.
+        // This also prevents a spurious re-fetch on mount (both start empty).
+        if (search === debouncedSearch) return;
         if (search.length > 0 && search.length < MIN_SEARCH_LENGTH) return;
         const timer = setTimeout(() => {
             setDebouncedSearch(search);
-            setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            setPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
         }, SEARCH_DEBOUNCE_MS);
         return () => clearTimeout(timer);
-    }, [search]);
+    }, [search, debouncedSearch]);
 
     useEffect(() => {
         let cancelled = false;
