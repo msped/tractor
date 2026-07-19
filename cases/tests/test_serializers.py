@@ -374,10 +374,25 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertIn("redactions", data)
         self.assertEqual(len(data["redactions"]), 2)
 
+        # No open review on this case.
+        self.assertIsNone(data["active_review"])
+
         # Check that fields not in the serializer are absent
         self.assertNotIn("status", data)
         self.assertNotIn("uploaded_at", data)
         self.assertNotIn("original_file", data)
+
+    def test_document_review_serializer_exposes_open_review(self):
+        from ..models import InternalReview
+
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.OPEN
+        )
+
+        data = DocumentReviewSerializer(instance=self.document).data
+
+        self.assertIsNotNone(data["active_review"])
+        self.assertEqual(data["active_review"]["status"], "OPEN")
 
     @freeze_time("2025-01-01")
     def test_case_serializer_fields(self):

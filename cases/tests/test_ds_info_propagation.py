@@ -11,8 +11,10 @@ from ..ds_info_propagation import (
     apply_plan,
     build_term_patterns,
     plan_document,
+    preview_propagation,
     propagate_term_across_case,
     propagate_terms_to_document,
+    summarize_propagation,
 )
 from ..models import Case, Document, Redaction
 
@@ -365,3 +367,72 @@ class ScopeConvenienceTests(PlanApplyTestCase):
 
         with self.assertNumQueries(0):
             propagate_term_across_case(source)
+
+
+class PreviewPropagationTests(PlanApplyTestCase):
+    def setUp(self):
+        super().setUp()
+        self.other_document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("b.pdf", b"y", "application/pdf"),
+            status=Document.Status.COMPLETED,
+            extracted_text="Alice was also mentioned here, and Alice again.",
+        )
+        self.empty_document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("c.pdf", b"z", "application/pdf"),
+            status=Document.Status.COMPLETED,
+            extracted_text="Nobody relevant is named here.",
+        )
+        self.source = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+    def test_preview_returns_only_documents_that_would_change(self):
+        plans = preview_propagation(self.source)
+
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].document.id, self.other_document.id)
+
+    def test_preview_does_not_apply_any_change(self):
+        preview_propagation(self.source)
+
+        self.assertFalse(self.other_document.redactions.exists())
+        self.assertFalse(self.empty_document.redactions.exists())
+
+    def test_preview_blank_term_returns_empty(self):
+        self.source.text = "  "
+
+        self.assertEqual(preview_propagation(self.source), [])
+
+    def test_summarize_counts_matches_per_document(self):
+        summary = summarize_propagation(self.source)
+
+        self.assertEqual(summary["term"], "Alice")
+        self.assertEqual(summary["total_matches"], 2)
+        self.assertEqual(len(summary["affected_documents"]), 1)
+        entry = summary["affected_documents"][0]
+        self.assertEqual(entry["document_id"], str(self.other_document.id))
+        self.assertEqual(entry["filename"], self.other_document.filename)
+        self.assertEqual(entry["match_count"], 2)
+
+    def test_summarize_then_apply_flags_the_previewed_documents(self):
+        summary = summarize_propagation(self.source)
+        self.assertEqual(summary["total_matches"], 2)
+
+        propagate_term_across_case(self.source)
+
+        self.assertEqual(
+            self.other_document.redactions.filter(
+                text="Alice",
+                redaction_type=Redaction.RedactionType.DS_INFORMATION,
+                is_accepted=True,
+            ).count(),
+            2,
+        )
