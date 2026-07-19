@@ -1436,6 +1436,92 @@ class CaseExportHistoryViewTests(NetworkBlockerMixin, APITestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class CaseDisclosureDiffViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="testuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="250077", data_subject_name="Dee Iff"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("d.txt", b"content"),
+            filename="d.txt",
+            file_type=".txt",
+            status=Document.Status.COMPLETED,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self):
+        return Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+    def _snapshot(self):
+        from ..snapshots import snapshot_redactions
+
+        return snapshot_redactions(self.case)
+
+    def test_diff_returns_added_removed_modified(self):
+        redaction = self._make_redaction()
+        self._snapshot()
+        # Modify the disclosed redaction and add a brand new one.
+        Redaction.objects.filter(pk=redaction.pk).reject(
+            "not needed", by=Redaction.DecidedBy.HUMAN
+        )
+        Redaction.objects.create(
+            document=self.document,
+            start_char=10,
+            end_char=13,
+            text="Bob",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=False,
+        )
+
+        url = reverse("case-diff", kwargs={"case_id": self.case.id})
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["counts"]["added"], 1)
+        self.assertEqual(response.data["counts"]["modified"], 1)
+        self.assertEqual(response.data["counts"]["removed"], 0)
+        self.assertEqual(response.data["added"][0]["text"], "Bob")
+        self.assertIn("is_accepted", response.data["modified"][0]["changes"])
+
+    def test_diff_without_disclosure_returns_404(self):
+        self._make_redaction()
+        url = reverse("case-diff", kwargs={"case_id": self.case.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_diff_unknown_case_returns_404(self):
+        url = reverse("case-diff", kwargs={"case_id": uuid.uuid4()})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_diff_requires_authentication(self):
+        self._snapshot()
+        anon = APIClient()
+        url = reverse("case-diff", kwargs={"case_id": self.case.id})
+        response = anon.get(url)
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class CaseReviewViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
