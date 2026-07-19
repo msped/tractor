@@ -1022,6 +1022,125 @@ describe('<RedactionComponent />', () => {
         });
     });
 
+    context('DS_INFO Propagation During Review', () => {
+        const reviewDocument = { ...mockDocument, active_review: { id: 'rev-1', status: 'OPEN' } };
+        const previewBody = {
+            term: 'John Doe',
+            total_matches: 2,
+            affected_documents: [{ document_id: 'd2', filename: 'other-doc.pdf', match_count: 2 }],
+        };
+
+        beforeEach(() => {
+            cy.intercept('GET', '**/cases/document/redaction/*/propagation', {
+                statusCode: 200,
+                body: previewBody,
+            }).as('previewProp');
+            cy.intercept('POST', '**/cases/document/redaction/*/propagation', {
+                statusCode: 200,
+                body: previewBody,
+            }).as('applyProp');
+        });
+
+        const reclassifyJohnDoeToDsInfo = () => {
+            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').click();
+        };
+
+        it('previews and applies propagation when marking DS_INFO during a review', () => {
+            mountRedactionComponent(reviewDocument);
+            reclassifyJohnDoeToDsInfo();
+
+            cy.wait('@previewProp');
+            cy.contains('Propagate data subject information?').should('be.visible');
+            cy.contains('other-doc.pdf').should('be.visible');
+
+            cy.get('[role="dialog"]').contains('button', 'Propagate').click();
+            cy.wait('@applyProp');
+            cy.contains('Propagated to 2 occurrences across the case.').should('be.visible');
+        });
+
+        it('cancels without applying propagation', () => {
+            mountRedactionComponent(reviewDocument);
+            reclassifyJohnDoeToDsInfo();
+
+            cy.wait('@previewProp');
+            cy.get('[role="dialog"]').contains('button', 'Cancel').click();
+            cy.get('[role="dialog"]').should('not.exist');
+            cy.get('@applyProp.all').should('have.length', 0);
+        });
+
+        it('does not prompt when no other document is affected', () => {
+            cy.intercept('GET', '**/cases/document/redaction/*/propagation', {
+                statusCode: 200,
+                body: { term: 'John Doe', total_matches: 0, affected_documents: [] },
+            }).as('emptyPreview');
+            mountRedactionComponent(reviewDocument);
+            reclassifyJohnDoeToDsInfo();
+
+            cy.wait('@emptyPreview');
+            cy.contains('Propagate data subject information?').should('not.exist');
+        });
+
+        it('does not preview outside a review', () => {
+            mountRedactionComponent(mockDocument);
+            reclassifyJohnDoeToDsInfo();
+
+            cy.wait('@updateRedaction');
+            cy.contains('Propagate data subject information?').should('not.exist');
+            cy.get('@previewProp.all').should('have.length', 0);
+        });
+
+        it('previews after manually creating a new DS_INFO redaction during a review', () => {
+            mountRedactionComponent(reviewDocument);
+
+            // Select "This" (chars 0–4) — not covered by any existing redaction.
+            cy.get('[data-testid="document-viewer"]').then($paper => {
+                const textNode = $paper[0].firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, 4);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            cy.get('[role="presentation"]').should('be.visible');
+            cy.get('[role="combobox"]').click();
+            cy.get('[role="listbox"]').contains('li', 'Data Subject Information').click();
+            cy.contains('button', 'Redact').click();
+
+            cy.wait('@createRedaction');
+            cy.wait('@previewProp');
+            cy.contains('Propagate data subject information?').should('be.visible');
+        });
+
+        it('previews after reclassifying already-redacted text to DS_INFO via the popover', () => {
+            mountRedactionComponent(reviewDocument);
+
+            // r4 (DS_INFO, chars 10–22) is the first highlighted span; select part
+            // of it and overwrite to DS_INFO via the popover to hit the overwrite
+            // branch. Use r2 (PII) instead so the type actually changes.
+            cy.get('[data-redaction-id="r2"]').then($span => {
+                const textNode = $span[0].firstChild;
+                const range = document.createRange();
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, 5);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            });
+            cy.get('[data-testid="document-viewer"]').trigger('mouseup');
+
+            cy.get('[role="presentation"]').should('be.visible');
+            cy.get('[role="combobox"]').click();
+            cy.get('[role="listbox"]').contains('li', 'Data Subject Information').click();
+            cy.contains('button', 'Redact').click();
+
+            cy.wait('@updateRedaction');
+            cy.wait('@previewProp');
+            cy.contains('Propagate data subject information?').should('be.visible');
+        });
+    });
+
     context('Context Save', () => {
         it('updates the redaction context state when context is saved via the sidebar', () => {
             cy.intercept('POST', '**/cases/document/redaction/r2/context', {
