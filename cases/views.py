@@ -19,6 +19,7 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .diff import diff_disclosure
 from .ds_info_propagation import (
     propagate_term_across_case,
     summarize_propagation,
@@ -177,6 +178,27 @@ class CaseExportHistoryView(ListAPIView):
     def get_queryset(self):
         case = get_object_or_404(Case, id=self.kwargs["case_id"])
         return case.exports.select_related("created_by").all()
+
+
+class CaseDisclosureDiffView(APIView):
+    """
+    Returns the diff between the case's latest disclosure snapshot and the
+    current live redaction set — the added / removed / modified redactions
+    since disclosure. Responds 404 when the case has never been disclosed and
+    so has no snapshot to diff against.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, case_id, *args, **kwargs):
+        case = get_object_or_404(Case, id=case_id)
+        diff = diff_disclosure(case)
+        if diff is None:
+            return Response(
+                {"detail": "This case has no disclosure to diff against."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(diff)
 
 
 class CaseReviewView(APIView):
