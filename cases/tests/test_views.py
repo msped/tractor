@@ -21,6 +21,7 @@ from ..models import (
     DocumentExportSettings,
     ExemptionTemplate,
     Export,
+    InternalReview,
     Redaction,
     RedactionContext,
 )
@@ -1605,6 +1606,136 @@ class CaseReviewCloseViewTests(NetworkBlockerMixin, APITestCase):
         url = reverse("case-review-abandon", kwargs={"case_id": self.case.id})
 
         response = anon.post(url, {"outcome": "x"}, format="json")
+
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionPropagationViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="prop", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="250099", data_subject_name="Prop Agate"
+        )
+        self.source_doc = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("s.txt", b"content"),
+            status=Document.Status.COMPLETED,
+            extracted_text="Alice met Bob.",
+        )
+        self.other_doc = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("o.txt", b"content"),
+            status=Document.Status.COMPLETED,
+            extracted_text="Alice was mentioned here too.",
+        )
+        # Disclose + open a review so marking DS_INFO does not auto-propagate.
+        export = Export(case=self.case, sequence=1, label="Original")
+        export.export_file.save(
+            "d.zip", SimpleUploadedFile("d.zip", b"zip"), save=False
+        )
+        export.save()
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.OPEN
+        )
+        self.source = Redaction.objects.create(
+            document=self.source_doc,
+            start_char=0,
+            end_char=5,
+            text="Alice",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _url(self, redaction_id=None):
+        return reverse(
+            "redaction-propagation",
+            kwargs={"redaction_id": redaction_id or self.source.id},
+        )
+
+    def test_preview_lists_affected_documents_without_applying(self):
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["term"], "Alice")
+        self.assertEqual(response.data["total_matches"], 1)
+        docs = response.data["affected_documents"]
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0]["document_id"], str(self.other_doc.id))
+        self.assertEqual(docs[0]["match_count"], 1)
+        # Preview is read-only — nothing was written.
+        self.assertFalse(self.other_doc.redactions.exists())
+
+    def test_apply_propagates_across_the_case(self):
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["total_matches"], 1)
+        propagated = self.other_doc.redactions.get(text="Alice")
+        self.assertEqual(
+            propagated.redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
+        self.assertTrue(propagated.is_accepted)
+
+    def test_apply_is_a_system_write_exempt_from_the_lock(self):
+        # Re-lock the case by closing the review. A human decision write would
+        # now be rejected, but propagation applies as a DS_PROP system write.
+        self.case.reviews.update(status=InternalReview.Status.COMPLETED)
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            self.other_doc.redactions.filter(
+                text="Alice", is_accepted=True
+            ).exists()
+        )
+
+    def test_preview_on_non_ds_info_redaction_returns_400(self):
+        other = Redaction.objects.create(
+            document=self.source_doc,
+            start_char=9,
+            end_char=12,
+            text="Bob",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        response = self.client.get(self._url(other.id))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_apply_on_non_ds_info_redaction_returns_400(self):
+        other = Redaction.objects.create(
+            document=self.source_doc,
+            start_char=9,
+            end_char=12,
+            text="Bob",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        response = self.client.post(self._url(other.id))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(self.other_doc.redactions.exists())
+
+    def test_unknown_redaction_returns_404(self):
+        response = self.client.get(self._url(uuid.uuid4()))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_requires_authentication(self):
+        anon = APIClient()
+        response = anon.get(self._url())
 
         self.assertIn(
             response.status_code,

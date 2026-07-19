@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
-from .models import Document, Redaction
+from .models import Document, InternalReview, Redaction
 
 
 @receiver(post_save, sender=Document)
@@ -41,10 +41,23 @@ def redaction_post_save(sender, instance, created, **kwargs):
         created or original_type != Redaction.RedactionType.DS_INFORMATION
     )
 
-    if type_changed_to_ds_info:
-        from django_q.tasks import async_task
+    if not type_changed_to_ds_info:
+        return
 
-        async_task(
-            "cases.tasks.find_and_flag_matching_text_in_case",
-            instance.id,
-        )
+    # During an Internal Review, propagation is no longer fire-and-forget: the
+    # reviewer previews the affected documents and confirms before it applies
+    # (see cases.views.RedactionPropagationView). Suppress the automatic task
+    # so no case-wide write happens without that confirmation.
+    review_open = InternalReview.objects.filter(
+        case=instance.document.case_id,
+        status=InternalReview.Status.OPEN,
+    ).exists()
+    if review_open:
+        return
+
+    from django_q.tasks import async_task
+
+    async_task(
+        "cases.tasks.find_and_flag_matching_text_in_case",
+        instance.id,
+    )

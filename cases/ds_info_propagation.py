@@ -216,14 +216,9 @@ def propagate_terms_to_document(document, terms):
     apply_plan(plan_document(document, patterns))
 
 
-def propagate_term_across_case(source_redaction):
-    """Hot path: scan all other reviewable case documents for one term."""
-    patterns = build_term_patterns([source_redaction.text])
-    if not patterns:
-        return
-
-    source_document = source_redaction.document
-    other_documents = Document.objects.filter(
+def _other_reviewable_documents(source_document):
+    """Every reviewable document in the case except the source itself."""
+    return Document.objects.filter(
         case=source_document.case,
         status__in=[
             Document.Status.READY_FOR_REVIEW,
@@ -231,11 +226,65 @@ def propagate_term_across_case(source_redaction):
         ],
     ).exclude(id=source_document.id)
 
+
+def preview_propagation(source_redaction):
+    """
+    Plan (but do not apply) propagation of one redaction's term across the
+    case. Returns the non-empty :class:`PropagationPlan` for each other
+    document that would be touched — read-only, so a reviewer can confirm the
+    affected documents before any write happens.
+    """
+    patterns = build_term_patterns([source_redaction.text])
+    if not patterns:
+        return []
+
+    plans = []
+    for document in _other_reviewable_documents(source_redaction.document):
+        plan = plan_document(document, patterns)
+        if not plan.is_empty:
+            plans.append(plan)
+    return plans
+
+
+def summarize_propagation(source_redaction):
+    """
+    Build the affected-documents summary a reviewer confirms against.
+
+    Each entry counts the positions that would be created, accepted or
+    upgraded in that document (duplicate cleanup is not surfaced).
+    """
+    affected = []
+    total = 0
+    for plan in preview_propagation(source_redaction):
+        count = (
+            len(plan.to_create) + len(plan.to_accept) + len(plan.to_upgrade)
+        )
+        total += count
+        affected.append(
+            {
+                "document_id": str(plan.document.id),
+                "filename": plan.document.filename,
+                "match_count": count,
+            }
+        )
+    return {
+        "term": source_redaction.text,
+        "affected_documents": affected,
+        "total_matches": total,
+    }
+
+
+def propagate_term_across_case(source_redaction):
+    """Hot path: scan all other reviewable case documents for one term."""
+    patterns = build_term_patterns([source_redaction.text])
+    if not patterns:
+        return
+
     logger.info(
         "Searching for variations of '%s' in other documents for case %s.",
         source_redaction.text,
-        source_document.case.case_reference,
+        source_redaction.document.case.case_reference,
     )
 
-    for document in other_documents:
+    for document in _other_reviewable_documents(source_redaction.document):
         apply_plan(plan_document(document, patterns))

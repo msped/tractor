@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
-from cases.models import Case, Document, Redaction
+from cases.models import Case, Document, Export, InternalReview, Redaction
 from training.tests.base import NetworkBlockerMixin
 
 MEDIA_ROOT = tempfile.mkdtemp()
@@ -97,6 +97,49 @@ class RedactionSignalTests(NetworkBlockerMixin, TestCase):
         redaction.save()
 
         mock_async_task.assert_not_called()
+
+    @patch("django_q.tasks.async_task")
+    def test_open_review_suppresses_the_propagation_task(
+        self, mock_async_task
+    ):
+        """During a review, propagation is driven by the reviewer's
+        preview/confirm — the automatic task must not fire."""
+        Export.objects.create(
+            case=self.case,
+            export_file=SimpleUploadedFile("d.zip", b"zip"),
+            sequence=1,
+        )
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.OPEN
+        )
+
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="Jane",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+        )
+
+        mock_async_task.assert_not_called()
+
+    @patch("django_q.tasks.async_task")
+    def test_closed_review_does_not_suppress_the_propagation_task(
+        self, mock_async_task
+    ):
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.COMPLETED
+        )
+
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="Jane",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+        )
+
+        mock_async_task.assert_called_once()
 
     @patch("django_q.tasks.async_task")
     def test_updating_type_to_ds_info_without_update_fields_triggers_task(

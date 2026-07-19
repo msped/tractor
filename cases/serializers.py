@@ -330,9 +330,21 @@ class BulkCaseDeleteSerializer(serializers.Serializer):
 class DocumentReviewSerializer(serializers.ModelSerializer):
     redactions = RedactionSerializer(many=True, read_only=True)
     merge_structure = serializers.SerializerMethodField()
+    active_review = serializers.SerializerMethodField()
 
     def get_merge_structure(self, obj):
         return serialize_merge_structure(obj.redactions.all())
+
+    def get_active_review(self, obj):
+        """
+        The case's currently open Internal Review, or null. Lets the review UI
+        drive the DS_INFO propagation preview/confirm flow only while a review
+        is open (outside a review, propagation stays automatic).
+        """
+        review = obj.case.reviews.filter(
+            status=InternalReview.Status.OPEN
+        ).first()
+        return InternalReviewSerializer(review).data if review else None
 
     class Meta:
         model = Document
@@ -346,6 +358,7 @@ class DocumentReviewSerializer(serializers.ModelSerializer):
             "extracted_structure",
             "redactions",
             "merge_structure",
+            "active_review",
         ]
         read_only_fields = [
             "id",
