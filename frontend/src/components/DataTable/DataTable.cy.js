@@ -40,6 +40,16 @@ describe('<DataTable />', () => {
             cy.contains('REF002').should('be.visible');
         });
 
+        it('fetches exactly once on mount (no spurious debounce re-fetch)', () => {
+            cy.intercept('GET', '**/cases*', makeResponse(openCases)).as('getCases');
+            cy.fullMount(<DataTable />, mountOpts);
+            cy.wait('@getCases');
+
+            // The empty search must not schedule a debounced re-fetch on mount.
+            cy.wait(400);
+            cy.get('@getCases.all').should('have.length', 1);
+        });
+
         it('renders cell content correctly', () => {
             cy.intercept('GET', '**/cases*', makeResponse(openCases)).as('getCases');
             cy.fullMount(<DataTable />, mountOpts);
