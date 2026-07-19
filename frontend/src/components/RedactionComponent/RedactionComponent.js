@@ -151,7 +151,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
             <Box sx={{ width: layout.sidebarWidth, flexShrink: 0 }}>
                 <RedactionSidebar {...getRedactionSidebarProps(store, {
                     exemptionTemplates,
-                    documentCompleted: currentDocument.status === 'Completed',
+                    documentCompleted: currentDocument.status === 'Completed' && !currentDocument.active_review,
                 })} />
             </Box>
 

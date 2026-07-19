@@ -63,6 +63,7 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
                     documents={caseData.documents}
                     onUpdate={handleMutate}
                     isCaseFinalised={isCaseFinalised}
+                    isUnderReview={caseData.status === 'UNDER_REVIEW'}
                 />
                 {caseData.is_disclosed && (
                     <CaseDisclosureDiff caseData={caseData} />

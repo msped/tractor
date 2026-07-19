@@ -33,7 +33,7 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
 
 
-export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) => {
+export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, isUnderReview = false }) => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(0);
     const [selectedFiles, setSelectedFiles] = useState([]);
@@ -227,6 +227,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised }) 
                                     onCancelProcessing={handleCancelProcessing}
                                     handleDocumentUpdate={onUpdate}
                                     isCaseFinalised={isCaseFinalised}
+                                    isUnderReview={isUnderReview}
                                 />
                             ))}
                         </List>
