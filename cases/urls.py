@@ -21,6 +21,7 @@ from .views import (
     RedactionContextView,
     RedactionDetailView,
     RedactionListCreateView,
+    RedactionPropagationView,
     RetentionSettingsView,
     ReviewWorkflowSettingsView,
 )
@@ -134,5 +135,10 @@ urlpatterns = [
         "cases/document/redaction/<uuid:redaction_id>/context",
         RedactionContextView.as_view(),
         name="redaction-context",
+    ),
+    path(
+        "cases/document/redaction/<uuid:redaction_id>/propagation",
+        RedactionPropagationView.as_view(),
+        name="redaction-propagation",
     ),
 ]

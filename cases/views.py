@@ -19,6 +19,10 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .ds_info_propagation import (
+    propagate_term_across_case,
+    summarize_propagation,
+)
 from .models import (
     Case,
     Document,
@@ -471,6 +475,50 @@ class RedactionDetailView(RetrieveUpdateDestroyAPIView):
     serializer_class = RedactionSerializer
     lookup_field = "id"
     lookup_url_kwarg = "pk"
+
+
+class RedactionPropagationView(APIView):
+    """
+    Preview and apply DS_INFO propagation for a single redaction.
+
+    During an Internal Review the automatic case-wide propagation is
+    suppressed (see :func:`cases.signals.redaction_post_save`); the reviewer
+    instead ``GET``s the affected-documents preview and, once satisfied,
+    ``POST``s to apply it. Applying runs as a DS_INFO_PROPAGATION system write,
+    which is exempt from the post-disclosure lock.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_ds_info_redaction(self, redaction_id):
+        redaction = get_object_or_404(
+            Redaction.objects.select_related("document__case"),
+            id=redaction_id,
+        )
+        if redaction.redaction_type != Redaction.RedactionType.DS_INFORMATION:
+            return None
+        return redaction
+
+    def get(self, request, redaction_id, *args, **kwargs):
+        redaction = self._get_ds_info_redaction(redaction_id)
+        if redaction is None:
+            return Response(
+                {"detail": "Redaction is not data-subject information."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(summarize_propagation(redaction))
+
+    def post(self, request, redaction_id, *args, **kwargs):
+        redaction = self._get_ds_info_redaction(redaction_id)
+        if redaction is None:
+            return Response(
+                {"detail": "Redaction is not data-subject information."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Summarise before applying so the response reports what was flagged.
+        summary = summarize_propagation(redaction)
+        propagate_term_across_case(redaction)
+        return Response(summary, status=status.HTTP_200_OK)
 
 
 class BulkRedactionUpdateView(APIView):
