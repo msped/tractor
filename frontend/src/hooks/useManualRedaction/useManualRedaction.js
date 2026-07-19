@@ -9,6 +9,7 @@ export function useManualRedaction({
     setRedactions,
     pushHistory,
     activeHighlightType,
+    onDsInfoCreate = () => {},
 }) {
     const [manualRedactionAnchor, setManualRedactionAnchor] = useState(null);
     const [newSelection, setNewSelection] = useState(null);
@@ -124,6 +125,7 @@ export function useManualRedaction({
                     }
                 );
 
+                if (redactionType === 'DS_INFO') onDsInfoCreate(overlapping[0]?.id);
                 handleCloseManualRedactionPopover();
                 return;
             }
@@ -143,6 +145,7 @@ export function useManualRedaction({
                 ));
                 handleCloseManualRedactionPopover();
                 toast.success("Redaction classification updated.");
+                if (redactionType === 'DS_INFO') onDsInfoCreate(overlapping[0]?.id);
                 pushHistory(
                     async () => applyUpdates(await Promise.all(
                         originalOverlapping.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }))
@@ -172,6 +175,7 @@ export function useManualRedaction({
             setRedactions(prev => [...prev, createdRedaction]);
             handleCloseManualRedactionPopover();
             toast.success("Redaction created successfully.");
+            if (redactionType === 'DS_INFO') onDsInfoCreate(currentCreatedId);
             pushHistory(
                 async () => {
                     await deleteRedaction(currentCreatedId);
@@ -187,7 +191,7 @@ export function useManualRedaction({
             handleCloseManualRedactionPopover();
             toast.error("Failed to create redaction. Please try again.");
         }
-    }, [newSelection, documentId, extractedText, handleCloseManualRedactionPopover, redactions, pushHistory, applyUpdates, setRedactions]);
+    }, [newSelection, documentId, extractedText, handleCloseManualRedactionPopover, redactions, pushHistory, applyUpdates, setRedactions, onDsInfoCreate]);
 
     const handleTextSelect = useCallback((selection, rect) => {
         if (activeHighlightType === 'REMOVE') return;

@@ -7,6 +7,7 @@ import { useRedactionActions } from '@/hooks/useRedactionActions';
 import { useRemoveRedaction } from '@/hooks/useRemoveRedaction';
 import { useManualRedaction } from '@/hooks/useManualRedaction';
 import { useMarkAllInCase } from '@/hooks/useMarkAllInCase';
+import { useDsInfoPropagation } from '@/hooks/useDsInfoPropagation';
 
 export function useRedactionState({ document: currentDocument, initialRedactions, router }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
@@ -41,6 +42,11 @@ export function useRedactionState({ document: currentDocument, initialRedactions
     }, [geometryKey, currentDocument.id]);
 
     const { push: pushHistory, undo, redo, clear: clearHistory, canUndo, canRedo } = useUndoHistory({ maxSize: 25 });
+
+    // During an Internal Review, marking text DS_INFO no longer auto-propagates
+    // across the case — the reviewer previews and confirms first.
+    const reviewActive = Boolean(currentDocument?.active_review);
+    const propagation = useDsInfoPropagation({ active: reviewActive });
 
     const {
         displaySections,
@@ -149,7 +155,20 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         setRedactions,
         pushHistory,
         activeHighlightType,
+        onDsInfoCreate: propagation.requestPropagationPreview,
     });
+
+    // Wrap the reclassify actions so that turning a redaction into DS_INFO
+    // during a review offers the propagation preview once the write lands.
+    const changeTypeAndAccept = useCallback(async (redactionId, newType) => {
+        await handleChangeTypeAndAccept(redactionId, newType);
+        if (newType === 'DS_INFO') propagation.requestPropagationPreview(redactionId);
+    }, [handleChangeTypeAndAccept, propagation]);
+
+    const bulkChangeTypeAndAccept = useCallback(async (ids, newType) => {
+        await handleBulkChangeTypeAndAccept(ids, newType);
+        if (newType === 'DS_INFO') propagation.requestPropagationPreview(ids?.[0]);
+    }, [handleBulkChangeTypeAndAccept, propagation]);
 
     const handleCloseRejectionDialog = useCallback(() => {
         setRejectionDialogOpen(false);
@@ -196,8 +215,8 @@ export function useRedactionState({ document: currentDocument, initialRedactions
             accept: handleAcceptSuggestion,
             bulkAccept: handleBulkAccept,
             rejectAsDisclosable: handleRejectAsDisclosable,
-            changeTypeAndAccept: handleChangeTypeAndAccept,
-            bulkChangeTypeAndAccept: handleBulkChangeTypeAndAccept,
+            changeTypeAndAccept,
+            bulkChangeTypeAndAccept,
             openRejectDialog: handleOpenRejectDialog,
             openBulkRejectDialog: handleOpenBulkRejectDialog,
             splitMerge: handleSplitMerge,
@@ -248,6 +267,14 @@ export function useRedactionState({ document: currentDocument, initialRedactions
             target: rejectionTarget,
             onClose: handleCloseRejectionDialog,
             onSubmit: handleRejectDialogSubmit,
+        },
+
+        propagation: {
+            open: propagation.propagationDialogOpen,
+            preview: propagation.propagationPreview,
+            applying: propagation.propagationApplying,
+            onConfirm: propagation.confirmPropagation,
+            onCancel: propagation.cancelPropagation,
         },
     };
 }

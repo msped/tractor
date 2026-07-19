@@ -72,6 +72,28 @@ export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justific
     }
 };
 
+export const previewDsInfoPropagation = async (redactionId) => {
+    try {
+        const response = await apiClient.get(
+            `cases/document/redaction/${redactionId}/propagation`,
+        );
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to preview propagation. Please try again.');
+    }
+};
+
+export const applyDsInfoPropagation = async (redactionId) => {
+    try {
+        const response = await apiClient.post(
+            `cases/document/redaction/${redactionId}/propagation`,
+        );
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to apply propagation. Please try again.');
+    }
+};
+
 export const updateRedactionContext = async (redactionId, contextData) => {
     try {
         const response = await apiClient.post(

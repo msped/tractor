@@ -10,6 +10,7 @@ import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
 import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { ResubmitDialog } from '@/components/ResubmitDialog';
+import { PropagationConfirmDialog } from '@/components/PropagationConfirmDialog';
 import { getExemptionTemplates } from '@/services/redactionService';
 import useSWR from 'swr';
 import { DocumentViewer } from '@/components/DocumentViewer';
@@ -190,6 +191,14 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                 onClose={() => docState.setResubmitDialogOpen(false)}
                 onConfirm={docState.onResubmit}
                 isConfirming={docState.isResubmitting}
+            />
+
+            <PropagationConfirmDialog
+                open={store.propagation.open}
+                preview={store.propagation.preview}
+                loading={store.propagation.applying}
+                onConfirm={store.propagation.onConfirm}
+                onCancel={store.propagation.onCancel}
             />
         </Box>
     );
