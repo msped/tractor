@@ -91,6 +91,17 @@ export const getCaseDisclosureDiff = async (caseId) => {
     }
 };
 
+export const getExportDiff = async (caseId, exportId) => {
+    try {
+        const response = await apiClient.get(
+            `/cases/${caseId}/exports/${exportId}/diff`
+        );
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to load the disclosure changes. Please try again.');
+    }
+};
+
 export const openCaseReview = async (caseId) => {
     try {
         const response = await apiClient.post(`/cases/${caseId}/reviews`, {});

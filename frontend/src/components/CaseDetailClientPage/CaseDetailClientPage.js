@@ -12,7 +12,6 @@ import { CaseInformation } from '@/components/CaseInformation';
 import { CaseDocuments } from '@/components/CaseDocuments';
 import { CaseExportManager } from '@/components/CaseExportManager';
 import { CaseExportHistory } from '@/components/CaseExportHistory';
-import { CaseDisclosureDiff } from '@/components/CaseDisclosureDiff';
 import { CaseReviewBanner } from '@/components/CaseReviewBanner';
 import { getCase } from '@/services/caseService';
 
@@ -65,9 +64,6 @@ export const CaseDetailClientPage = ({ initialCaseData }) => {
                     isCaseFinalised={isCaseFinalised}
                     isUnderReview={caseData.status === 'UNDER_REVIEW'}
                 />
-                {caseData.is_disclosed && (
-                    <CaseDisclosureDiff caseData={caseData} />
-                )}
                 <CaseExportHistory caseData={caseData} />
             </Stack>
         </Container>
