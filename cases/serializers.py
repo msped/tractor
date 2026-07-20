@@ -190,6 +190,9 @@ class ExportSerializer(serializers.ModelSerializer):
     created_by = serializers.CharField(
         source="created_by.username", read_only=True, default=None
     )
+    # The review that produced this disclosure, if any — carries its outcome
+    # and reasoning so the disclosure history can surface why it was re-issued.
+    review_detail = InternalReviewSerializer(source="review", read_only=True)
 
     class Meta:
         model = Export
@@ -200,6 +203,7 @@ class ExportSerializer(serializers.ModelSerializer):
             "created_at",
             "created_by",
             "review",
+            "review_detail",
             "export_file",
         ]
         read_only_fields = fields

@@ -19,7 +19,7 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .diff import diff_disclosure
+from .diff import diff_disclosure, diff_export
 from .ds_info_propagation import (
     propagate_term_across_case,
     summarize_propagation,
@@ -29,6 +29,7 @@ from .models import (
     Document,
     DocumentExportSettings,
     ExemptionTemplate,
+    Export,
     InternalReview,
     Redaction,
     RedactionContext,
@@ -196,6 +197,27 @@ class CaseDisclosureDiffView(APIView):
         if diff is None:
             return Response(
                 {"detail": "This case has no disclosure to diff against."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(diff)
+
+
+class CaseExportDiffView(APIView):
+    """
+    Returns the diff between a preserved disclosure and the one before it — the
+    changes that produced that disclosure. The first disclosure comes back as a
+    ``baseline`` marker with empty change lists. Responds 404 when the export is
+    unknown for the case, or has no snapshot to diff (a legacy disclosure).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, case_id, export_id, *args, **kwargs):
+        export = get_object_or_404(Export, id=export_id, case_id=case_id)
+        diff = diff_export(export)
+        if diff is None:
+            return Response(
+                {"detail": "This disclosure has no snapshot to diff against."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response(diff)
