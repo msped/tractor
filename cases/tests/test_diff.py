@@ -7,11 +7,12 @@ from django.test import TestCase, override_settings
 
 from training.tests.base import NetworkBlockerMixin
 
-from ..diff import diff_disclosure
+from ..diff import diff_disclosure, diff_export
 from ..models import (
     Case,
     Document,
     Export,
+    InternalReview,
     Redaction,
     RedactionContext,
 )
@@ -230,3 +231,137 @@ class DiffDisclosureTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(
             diff["counts"], {"added": 0, "removed": 0, "modified": 0}
         )
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class DiffExportTests(NetworkBlockerMixin, TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="testuser", password="password"
+        )
+        self.case = Case.objects.create(
+            case_reference="250001",
+            data_subject_name="John Doe",
+            data_subject_dob=date(1990, 1, 1),
+            created_by=self.user,
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("doc.txt", b"hello world"),
+            filename="doc.txt",
+            file_type=".txt",
+            status=Document.Status.COMPLETED,
+            extracted_text="Alice met Bob in London on 2020-01-01.",
+        )
+
+    def _make_redaction(self, **overrides):
+        defaults = {
+            "document": self.document,
+            "start_char": 0,
+            "end_char": 5,
+            "text": "Alice",
+            "redaction_type": Redaction.RedactionType.THIRD_PARTY_PII,
+            "is_suggestion": True,
+            "is_accepted": True,
+            "decided_by": Redaction.DecidedBy.HUMAN,
+            "source": Redaction.Source.NER,
+        }
+        defaults.update(overrides)
+        return Redaction.objects.create(**defaults)
+
+    def _disclose(self, sequence, label):
+        """Preserve the live redaction set as an export + linked snapshot."""
+        export = Export.objects.create(
+            case=self.case,
+            export_file=SimpleUploadedFile(f"d{sequence}.zip", b"zip"),
+            sequence=sequence,
+            label=label,
+        )
+        snapshot = snapshot_redactions(self.case)
+        snapshot.export = export
+        snapshot.save(update_fields=["export"])
+        return export
+
+    def test_export_without_snapshot_returns_none(self):
+        export = Export.objects.create(
+            case=self.case,
+            export_file=SimpleUploadedFile("d.zip", b"zip"),
+            sequence=1,
+            label="Legacy disclosure",
+        )
+        self.assertIsNone(diff_export(export))
+
+    def test_first_disclosure_is_baseline(self):
+        self._make_redaction()
+        export = self._disclose(1, "Original disclosure")
+
+        diff = diff_export(export)
+        self.assertTrue(diff["baseline"])
+        self.assertIsNone(diff["base"])
+        self.assertEqual(diff["target"]["sequence"], 1)
+        self.assertEqual(diff["target"]["label"], "Original disclosure")
+        self.assertEqual(
+            diff["counts"], {"added": 0, "removed": 0, "modified": 0}
+        )
+        self.assertEqual(diff["added"], [])
+        self.assertEqual(diff["removed"], [])
+        self.assertEqual(diff["modified"], [])
+
+    def test_reports_changes_against_previous_disclosure(self):
+        original = self._make_redaction(text="Alice")
+        self._disclose(1, "Original disclosure")
+
+        # Edits between disclosures happen during an open review, which lifts
+        # the provenance lock on the now-disclosed case.
+        InternalReview.objects.create(case=self.case, opened_by=self.user)
+        # Add Bob, flip Alice's decision.
+        added = self._make_redaction(
+            text="Bob",
+            start_char=10,
+            end_char=13,
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+        )
+        Redaction.objects.filter(pk=original.pk).reject(
+            "not needed", by=Redaction.DecidedBy.HUMAN
+        )
+        second = self._disclose(2, "Disclosure 2")
+
+        diff = diff_export(second)
+        self.assertFalse(diff["baseline"])
+        self.assertEqual(
+            diff["base"], {"sequence": 1, "label": "Original disclosure"}
+        )
+        self.assertEqual(diff["target"]["sequence"], 2)
+        self.assertEqual(
+            diff["counts"], {"added": 1, "removed": 0, "modified": 1}
+        )
+        self.assertEqual(diff["added"][0]["id"], str(added.id))
+        self.assertEqual(diff["added"][0]["text"], "Bob")
+        modified = diff["modified"][0]
+        self.assertEqual(modified["id"], str(original.id))
+        self.assertEqual(
+            modified["changes"]["is_accepted"], {"from": True, "to": False}
+        )
+
+    def test_reports_removed_against_previous_disclosure(self):
+        removed = self._make_redaction(text="Alice")
+        self._disclose(1, "Original disclosure")
+        removed_id = str(removed.id)
+        removed.delete()
+        second = self._disclose(2, "Disclosure 2")
+
+        diff = diff_export(second)
+        self.assertEqual(diff["counts"]["removed"], 1)
+        self.assertEqual(diff["removed"][0]["id"], removed_id)
+        self.assertEqual(diff["removed"][0]["filename"], "doc.txt")
+
+    def test_diffs_against_nearest_prior_disclosure(self):
+        self._make_redaction(text="Alice")
+        self._disclose(1, "Original disclosure")
+        self._disclose(2, "Disclosure 2")  # unchanged in between
+        self._make_redaction(text="Bob", start_char=10, end_char=13)
+        third = self._disclose(3, "Disclosure 3")
+
+        diff = diff_export(third)
+        self.assertEqual(diff["base"]["sequence"], 2)
+        self.assertEqual(diff["counts"]["added"], 1)
