@@ -1434,6 +1434,155 @@ class CaseExportHistoryViewTests(NetworkBlockerMixin, APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_history_surfaces_producing_review_outcome(self):
+        review = InternalReview.objects.create(
+            case=self.case,
+            opened_by=self.user,
+            status=InternalReview.Status.COMPLETED,
+            outcome="DS challenge accepted",
+        )
+        self._make_export(1, "Original disclosure")
+        second = self._make_export(2, "Disclosure 2")
+        second.review = review
+        second.save(update_fields=["review"])
+
+        url = reverse("case-exports", kwargs={"case_id": self.case.id})
+        response = self.client.get(url)
+
+        self.assertIsNone(response.data[0]["review_detail"])
+        self.assertEqual(
+            response.data[1]["review_detail"]["outcome"],
+            "DS challenge accepted",
+        )
+        self.assertEqual(
+            response.data[1]["review_detail"]["status"], "COMPLETED"
+        )
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class CaseExportDiffViewTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="testuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="250066", data_subject_name="Ex Port"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("d.txt", b"content"),
+            filename="d.txt",
+            file_type=".txt",
+            status=Document.Status.COMPLETED,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **overrides):
+        defaults = {
+            "document": self.document,
+            "start_char": 0,
+            "end_char": 5,
+            "text": "Alice",
+            "redaction_type": Redaction.RedactionType.THIRD_PARTY_PII,
+            "is_accepted": True,
+            "decided_by": Redaction.DecidedBy.HUMAN,
+        }
+        defaults.update(overrides)
+        return Redaction.objects.create(**defaults)
+
+    def _disclose(self, sequence, label):
+        from ..snapshots import snapshot_redactions
+
+        export = Export(case=self.case, sequence=sequence, label=label)
+        export.export_file.save(
+            f"d{sequence}.zip",
+            SimpleUploadedFile(f"d{sequence}.zip", b"zip"),
+            save=False,
+        )
+        export.save()
+        snapshot = snapshot_redactions(self.case)
+        snapshot.export = export
+        snapshot.save(update_fields=["export"])
+        return export
+
+    def test_first_disclosure_returns_baseline(self):
+        self._make_redaction()
+        export = self._disclose(1, "Original disclosure")
+
+        url = reverse(
+            "case-export-diff",
+            kwargs={"case_id": self.case.id, "export_id": export.id},
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["baseline"])
+        self.assertIsNone(response.data["base"])
+
+    def test_diff_reports_changes_between_disclosures(self):
+        self._make_redaction()
+        self._disclose(1, "Original disclosure")
+        self._make_redaction(
+            text="Bob",
+            start_char=10,
+            end_char=13,
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+        )
+        second = self._disclose(2, "Disclosure 2")
+
+        url = reverse(
+            "case-export-diff",
+            kwargs={"case_id": self.case.id, "export_id": second.id},
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["baseline"])
+        self.assertEqual(response.data["base"]["sequence"], 1)
+        self.assertEqual(response.data["counts"]["added"], 1)
+        self.assertEqual(response.data["added"][0]["text"], "Bob")
+
+    def test_export_without_snapshot_returns_404(self):
+        export = Export(case=self.case, sequence=1, label="Legacy")
+        export.export_file.save(
+            "legacy.zip",
+            SimpleUploadedFile("legacy.zip", b"zip"),
+            save=False,
+        )
+        export.save()
+
+        url = reverse(
+            "case-export-diff",
+            kwargs={"case_id": self.case.id, "export_id": export.id},
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unknown_export_returns_404(self):
+        url = reverse(
+            "case-export-diff",
+            kwargs={"case_id": self.case.id, "export_id": uuid.uuid4()},
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_requires_authentication(self):
+        export = self._disclose(1, "Original disclosure")
+        anon = APIClient()
+        url = reverse(
+            "case-export-diff",
+            kwargs={"case_id": self.case.id, "export_id": export.id},
+        )
+        response = anon.get(url)
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class CaseDisclosureDiffViewTests(NetworkBlockerMixin, APITestCase):

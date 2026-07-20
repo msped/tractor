@@ -6,6 +6,7 @@ from .views import (
     BulkRedactionUpdateView,
     CaseDetailView,
     CaseDisclosureDiffView,
+    CaseExportDiffView,
     CaseExportHistoryView,
     CaseExportView,
     CaseListCreateView,
@@ -69,6 +70,11 @@ urlpatterns = [
         "cases/<uuid:case_id>/exports",
         CaseExportHistoryView.as_view(),
         name="case-exports",
+    ),
+    path(
+        "cases/<uuid:case_id>/exports/<uuid:export_id>/diff",
+        CaseExportDiffView.as_view(),
+        name="case-export-diff",
     ),
     path(
         "cases/<uuid:case_id>/diff",

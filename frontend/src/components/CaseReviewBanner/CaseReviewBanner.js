@@ -173,13 +173,16 @@ export const CaseReviewBanner = ({ caseData, onUpdate }) => {
     return (
         <Alert
             severity="info"
+            sx={{ '& .MuiAlert-action': { alignItems: 'center', pt: 0 } }}
             action={
                 <Button
                     color="inherit"
-                    size="small"
+                    size="medium"
+                    variant="outlined"
                     startIcon={<LockOpenIcon />}
                     onClick={handleOpenReview}
                     loading={isOpening}
+                    sx={{ mr: 1.5 }}
                 >
                     Open Review
                 </Button>

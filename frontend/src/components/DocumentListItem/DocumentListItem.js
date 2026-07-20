@@ -46,7 +46,8 @@ export const DocumentListItem = ({
     onResubmit,
     onCancelProcessing,
     handleDocumentUpdate,
-    isCaseFinalised
+    isCaseFinalised,
+    isUnderReview = false
 }) => {
 
     const { session } = useSession();
@@ -91,13 +92,13 @@ export const DocumentListItem = ({
                         </Button>
                     )}
                     {doc.status === 'Completed' && (
-                        <Button 
-                            component={NextLink} 
-                            href={`/cases/${caseId}/document/${doc.id}/view`} 
-                            variant="contained" 
+                        <Button
+                            component={NextLink}
+                            href={`/cases/${caseId}/document/${doc.id}/${isUnderReview ? 'review' : 'view'}`}
+                            variant="contained"
                             size="small"
                         >
-                            Open
+                            {isUnderReview ? 'Review' : 'Open'}
                         </Button>
                     )}
                     {(doc.status === 'Error' || doc.status === 'Unprocessed') && (
