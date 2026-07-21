@@ -178,28 +178,7 @@ This setting is read-only in the UI — it reflects the value of the `AUTO_CASE_
 
 ### Retention Review page
 
-Navigate to **Retention Review** in the sidebar (administrators only). The page lists:
-
-- **Overdue cases** — cases whose retention date has already passed.
-- **Upcoming cases** — cases whose retention date falls within the next `RETENTION_WARNING_DAYS` days (default: 30).
-
-Both lists are combined and sorted by retention date, earliest first.
-
-#### Reviewing cases
-
-Each row shows the case reference, data subject name and date of birth, retention date, creation date, and case outcome. Use the column chooser (grid icon, top-left) to hide columns you do not need.
-
-Click the **open in new tab** icon on any row to review the case before deciding whether to delete it.
-
-#### Deleting cases
-
-- **Delete one** — click the delete icon on a row and confirm the prompt.
-- **Delete selected** — check one or more rows (or use the header checkbox to select all), then click **Delete selected (N)** and confirm.
-
-!!! warning
-    Case deletion is permanent and cannot be undone. All documents, redactions, and exports associated with the case are removed. Verify the case before deleting.
-
-If auto deletion is disabled, the page description notes that cases must be deleted manually — no automatic cleanup will occur until the feature is re-enabled.
+When automatic deletion is disabled, administrators review and delete overdue and upcoming cases manually from the **Retention Review** page. See the dedicated [Retention Review](retention.md) guide for a full walkthrough.
 
 ---
 
