@@ -11,11 +11,13 @@ Tractor is a document redaction application with ML-powered Named Entity Recogni
 - **Review Workflow**: Accept, reject, or bulk-action suggested redactions. Adjacent same-type spans are automatically merged for easier review.
 - **Model Training**: Train custom SpanCat models from accepted redactions; GLiNER model managed separately
 - **Export**: Generate disclosure packages with original, redacted, and edited versions
+- **Internal Review**: Re-open a disclosed case to make targeted changes and re-disclose, preserving every past disclosure and its decision record
 
 ## Quick Links
 
 - [Getting Started](user-guide/getting-started.md) - Set up and start using Tractor
 - [Redacting Documents](user-guide/redaction.md) - Learn how to redact documents
+- [Internal Review](user-guide/internal-review.md) - Re-review and re-disclose a case after disclosure
 - [Settings](user-guide/settings.md) - Configure exemption templates and other settings
 - [Retention Review](user-guide/retention.md) - Manage cases approaching or past their retention date
 - [Developer Setup](dev/setup.md) - Set up your development environment

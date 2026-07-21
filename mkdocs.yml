@@ -43,8 +43,10 @@ nav:
   - User Guide:
       - Getting Started: user-guide/getting-started.md
       - Redacting Documents: user-guide/redaction.md
+      - Internal Review: user-guide/internal-review.md
       - Model Training: user-guide/training.md
       - System Settings: user-guide/settings.md
+      - Retention Review: user-guide/retention.md
   - Developer Guide:
       - Development Setup: dev/setup.md
       - Production Deployment: dev/deployment.md

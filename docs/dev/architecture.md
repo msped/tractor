@@ -41,8 +41,10 @@ tractor/
     - Results are deduplicated with priority: **Custom Presidio > SpanCat > Presidio > GLiNER > Gemma**
 4. **Data Subject Filtering**: Entities matching the case's data subject name or DOB are excluded from suggestions
 5. **User Review**: User accepts/rejects redactions in the UI. Adjacent same-type spans are automatically merged into compound display items for easier review. Merged items can be split and reviewed individually.
-6. **Export**: WeasyPrint generates PDF exports with redactions applied
-7. **Training**: Accepted redactions from completed documents feed into the SpanCat training pipeline
+6. **Export**: WeasyPrint generates PDF exports with redactions applied. Each completed export is preserved as an `Export` row and captured as a `RedactionSnapshot` (a complete, restorable copy of the redaction set); `Case.export_file` becomes a pointer to the latest package.
+7. **Disclosure lock**: Once a case has any `Export`, human redaction decision writes are rejected at the `RedactionQuerySet` choke point unless an `InternalReview` is open. System writes (snapshot restore, DS_INFO propagation, initial processing) are exempt.
+8. **Internal review**: Opening a review moves the case to `UNDER_REVIEW` and unlocks its redactions in place; completing re-exports (new `Export` + snapshot) and re-locks, while abandoning restores the latest snapshot and re-locks. See the [Internal Review user guide](../user-guide/internal-review.md).
+9. **Training**: Accepted redactions from completed documents feed into the SpanCat training pipeline
 
 ## API Endpoints
 
@@ -73,6 +75,17 @@ All endpoints are prefixed with `/api/`.
 | DELETE | `/cases/<case_id>`        | Delete case                 |
 | POST   | `/cases/<case_id>/export` | Generate disclosure package |
 
+### Disclosure & Internal Review (`/api/cases/<case_id>/...`)
+
+| Method | Endpoint                              | Description                                            |
+|--------|---------------------------------------|--------------------------------------------------------|
+| GET    | `/exports`                            | List preserved disclosure packages (newest per row)    |
+| GET    | `/exports/<export_id>/diff`           | Redaction diff of an export vs the preceding one       |
+| GET    | `/diff`                               | Live redactions vs the latest disclosure snapshot      |
+| POST   | `/reviews`                            | Open an internal review (unlock disclosed redactions)  |
+| POST   | `/reviews/complete`                   | Complete the review — re-export and re-lock            |
+| POST   | `/reviews/abandon`                    | Abandon the review — restore snapshot and re-lock      |
+
 ### Documents (`/api/cases/...`)
 
 | Method | Endpoint                                         | Description             |
@@ -96,6 +109,8 @@ All endpoints are prefixed with `/api/`.
 | DELETE | `/cases/document/redaction/<id>`                | Delete redaction                              |
 | POST   | `/cases/document/redaction/<id>/context`        | Add/update context                            |
 | PATCH  | `/cases/document/<document_id>/redactions/bulk` | Bulk accept/reject/retype multiple redactions |
+| GET    | `/cases/document/redaction/<id>/propagation`    | Preview case-wide DS_INFO propagation         |
+| POST   | `/cases/document/redaction/<id>/propagation`    | Apply case-wide DS_INFO propagation           |
 
 ### Models & Training (`/api/...`)
 
