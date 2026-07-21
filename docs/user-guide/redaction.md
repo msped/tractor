@@ -122,3 +122,9 @@ The appearance of the disclosure PDF is controlled by the **Disclosure style** s
 
 !!! note
     The in-browser document preview always shows colour-highlighted redactions regardless of the disclosure style setting. To see the removal style in effect, you must generate and download a disclosure package.
+
+### After Disclosure
+
+Once a disclosure package has been generated, the case is **disclosed and locked** — its redactions become read-only so the record of what was disclosed is preserved. Every disclosure package is kept in the case's **Disclosure History**, where it can be downloaded again at any time.
+
+If the disclosure is later challenged, you can open an **internal review** to make targeted changes and re-disclose. See [Internal Review](internal-review.md).
