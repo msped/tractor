@@ -133,12 +133,12 @@ export function NavSidebar() {
                         href="/cases/new"
                         sx={{
                             borderRadius: 1,
-                            bgcolor: 'secondary.main',
+                            bgcolor: 'primary.main',
                             color: 'white',
                             justifyContent: collapsed ? 'center' : 'flex-start',
                             px: collapsed ? 1.5 : 2,
                             '&:hover': {
-                                bgcolor: 'secondary.dark',
+                                bgcolor: 'primary.dark',
                             },
                         }}
                     >
