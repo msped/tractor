@@ -198,11 +198,10 @@ describe('<NavSidebar />', () => {
             });
         });
 
-        it('New Case button has secondary color styling', () => {
+        it('New Case button has primary color styling', () => {
             cy.contains('New Case')
                 .closest('.MuiListItemButton-root')
-                .should('have.css', 'background-color')
-                .and('not.equal', 'rgba(0, 0, 0, 0)');
+                .should('have.css', 'background-color', 'rgb(10, 37, 64)');
         });
     });
 
