@@ -37,7 +37,7 @@ cp frontend/.env.example frontend/.env
 | `DJANGO_SETTINGS_MODULE` | Settings module path                          | `backend.settings.production` |
 | `DEBUG`                  | Enable debug mode (optional — defaults to `False` in production) | `False` |
 | `ALLOWED_HOSTS`          | Comma-separated allowed hostnames — must include `backend` when running in Docker, as the frontend container calls the backend directly | `localhost,backend,yourdomain.com` |
-| `CORS_ALLOWED_ORIGINS`   | Comma-separated list of allowed CORS origins. In production, set this to the frontend URL only. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
+| `FRONTEND_ORIGIN`        | Public origin the frontend is served from. Used for the Microsoft OAuth callback and, in production, as the sole allowed CORS origin. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
 | `DATABASE_URL`           | Database URL for connection (optional — takes priority over individual vars) | |
 | `POSTGRES_DB`            | Database name (optional, default: `tractor`)  | `tractor`                  |
 | `POSTGRES_USER`          | Database user (optional, default: `tractor`)  | `tractor`                  |
@@ -55,11 +55,9 @@ cp frontend/.env.example frontend/.env
 
 | Variable                              | Description                                                                            | Example                  |
 |---------------------------------------|----------------------------------------------------------------------------------------|--------------------------|
-| `NEXT_PUBLIC_API_HOST`                | Public-facing backend URL (used by the browser to reach the API)                       | `https://yourdomain.com` |
 | `INTERNAL_API_HOST`                   | Backend URL reachable from the frontend container (Docker network hostname)             | `http://backend:8000`    |
 | `BETTER_AUTH_SECRET`                  | better-auth secret for session signing and encryption                                  | Long random string       |
-| `BETTER_AUTH_URL`                     | Server-side base URL of the frontend (used by better-auth API routes)                  | `https://yourdomain.com` |
-| `NEXT_PUBLIC_BETTER_AUTH_URL`         | Public-facing base URL of the frontend (used by the browser)                           | `https://yourdomain.com` |
+| `BETTER_AUTH_URL`                     | Public base URL / identity of the frontend (server-side; OAuth callbacks, cookie flags) | `https://yourdomain.com` |
 | `BETTER_AUTH_MICROSOFT_CLIENT_ID`     | Microsoft Entra application (client) ID (optional — see below)                         |                          |
 | `BETTER_AUTH_MICROSOFT_CLIENT_SECRET` | Microsoft Entra client secret (optional — see below)                                   |                          |
 | `BETTER_AUTH_MICROSOFT_TENANT_ID`     | Microsoft Entra tenant ID (optional — defaults to `common` for multi-tenant)           |                          |

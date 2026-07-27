@@ -50,7 +50,11 @@ tractor/
 
 All endpoints are prefixed with `/api/`.
 
-### Authentication (`/api/auth/`)
+### Authentication (`/api/account/`)
+
+These are Django's own auth/token/API-key endpoints. Browser-facing session
+management (sign-in, get-session, sign-out) lives under `/api/auth/` and is
+handled by better-auth on the Next.js frontend, not Django.
 
 | Method | Endpoint           | Description                             |
 |--------|--------------------|-----------------------------------------|
