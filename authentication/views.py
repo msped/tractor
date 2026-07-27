@@ -27,7 +27,9 @@ class MicrosoftLogin(SocialLoginView):
 
     @property
     def callback_url(self):
-        return f"{settings.FRONTEND_URL}/api/auth/callback/microsoft-entra-id"
+        return (
+            f"{settings.FRONTEND_ORIGIN}/api/auth/callback/microsoft-entra-id"
+        )
 
 
 class APIKeyListCreateView(APIView):
