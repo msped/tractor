@@ -15,7 +15,7 @@ export default async function page({ params }) {
         initialCaseData = caseResponse;
     } catch (error) {
         if (error.status === 401) {
-            redirect('/api/force-logout');
+            redirect('/api/auth/force-logout');
         }
         console.error("Failed to fetch case details:", error);
         fetchError = "There was an issue retrieving the case details. Please try again later.";

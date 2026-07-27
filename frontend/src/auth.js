@@ -8,21 +8,24 @@ import * as z from "zod";
 
 export const getSession = async () => {
     const { headers } = await import("next/headers");
-    const { authClient } = await import("@/lib/auth-client");
-    return authClient.getSession({
-        fetchOptions: { headers: await headers() },
-    });
+    // Resolve the session in-process — no HTTP self-call, so no internal URL to
+    // configure. auth.api.getSession applies the customSession transform (so
+    // user.access_token is present); wrap it in { data } to match the shape the
+    // caller previously got from authClient.getSession().
+    const session = await auth.api.getSession({ headers: await headers() });
+    return { data: session };
 };
 
 const SESSION_LIFETIME = 8 * 60 * 60; // 8 hours in seconds
 
 function getApiBase() {
+    // callDjango only runs server-side (inside better-auth endpoint handlers),
+    // so reach the backend directly over the Docker network. The browser branch
+    // falls back to a same-origin relative path and is effectively unused.
     const host =
         typeof window === "undefined"
-            ? process.env.INTERNAL_API_HOST ||
-              process.env.NEXT_PUBLIC_API_HOST ||
-              ""
-            : process.env.NEXT_PUBLIC_API_HOST || "";
+            ? process.env.INTERNAL_API_HOST || "http://localhost:8000"
+            : "";
     return `${host}/api`;
 }
 
@@ -42,10 +45,18 @@ async function callDjango(path, body) {
 const REFRESH_COOKIE = "django_rt";
 const REFRESH_COOKIE_MAX_AGE = 24 * 60 * 60;
 
+// Mark the refresh cookie Secure only when actually served over HTTPS. Keying
+// off NODE_ENV alone makes it Secure on HTTP-only prod deployments, where the
+// browser silently drops it — breaking token refresh. Infer from the auth URL
+// scheme, matching how better-auth decides its own cookie flags.
+const USE_SECURE_COOKIES = (process.env.BETTER_AUTH_URL || "").startsWith(
+    "https"
+);
+
 function setRefreshCookie(ctx, value) {
     ctx.setCookie(REFRESH_COOKIE, value, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: USE_SECURE_COOKIES,
         sameSite: "lax",
         maxAge: REFRESH_COOKIE_MAX_AGE,
         path: "/",
@@ -78,7 +89,7 @@ function djangoCredentialsPlugin() {
 
                     let djangoData;
                     try {
-                        djangoData = await callDjango("auth/login", {
+                        djangoData = await callDjango("account/login", {
                             username,
                             password,
                         });
@@ -160,7 +171,7 @@ function djangoCredentialsPlugin() {
 
                     let djangoData;
                     try {
-                        djangoData = await callDjango("auth/token/refresh", {
+                        djangoData = await callDjango("account/token/refresh", {
                             refresh: refreshToken,
                         });
                     } catch {
@@ -239,7 +250,7 @@ function buildMicrosoftProvider() {
                         );
                     const graphUser = await graphRes.json();
 
-                    const djangoData = await callDjango("auth/microsoft", {
+                    const djangoData = await callDjango("account/microsoft", {
                         access_token: accessToken,
                     });
 
