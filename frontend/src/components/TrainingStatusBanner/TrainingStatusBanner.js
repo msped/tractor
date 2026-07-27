@@ -1,36 +1,39 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, LinearProgress, Typography, Box } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { getTrainingStatus } from '@/services/trainingService';
 
-export const TrainingStatusBanner = ({ pollInterval = 10000 }) => {
+export const TrainingStatusBanner = ({ initialIsRunning = false, pollInterval = 10000 }) => {
     const router = useRouter();
-    const [isRunning, setIsRunning] = useState(false);
-    const wasRunningRef = useRef(false);
+    const [isRunning, setIsRunning] = useState(initialIsRunning);
 
+    // Only poll while a run is actually in progress. The initial state comes
+    // from the server (page load), so an idle page makes no status requests;
+    // polling exists solely to detect when the in-progress run finishes.
     useEffect(() => {
+        if (!isRunning) return;
+
+        let active = true;
         const checkStatus = async () => {
             try {
                 const { is_running } = await getTrainingStatus();
-                if (wasRunningRef.current && !is_running) {
-                    wasRunningRef.current = false;
+                if (active && !is_running) {
                     setIsRunning(false);
                     router.refresh();
-                } else {
-                    wasRunningRef.current = is_running;
-                    setIsRunning(is_running);
                 }
             } catch (error) {
                 console.error('Failed to poll training status:', error);
             }
         };
 
-        checkStatus();
         const intervalId = setInterval(checkStatus, pollInterval);
-        return () => clearInterval(intervalId);
-    }, [router, pollInterval]);
+        return () => {
+            active = false;
+            clearInterval(intervalId);
+        };
+    }, [isRunning, router, pollInterval]);
 
     if (!isRunning) return null;
 
