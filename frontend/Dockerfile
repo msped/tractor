@@ -1,9 +1,7 @@
 # Stage 1: Install dependencies
 FROM node:24.18.0-alpine3.24 AS deps
 WORKDIR /app
-# .npmrc carries legacy-peer-deps=true, required for npm 11 to resolve
-# better-auth's optional @lynx-js/react peer (wants @types/react@^18 vs ^19).
-COPY package*.json .npmrc ./
+COPY package*.json ./
 RUN npm ci
 
 # Stage 2: Build the application
