@@ -293,6 +293,16 @@ export const auth = betterAuth({
             strategy: "jwe",
         },
     },
+    account: {
+        // better-auth defaults storeAccountCookie:true, which caches the OAuth
+        // provider's tokens (Microsoft access_token/id_token/refresh_token) in a
+        // chunked JWE `account_data` cookie. Azure AD tokens are large (group
+        // claims etc.), so this balloons to hundreds of KB across chunks and the
+        // browser replays them on every request -> nginx 400 "Request Header Or
+        // Cookie Too Large". We never use the Microsoft tokens after login (the
+        // callback exchanges them for Django JWTs once), so drop the cookie.
+        storeAccountCookie: false,
+    },
     user: {
         additionalFields: {
             djangoAccessToken: {
