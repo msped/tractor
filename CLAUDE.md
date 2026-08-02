@@ -72,14 +72,15 @@ tractor/
 ### API Communication
 
 - Frontend services in `frontend/src/services/` call backend via `apiClient.js`
-- API base: `${NEXT_PUBLIC_API_HOST}/api`
+- API base: browser uses a relative `/api` (same origin, nginx path-routes to the backend); server-side (SSR) uses `${INTERNAL_API_HOST}/api`
 - Auth: Django JWT access token passed in `Authorization` header; managed by better-auth via `SessionContext`
 - Token is cached in `apiClient.js` via `setClientToken`; 401 responses trigger a token refresh then redirect to `/` on failure
 - Server-side requests read the session via `getSession()` from `@/auth` (wraps `authClient.getSession` with Next.js request headers)
 
 ### Key Endpoints
 
-- `/api/auth/` - Authentication (login, logout, token refresh, Microsoft callback)
+- `/api/auth/` - better-auth session routes on the Next.js frontend (sign-in, get-session, sign-out, oauth2 callbacks)
+- `/api/account/` - Django auth/token/API-key endpoints (login, logout, token refresh, Microsoft exchange, api-keys)
 - `/api/cases/` - Case CRUD, export triggering
 - `/api/cases/{id}/documents/` - Document upload and management
 - `/api/model-management/` - Model management, training runs
@@ -129,8 +130,8 @@ See `.env.example`. Key variables:
 
 - `SECRET_KEY`, `JWT_SIGNING_KEY` - Django secrets
 - `POSTGRES_*` - Database connection
-- `NEXT_PUBLIC_API_HOST` - Backend URL for frontend
+- `FRONTEND_ORIGIN` - Public origin the frontend is served from (Django: OAuth callback + sole CORS origin)
 - `INTERNAL_API_HOST` - Backend URL for server-side Next.js requests (Docker network)
 - `BETTER_AUTH_SECRET` - better-auth signing secret
-- `BETTER_AUTH_URL` / `NEXT_PUBLIC_BETTER_AUTH_URL` - better-auth base URL (server / client)
+- `BETTER_AUTH_URL` - better-auth public base URL / identity (server-side; OAuth callbacks, cookie flags). The browser uses its own origin via relative URLs, so no `NEXT_PUBLIC_*` host is baked into the bundle.
 - `BETTER_AUTH_MICROSOFT_CLIENT_ID/SECRET/TENANT_ID` - Microsoft SSO config

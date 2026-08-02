@@ -21,7 +21,7 @@ export default async function page({ params }) {
 
     } catch (error) {
         if (error.status === 401) {
-            redirect('/api/force-logout');
+            redirect('/api/auth/force-logout');
         }
         console.error("Failed to fetch document for view:", error);
         fetchError = "There was an issue retrieving the document. Please try again later.";

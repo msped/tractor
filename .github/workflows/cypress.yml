@@ -36,7 +36,6 @@ jobs:
           component: true
           install: false
         env:
-          NEXT_PUBLIC_API_HOST: ${{ secrets.NEXT_PUBLIC_API_HOST }}
           CYPRESS_TEST: true
 
       - name: Generate and check coverage

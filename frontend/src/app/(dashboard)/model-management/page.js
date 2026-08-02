@@ -4,16 +4,20 @@ import { ModelManagementCard } from '@/components/ModelManagementCard';
 import { ScheduledTrainingCard } from '@/components/ScheduledTrainingCard';
 import { TrainingRunList } from '@/components/TrainingRunList';
 import { TrainingStatusBanner } from '@/components/TrainingStatusBanner';
-import { getTrainingSchedules, getTrainingRuns } from '@/services/trainingService';
+import { getTrainingSchedules, getTrainingRuns, getTrainingStatus } from '@/services/trainingService';
 import ModelTrainingIcon from '@mui/icons-material/ModelTraining';
 
 export default async function TrainingPage() {
-    let schedule = null, runs = [], error = null;
+    let schedule = null, runs = [], initialIsRunning = false, error = null;
     try {
-        [schedule, runs] = await Promise.all([
+        const [scheduleData, runsData, statusData] = await Promise.all([
             getTrainingSchedules(),
-            getTrainingRuns()
+            getTrainingRuns(),
+            getTrainingStatus()
         ]);
+        schedule = scheduleData;
+        runs = runsData;
+        initialIsRunning = statusData?.is_running ?? false;
     } catch (e) {
         error = e.message;
     }
@@ -40,7 +44,7 @@ export default async function TrainingPage() {
                     <ScheduledTrainingCard schedule={schedule} />
                 </Grid>
                 <Grid item size={{ xs: 12}}>
-                    <TrainingStatusBanner />
+                    <TrainingStatusBanner initialIsRunning={initialIsRunning} />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
                     <ModelManagementCard />

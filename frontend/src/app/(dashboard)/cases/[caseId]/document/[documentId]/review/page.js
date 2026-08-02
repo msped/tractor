@@ -14,7 +14,7 @@ export default async function page({ params }) {
         documentFile = await getDocumentForReview(caseId, documentId);
     } catch (error) {
         if (error.status === 401) {
-            redirect('/api/force-logout');
+            redirect('/api/auth/force-logout');
         }
         console.error("Failed to fetch document for review:", error);
         fetchError = "There was an issue retrieving the document for review. Please try again later.";

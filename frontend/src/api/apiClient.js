@@ -1,5 +1,5 @@
 import axios from "axios";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client.base";
 
 let isRefreshing = false;
 let refreshSubscribers = [];
@@ -18,11 +18,13 @@ const REFRESH_TIMEOUT_MS = 15000;
 
 const apiClient = () => {
     // Server-side (Next.js container): use INTERNAL_API_HOST to reach the
-    // backend directly on the Docker network. Client-side (browser): use
-    // NEXT_PUBLIC_API_HOST which resolves via nginx on the host machine.
+    // backend directly on the Docker network. Client-side (browser): use a
+    // relative URL so the request goes to whatever origin served the app
+    // (nginx path-routes /api to the backend). This keeps the browser bundle
+    // origin-agnostic — no NEXT_PUBLIC_API_HOST baked in at build time.
     const host = typeof window === 'undefined'
-        ? (process.env.INTERNAL_API_HOST || process.env.NEXT_PUBLIC_API_HOST || '')
-        : (process.env.NEXT_PUBLIC_API_HOST || '');
+        ? (process.env.INTERNAL_API_HOST || 'http://localhost:8000')
+        : '';
     const defaultOptions = {
         baseURL: `${host}/api`,
         headers: {
@@ -72,7 +74,7 @@ const apiClient = () => {
 
             const originalRequest = error.config;
             if (originalRequest._retried) {
-                window.location.href = '/api/force-logout';
+                window.location.href = '/api/auth/force-logout';
                 return new Promise(() => {});
             }
 
@@ -94,6 +96,10 @@ const apiClient = () => {
             try {
                 const result = await authClient.$fetch("/refresh-django-token", {
                     method: "POST",
+                    // Send a JSON body so better-fetch sets Content-Type:
+                    // application/json. Without it better-auth rejects the POST
+                    // with 415 (Unsupported Media Type) before the handler runs.
+                    body: {},
                     fetchOptions: { signal: controller.signal },
                 });
                 if (result.error) throw new Error("Refresh failed");
@@ -106,7 +112,7 @@ const apiClient = () => {
             } catch {
                 clientToken = null;
                 refreshSubscribers = [];
-                window.location.href = '/api/force-logout';
+                window.location.href = '/api/auth/force-logout';
                 return new Promise(() => {});
             } finally {
                 clearTimeout(timeout);

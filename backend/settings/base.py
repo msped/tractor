@@ -13,7 +13,9 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY environment variable must be set")
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+# Public origin the frontend is served from. Used both for the Microsoft OAuth
+# callback URL and (in production) as the sole allowed CORS origin.
+FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:3000")
 
 INSTALLED_APPS = [
     "django.contrib.sites",

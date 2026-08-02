@@ -31,7 +31,7 @@ const mockKeys = [
 
 describe('<ApiKeysCard />', () => {
     beforeEach(() => {
-        cy.intercept('GET', '**/auth/api-keys', { body: mockKeys }).as('getKeys');
+        cy.intercept('GET', '**/account/api-keys', { body: mockKeys }).as('getKeys');
     });
 
     it('renders the card title and description', () => {
@@ -48,7 +48,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('shows singular "key" for one key', () => {
-        cy.intercept('GET', '**/auth/api-keys', { body: [mockKeys[0]] }).as('getSingleKey');
+        cy.intercept('GET', '**/account/api-keys', { body: [mockKeys[0]] }).as('getSingleKey');
         cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
         cy.wait('@getSingleKey');
         cy.contains('1 active key').should('be.visible');
@@ -71,7 +71,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('shows empty state when no keys exist', () => {
-        cy.intercept('GET', '**/auth/api-keys', { body: [] }).as('getKeysEmpty');
+        cy.intercept('GET', '**/account/api-keys', { body: [] }).as('getKeysEmpty');
         cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
         cy.wait('@getKeysEmpty');
         cy.contains('button', 'Manage').click();
@@ -98,7 +98,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('submits the new key and displays the one-time key alert', () => {
-        cy.intercept('POST', '**/auth/api-keys', {
+        cy.intercept('POST', '**/account/api-keys', {
             statusCode: 201,
             body: {
                 id: 3,
@@ -122,7 +122,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('cancels the generate form without submitting', () => {
-        cy.intercept('POST', '**/auth/api-keys').as('createKey');
+        cy.intercept('POST', '**/account/api-keys').as('createKey');
 
         cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
         cy.wait('@getKeys');
@@ -135,7 +135,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('clears the one-time key when the dialog is closed', () => {
-        cy.intercept('POST', '**/auth/api-keys', {
+        cy.intercept('POST', '**/account/api-keys', {
             statusCode: 201,
             body: {
                 id: 3,
@@ -169,7 +169,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('revokes a key after confirmation', () => {
-        cy.intercept('DELETE', '**/auth/api-keys/1', { statusCode: 204 }).as('revokeKey');
+        cy.intercept('DELETE', '**/account/api-keys/1', { statusCode: 204 }).as('revokeKey');
 
         cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
         cy.wait('@getKeys');
@@ -189,7 +189,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('shows error toast when creating a key fails', () => {
-        cy.intercept('POST', '**/auth/api-keys', { statusCode: 500, body: {} }).as('createFail');
+        cy.intercept('POST', '**/account/api-keys', { statusCode: 500, body: {} }).as('createFail');
 
         cy.fullMount(<TestWrapper><ApiKeysCard /></TestWrapper>, mountOpts);
         cy.wait('@getKeys');
@@ -210,7 +210,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('sends expires_at when an expiry date is set', () => {
-        cy.intercept('POST', '**/auth/api-keys', (req) => {
+        cy.intercept('POST', '**/account/api-keys', (req) => {
             expect(req.body.expires_at).to.equal('2099-06-30');
             req.reply({ statusCode: 201, body: { id: 3, description: 'Test', created_at: '2026-04-25T10:00:00Z', key: 'abc123', expires_at: '2099-06-30T23:59:59Z', last_used_at: null } });
         }).as('createKey');
@@ -226,7 +226,7 @@ describe('<ApiKeysCard />', () => {
     });
 
     it('does not send expires_at when expiry date is left blank', () => {
-        cy.intercept('POST', '**/auth/api-keys', (req) => {
+        cy.intercept('POST', '**/account/api-keys', (req) => {
             expect(req.body.expires_at).to.be.undefined;
             req.reply({ statusCode: 201, body: { id: 3, description: 'Test', created_at: '2026-04-25T10:00:00Z', key: 'abc123', expires_at: null, last_used_at: null } });
         }).as('createKey');

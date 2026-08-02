@@ -235,7 +235,7 @@ Django's allauth layer also needs a Social Application record to validate the Mi
 - **Secret key**: your Azure client secret
 - **Sites**: move your site to Chosen sites
 
-Without this record the `POST /api/auth/microsoft` backend call will fail.
+Without this record the `POST /api/account/microsoft` backend call will fail.
 
 ---
 
@@ -274,13 +274,12 @@ The project uses split settings under `backend/settings/`:
 
 | Variable                              | Purpose                                                                     |
 |---------------------------------------|-----------------------------------------------------------------------------|
-| `NEXT_PUBLIC_API_HOST`                | Backend API URL — for local dev use `http://localhost:8000`                 |
 | `BETTER_AUTH_SECRET`                  | better-auth secret for session signing and encryption                       |
 | `BETTER_AUTH_URL`                     | Server-side base URL of the frontend (e.g. `http://localhost:3000`)         |
-| `NEXT_PUBLIC_BETTER_AUTH_URL`         | Public-facing base URL of the frontend (e.g. `http://localhost:3000`)       |
+| `INTERNAL_API_HOST`                   | Backend origin for server-side requests and the dev proxy (optional — defaults to `http://localhost:8000`) |
 | `BETTER_AUTH_MICROSOFT_CLIENT_ID`     | Microsoft Entra ID client ID (optional)                                     |
 | `BETTER_AUTH_MICROSOFT_CLIENT_SECRET` | Microsoft Entra ID client secret (optional)                                 |
 | `BETTER_AUTH_MICROSOFT_TENANT_ID`     | Microsoft Entra ID tenant ID (optional — defaults to `common`)              |
 
 !!! note
-    The `BETTER_AUTH_MICROSOFT_*` variables are only required if SSO is being configured.
+    The browser talks to its own origin using relative URLs; Next.js rewrites (`next.config.mjs`) proxy `/api` and `/media` to the backend in dev, so no public backend URL needs to be configured. The `BETTER_AUTH_MICROSOFT_*` variables are only required if SSO is being configured.

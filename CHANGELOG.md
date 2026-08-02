@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Export package generation no longer silently overwrites documents with identical sanitised filenames
 - File downloads use absolute storage URLs natively (cloud storage backends) and defer blob URL revocation until after the download starts
 - Per-thread database connections closed after parallel pipeline extractor stages, preventing connection exhaustion in the worker
+- Microsoft SSO login no longer fails with an nginx 400 "Request Header Or Cookie Too Large". better-auth defaults to caching the OAuth provider's tokens (Microsoft access/id/refresh) in a chunked `account_data` cookie; Azure AD tokens are large enough that this ballooned to hundreds of KB across cookie chunks, which the browser then replayed on every request. Disabled via `storeAccountCookie: false` — the Microsoft tokens are exchanged for Django JWTs once at login and never used again — and the nginx header buffers were trimmed back to a modest bump accordingly
 - better-auth endpoints routed to the frontend in the nginx production config
 - Training document upload returns 400 when no file is provided
 - Explicitly provided case retention dates are preserved instead of being overwritten by the DOB-derived default; model creation detected via `_state.adding` for UUID-pk models

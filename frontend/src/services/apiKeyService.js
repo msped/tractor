@@ -3,7 +3,7 @@ import { throwApiError } from '@/api/apiError';
 
 export const getApiKeys = async () => {
     try {
-        const response = await apiClient.get('/auth/api-keys');
+        const response = await apiClient.get('/account/api-keys');
         return response.data;
     } catch (error) {
         throwApiError(error, 'Failed to load API keys. Please try again.');
@@ -14,7 +14,7 @@ export const createApiKey = async (description, expiresAt = null) => {
     try {
         const body = { description };
         if (expiresAt) body.expires_at = expiresAt;
-        const response = await apiClient.post('/auth/api-keys', body);
+        const response = await apiClient.post('/account/api-keys', body);
         return response.data;
     } catch (error) {
         throwApiError(error, 'Failed to create API key. Please try again.');
@@ -23,7 +23,7 @@ export const createApiKey = async (description, expiresAt = null) => {
 
 export const revokeApiKey = async (keyId) => {
     try {
-        await apiClient.delete(`/auth/api-keys/${keyId}`);
+        await apiClient.delete(`/account/api-keys/${keyId}`);
         return true;
     } catch (error) {
         throwApiError(error, 'Failed to revoke API key. Please try again.');

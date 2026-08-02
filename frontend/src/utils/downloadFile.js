@@ -29,7 +29,9 @@ export async function downloadFile(url, filename) {
     }
 
     const response = await apiClient.get(url, {
-        baseURL: process.env.NEXT_PUBLIC_API_HOST || "",
+        // Host-root-relative (same origin): download paths like /media/... sit
+        // outside /api, and the browser reaches them via nginx on this origin.
+        baseURL: "",
         responseType: "blob",
     });
     const blobUrl = window.URL.createObjectURL(response.data);

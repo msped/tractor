@@ -24,7 +24,11 @@ from .views import MediaServeView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("api/auth/", include("authentication.urls")),
+    # Django's own auth/token/api-key endpoints. Deliberately NOT under
+    # /api/auth/ — that prefix belongs exclusively to better-auth (Next.js), so
+    # nginx and the dev proxy can route /api/auth/* to the frontend with a
+    # single rule and everything else under /api/ to Django.
+    path("api/account/", include("authentication.urls")),
     path("api/", include("cases.urls")),
     path("api/", include("training.urls")),
 ]

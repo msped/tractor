@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import {
     Alert,
@@ -40,6 +40,14 @@ export const ApiKeysCard = () => {
     const [newRawKey, setNewRawKey] = useState(null);
     const [confirmRevoke, setConfirmRevoke] = useState(null);
     const [manageOpen, setManageOpen] = useState(false);
+
+    // The REST API is served from the same origin as this app (nginx routes
+    // /api to the backend), so derive the public endpoint from the browser
+    // origin. Set in an effect to stay SSR-safe (no window on the server).
+    const [apiEndpoint, setApiEndpoint] = useState('');
+    useEffect(() => {
+        setApiEndpoint(`${window.location.origin}/api/`);
+    }, []);
 
     const today = new Date().toISOString().split('T')[0];
 
@@ -259,11 +267,11 @@ export const ApiKeysCard = () => {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                         Allow external services to create cases via the REST API.
                     </Typography>
-                    {process.env.NEXT_PUBLIC_API_HOST && (
+                    {apiEndpoint && (
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             Endpoint:{' '}
                             <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                {process.env.NEXT_PUBLIC_API_HOST}/api/
+                                {apiEndpoint}
                             </Box>
                         </Typography>
                     )}
