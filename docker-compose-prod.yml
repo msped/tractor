@@ -10,7 +10,7 @@ services:
       - nlp_models_volume:/app/nlp_models
     expose:
       - 8000
-    env_file: .env.prod
+    env_file: .env
 
   worker:
     build:
@@ -21,7 +21,7 @@ services:
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
       - nlp_models_volume:/app/nlp_models
-    env_file: .env.prod
+    env_file: .env
     # Uncomment the section below to enable NVIDIA GPU passthrough for SpanCat training.
     # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
     # deploy:
@@ -38,7 +38,7 @@ services:
       dockerfile: Dockerfile
     expose:
       - 3000
-    env_file: ./frontend/.env.prod
+    env_file: ./frontend/.env
     environment:
       - INTERNAL_API_HOST=http://backend:8000
     depends_on:
@@ -62,7 +62,7 @@ services:
       - db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    env_file: .env.prod
+    env_file: .env
 
   ollama:
     image: ollama/ollama
