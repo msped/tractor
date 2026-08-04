@@ -6,7 +6,7 @@ This guide covers setting up a development environment for Tractor.
 
 - Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- Node.js 18 or later
+- Node.js 24 (with npm 11 or later)
 - PostgreSQL 15 **or** MySQL 8.0+ (see [Database Configuration](#database-configuration))
 - Docker (optional, for database)
 - [Ollama](https://ollama.com/) (optional, for contextual AI redaction)

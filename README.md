@@ -58,7 +58,7 @@ The SpanCat model improves over time as more redactions are accepted and the mod
 
 ### Prerequisites
 
-* Node.js (v18 or later)
+* Node.js (v24, with npm 11 or later)
 * Python (v3.13 or later)
 * [uv](https://docs.astral.sh/uv/) (Python package manager)
 * Docker
