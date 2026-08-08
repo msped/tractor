@@ -1,4 +1,5 @@
 import os
+import zipfile
 
 import filetype
 from rest_framework import serializers
@@ -47,6 +48,35 @@ _MIME_TO_EXT = {
     "application/zip": ".docx",
 }
 _MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+# A DOCX is a ZIP: a small compressed upload can declare gigabytes of inflated
+# content (zip bomb) that would OOM the worker during text extraction. Cap the
+# total declared uncompressed size and the compression ratio.
+_MAX_DOCX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB inflated
+_MAX_DOCX_COMPRESSION_RATIO = 200
+
+
+def _validate_docx_not_zip_bomb(file):
+    """Reject DOCX uploads whose declared inflated size or compression ratio is
+    abnormally large, before python-docx tries to load them into memory."""
+    file.seek(0)
+    try:
+        with zipfile.ZipFile(file) as zf:
+            total = sum(info.file_size for info in zf.infolist())
+    except zipfile.BadZipFile as exc:
+        raise serializers.ValidationError(
+            "File is not a valid .docx (corrupt archive)."
+        ) from exc
+    finally:
+        file.seek(0)
+
+    if total > _MAX_DOCX_UNCOMPRESSED_BYTES:
+        raise serializers.ValidationError(
+            "Document is too large when decompressed and was rejected."
+        )
+    if file.size and total / file.size > _MAX_DOCX_COMPRESSION_RATIO:
+        raise serializers.ValidationError(
+            "Document has an abnormal compression ratio and was rejected."
+        )
 
 
 class DocumentSerializer(serializers.ModelSerializer):
@@ -95,6 +125,8 @@ class DocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "File content does not match the declared file type."
             )
+        if ext == ".docx":
+            _validate_docx_not_zip_bomb(file)
         return file
 
     class Meta:

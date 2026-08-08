@@ -45,6 +45,15 @@ def _make_pdf_bytes() -> bytes:
     return b"%PDF-1.4 minimal"
 
 
+def _make_docx_zip_bomb_bytes() -> bytes:
+    """A valid ZIP that inflates ~5 MB from a few KB (compression ratio > 200)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", "")
+        zf.writestr("bomb.bin", b"\0" * (5 * 1024 * 1024))
+    return buf.getvalue()
+
+
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class SerializerTests(NetworkBlockerMixin, TestCase):
     def setUp(self):
@@ -178,6 +187,18 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         serializer = DocumentSerializer(data=data)
         self.assertFalse(serializer.is_valid())
         self.assertIn("original_file", serializer.errors)
+
+    def test_document_serializer_rejects_zip_bomb_docx(self):
+        """A DOCX that inflates far beyond its compressed size is rejected."""
+        bomb = SimpleUploadedFile("report.docx", _make_docx_zip_bomb_bytes())
+        data = {"case": self.case.pk, "original_file": bomb}
+
+        serializer = DocumentSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("original_file", serializer.errors)
+        self.assertIn(
+            "compression ratio", str(serializer.errors["original_file"])
+        )
 
     def test_document_serializer_update_status(self):
         """Test updating a Document's status via the serializer."""
