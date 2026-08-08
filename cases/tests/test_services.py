@@ -32,6 +32,8 @@ from ..services import (
     _build_document_html,
     _build_export_css,
     _cell_fully_redacted,
+    _css_string_escape,
+    _export_url_fetcher,
     _generate_pdf_from_document,
     _matches_data_subject,
     _render_table_with_redactions,
@@ -1972,3 +1974,43 @@ class ApplyCaseDsInfoToDocumentTests(NetworkBlockerMixin, TestCase):
         _apply_case_ds_info_to_document(self.new_doc)
 
         self.assertEqual(self.new_doc.redactions.count(), 0)
+
+
+class ExportUrlFetcherTests(TestCase):
+    """The WeasyPrint URL fetcher must refuse local-file and network resources."""
+
+    def test_blocks_file_scheme(self):
+        with self.assertRaises(ValueError):
+            _export_url_fetcher("file:///etc/passwd")
+
+    def test_blocks_http_scheme(self):
+        with self.assertRaises(ValueError):
+            _export_url_fetcher("http://169.254.169.254/latest/meta-data/")
+
+    def test_blocks_https_scheme(self):
+        with self.assertRaises(ValueError):
+            _export_url_fetcher("https://example.com/x.png")
+
+    def test_allows_data_uri(self):
+        with patch("weasyprint.default_url_fetcher") as mock_fetch:
+            mock_fetch.return_value = {"string": b""}
+            _export_url_fetcher("data:text/plain,hi")
+        mock_fetch.assert_called_once()
+
+
+class CssStringEscapeTests(TestCase):
+    """CSS string escaping must not let a trailing backslash break out."""
+
+    def test_escapes_double_quote(self):
+        self.assertEqual(_css_string_escape('a"b'), 'a\\"b')
+
+    def test_escapes_backslash_before_quote(self):
+        # A trailing backslash must become an escaped backslash so the following
+        # closing quote can't be neutralised into a live one.
+        self.assertEqual(_css_string_escape("a\\"), "a\\\\")
+
+    def test_injection_attempt_cannot_close_string(self):
+        malicious = "x\\"  # trailing backslash
+        escaped = _css_string_escape(malicious)
+        # Rendered inside content: "<escaped>" the closing quote stays live.
+        self.assertTrue(escaped.endswith("\\\\"))

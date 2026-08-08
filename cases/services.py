@@ -534,6 +534,17 @@ def _render_table_with_redactions(
     return table_html
 
 
+def _css_string_escape(value):
+    """Escape a value for safe inclusion inside a double-quoted CSS string.
+
+    Backslashes must be escaped first, then double quotes; otherwise a value
+    ending in a backslash produces ``\\"`` (an escaped backslash followed by a
+    live closing quote), letting admin-supplied header/footer/watermark text
+    break out of the string and inject arbitrary CSS (e.g. ``url(file:///...)``).
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _build_export_css(settings, case_reference=""):
     """Build the WeasyPrint CSS string from the current DocumentExportSettings."""
     has_header = bool(settings.header_text)
@@ -545,7 +556,7 @@ def _build_export_css(settings, case_reference=""):
 
     page_rules = ""
     if has_header:
-        escaped = settings.header_text.replace('"', '\\"')
+        escaped = _css_string_escape(settings.header_text)
         page_rules += (
             '  @top-left { content: ""; width: 0; }\n'
             f'  @top-center {{ content: "{escaped}"; font-size: 9pt; color: #555;'
@@ -553,7 +564,7 @@ def _build_export_css(settings, case_reference=""):
             '  @top-right { content: ""; width: 0; }\n'
         )
     if has_footer and has_page_numbers:
-        escaped = settings.footer_text.replace('"', '\\"')
+        escaped = _css_string_escape(settings.footer_text)
         page_rules += (
             '  @bottom-left { content: ""; width: 0; }\n'
             f'  @bottom-center {{ content: "{escaped}\\A Page " counter(page) " of " counter(pages);'
@@ -561,7 +572,7 @@ def _build_export_css(settings, case_reference=""):
             '  @bottom-right { content: ""; width: 0; }\n'
         )
     elif has_footer:
-        escaped = settings.footer_text.replace('"', '\\"')
+        escaped = _css_string_escape(settings.footer_text)
         page_rules += (
             '  @bottom-left { content: ""; width: 0; }\n'
             f'  @bottom-center {{ content: "{escaped}"; font-size: 9pt; color: #555;'
@@ -749,6 +760,24 @@ def _build_document_html(
     return html_string, css_string
 
 
+def _export_url_fetcher(url, *args, **kwargs):
+    """URL fetcher for WeasyPrint that refuses every non-inline resource.
+
+    Only ``data:`` URIs are permitted. ``file://``, ``http(s)://`` and any other
+    scheme are blocked so that a crafted document or export setting cannot make
+    the server read local files or reach internal network services (SSRF) while
+    rendering the PDF. This neutralises the whole external-resource class even if
+    an HTML/CSS-escaping bug lets attacker-controlled text into the markup.
+    """
+    from weasyprint import default_url_fetcher
+
+    if url.lower().startswith("data:"):
+        return default_url_fetcher(url, *args, **kwargs)
+    raise ValueError(
+        f"Refusing to fetch external resource during export: {url!r}"
+    )
+
+
 def _generate_pdf_from_document(
     document, mode="disclosure", export_settings=None, case_reference=""
 ):
@@ -763,8 +792,14 @@ def _generate_pdf_from_document(
         return None
 
     font_config = FontConfiguration()
-    return HTML(string=html_string).write_pdf(
-        stylesheets=[CSS(string=css_string, font_config=font_config)],
+    return HTML(string=html_string, url_fetcher=_export_url_fetcher).write_pdf(
+        stylesheets=[
+            CSS(
+                string=css_string,
+                font_config=font_config,
+                url_fetcher=_export_url_fetcher,
+            )
+        ],
         font_config=font_config,
     )
 
