@@ -1,11 +1,14 @@
 import hashlib
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from training.tests.base import NetworkBlockerMixin
 
@@ -257,3 +260,31 @@ class APIKeyAuthenticationTests(NetworkBlockerMixin, APITestCase):
         )
         self.instance.refresh_from_db()
         self.assertIsNotNone(self.instance.last_used_at)
+
+
+class LoginThrottleTests(NetworkBlockerMixin, APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.url = reverse("rest_login")
+        User.objects.create_user(username="alice", password="password")
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_login_is_rate_limited(self):
+        # DRF captures THROTTLE_RATES on the throttle class at import time, so
+        # override_settings won't reach it — patch the class attribute directly.
+        creds = {"username": "alice", "password": "wrong"}
+        with patch.dict(SimpleRateThrottle.THROTTLE_RATES, {"login": "3/min"}):
+            # First 3 attempts pass the throttle (and fail auth with 400).
+            for _ in range(3):
+                resp = self.client.post(self.url, creds)
+                self.assertNotEqual(
+                    resp.status_code, status.HTTP_429_TOO_MANY_REQUESTS
+                )
+            # The 4th attempt is throttled.
+            resp = self.client.post(self.url, creds)
+            self.assertEqual(
+                resp.status_code, status.HTTP_429_TOO_MANY_REQUESTS
+            )
