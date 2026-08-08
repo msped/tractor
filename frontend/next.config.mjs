@@ -1,4 +1,33 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
+// Content-Security-Policy. The Django JWT is readable by client JS (it's set as
+// an Authorization header, not an httpOnly cookie), so any script injection can
+// exfiltrate it — this policy is the defence-in-depth layer around that.
+//
+// It's a *moderate* policy: it pins scripts/styles/images/connections to the
+// app's own origin and shuts down the classic clickjacking / <base> / form-
+// hijack vectors. `script-src` still allows 'unsafe-inline' because Next.js
+// emits inline bootstrap scripts and we don't yet mint a per-request nonce —
+// tightening script-src to a nonce (via middleware) is the recommended
+// follow-up. 'unsafe-inline' for styles is required by MUI/emotion. 'unsafe-eval'
+// and the ws: connect source are dev-only (React Fast Refresh / HMR).
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  `connect-src 'self'${isDev ? ' ws:' : ''}`,
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+  "frame-src 'none'",
+].join('; ');
+
 const securityHeaders = [
+  { key: 'Content-Security-Policy', value: contentSecurityPolicy },
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
