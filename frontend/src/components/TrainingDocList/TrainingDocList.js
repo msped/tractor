@@ -22,6 +22,7 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import { deleteTrainingDoc as deleteTrainingDocService } from '@/services/trainingService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const TrainingDocList = ({ docs, refreshDocs, deleteTrainingDoc = deleteTrainingDocService }) => {
     const handleDelete = async (docId, docName) => {
@@ -31,7 +32,7 @@ export const TrainingDocList = ({ docs, refreshDocs, deleteTrainingDoc = deleteT
             toast.success("Document deleted successfully.", { id: toastId });
             if (refreshDocs) refreshDocs();
         } catch (error) {
-            toast.error(error.message, { id: toastId });
+            toastError(error, 'Failed to delete the document. Please try again.', { id: toastId });
         } finally {
             handleCloseConfirmDialog();
         }

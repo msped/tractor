@@ -20,6 +20,7 @@ import {
 import SettingsIcon from '@mui/icons-material/Settings';
 import { deleteCase, updateCase } from '@/services/caseService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -95,7 +96,7 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
             toast.success('Case updated.');
             if (onUpdate) onUpdate(); else router.refresh();
         } catch (error) {
-            toast.error('Failed to update case. Please try again.');
+            toastError(error, 'Failed to update case. Please try again.');
         }
     };
 
@@ -108,7 +109,7 @@ export const CaseInformation = ({ caseObject, onUpdate }) => {
             router.push('/cases');
             toast.success('Case deleted.');
         } catch (error) {
-            toast.error('Failed to delete case. Please try again.');
+            toastError(error, 'Failed to delete case. Please try again.');
         }
     };
 

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { previewDsInfoPropagation, applyDsInfoPropagation } from '@/services/redactionService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 /**
  * Drives the DS_INFO propagation preview → confirm → apply flow used during an
@@ -44,8 +45,8 @@ export function useDsInfoPropagation({ active }) {
             toast.success(`Propagated to ${total} ${total === 1 ? 'occurrence' : 'occurrences'} across the case.`);
             setPreview(null);
             setRedactionId(null);
-        } catch {
-            toast.error('Failed to apply propagation. Please try again.');
+        } catch (error) {
+            toastError(error, 'Failed to apply propagation. Please try again.');
         } finally {
             setApplying(false);
         }

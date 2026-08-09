@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { updateRedaction, bulkUpdateRedactions } from '@/services/redactionService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export function useRedactionActions({
     documentId,
@@ -40,7 +41,7 @@ export function useRedactionActions({
                 async () => applySingle(await updateRedaction(redactionId, { is_accepted: true }))
             );
         } catch (error) {
-            toast.error("Failed to accept suggestion. Please try again.");
+            toastError(error, "Failed to accept suggestion. Please try again.");
         }
     }, [redactions, pushHistory, applySingle, setScrollToId]);
 
@@ -56,7 +57,7 @@ export function useRedactionActions({
                 async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, true, null))
             );
         } catch (error) {
-            toast.error("Failed to accept suggestions. Please try again.");
+            toastError(error, "Failed to accept suggestions. Please try again.");
         }
     }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
@@ -83,7 +84,7 @@ export function useRedactionActions({
                 );
             }
         } catch (error) {
-            toast.error("Failed to reject suggestion. Please try again.");
+            toastError(error, "Failed to reject suggestion. Please try again.");
         }
     }, [documentId, pushHistory, applySingle, applyUpdates, setScrollToId]);
 
@@ -106,7 +107,7 @@ export function useRedactionActions({
                 async () => applySingle(await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }))
             );
         } catch (error) {
-            toast.error("Failed to change suggestion type. Please try again.");
+            toastError(error, "Failed to change suggestion type. Please try again.");
         }
     }, [redactions, pushHistory, applySingle, setScrollToId]);
 
@@ -128,7 +129,7 @@ export function useRedactionActions({
                 ))
             );
         } catch (error) {
-            toast.error("Failed to change suggestion types. Please try again.");
+            toastError(error, "Failed to change suggestion types. Please try again.");
         }
     }, [redactions, pushHistory, applyUpdates, setScrollToId]);
 
@@ -158,7 +159,7 @@ export function useRedactionActions({
                     async () => applyUpdates(await bulkUpdateRedactions(documentId, capturedIds, false, reason))
                 );
             } catch (error) {
-                toast.error("Failed to reject suggestions. Please try again.");
+                toastError(error, "Failed to reject suggestions. Please try again.");
             } finally {
                 setRejectionDialogOpen(false);
                 setRejectionTarget(null);
@@ -176,7 +177,7 @@ export function useRedactionActions({
                     async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: reason }))
                 );
             } catch (error) {
-                toast.error("Failed to reject suggestion. Please try again.");
+                toastError(error, "Failed to reject suggestion. Please try again.");
             } finally {
                 setRejectionDialogOpen(false);
                 setRejectionTarget(null);

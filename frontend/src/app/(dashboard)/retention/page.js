@@ -14,6 +14,7 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RetentionCaseTable } from '@/components/RetentionCaseTable';
 import { getRetentionSettings, bulkDeleteCases } from '@/services/caseService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export default function RetentionPage() {
     const { session, isPending } = useSession();
@@ -45,7 +46,7 @@ export default function RetentionPage() {
             });
             mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to delete cases.');
+            toastError(e, 'Failed to delete cases.');
         } finally {
             setIsDeleting(false);
             closeConfirm();

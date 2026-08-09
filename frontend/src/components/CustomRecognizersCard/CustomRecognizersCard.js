@@ -36,6 +36,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { useSession } from "@/contexts/SessionContext";
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import {
     createCustomRecognizer,
@@ -359,7 +360,7 @@ export const CustomRecognizersCard = () => {
             await mutate();
             closeForm();
         } catch (e) {
-            toast.error(e.message || 'Failed to save recognizer.');
+            toastError(e, 'Failed to save recognizer.');
         }
     };
 
@@ -369,7 +370,7 @@ export const CustomRecognizersCard = () => {
             await updateCustomRecognizer(rec.id, { is_active: !rec.is_active });
             await mutate();
         } catch (e) {
-            toast.error('Failed to toggle recognizer.');
+            toastError(e, 'Failed to toggle recognizer.');
         } finally {
             setToggling(null);
         }
@@ -383,7 +384,7 @@ export const CustomRecognizersCard = () => {
             toast.success('Recognizer deleted.');
             await mutate();
         } catch (e) {
-            toast.error('Failed to delete recognizer.');
+            toastError(e, 'Failed to delete recognizer.');
         }
     };
 

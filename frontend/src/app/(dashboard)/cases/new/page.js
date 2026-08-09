@@ -12,6 +12,7 @@ import {
     Alert
 } from '@mui/material';
 import { createCase } from '@/services/caseService';
+import { resolveErrorMessage } from '@/api/apiError';
 
 export default function NewCasePage() {
 
@@ -38,7 +39,7 @@ export default function NewCasePage() {
             // Redirect to the new case's detail page on success
             router.push(`/cases/${newCase.id}`);
         } catch (e) {
-            setError(e.message);
+            setError(resolveErrorMessage(e, 'Failed to create the case. Please try again.'));
             setIsSubmitting(false);
         }
     };

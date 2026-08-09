@@ -20,6 +20,7 @@ import {
 import { useSession } from "@/contexts/SessionContext";
 import { getReviewWorkflowSettings, updateReviewWorkflowSettings } from '@/services/caseService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const ReviewWorkflowSettingsCard = () => {
     const { session } = useSession();
@@ -52,8 +53,8 @@ export const ReviewWorkflowSettingsCard = () => {
             await mutate();
             setConfigureOpen(false);
             toast.success('Review workflow settings updated.');
-        } catch {
-            toast.error('Failed to update review workflow settings.');
+        } catch (error) {
+            toastError(error, 'Failed to update review workflow settings.');
         } finally {
             setIsSubmitting(false);
         }

@@ -6,6 +6,7 @@ import { Box, Button, Typography, Paper } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { uploadTrainingDoc, runManualTraining } from '@/services/trainingService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
     const router = useRouter();
@@ -34,7 +35,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
             toast.success(`${docxFiles.length} document(s) uploaded successfully.`, { id: toastId });
             if (onUpload) onUpload();
         } catch (error) {
-            toast.error(`An error occurred during upload: ${error?.message ?? 'please try again.'}`, { id: toastId });
+            toastError(error, 'Upload failed. Please try again.', { id: toastId });
         }
     };
 
@@ -58,7 +59,7 @@ export const TrainingUpload = ({ onUpload, unprocessedDocsCount }) => {
             toast.success(`Training started on ${response.documents} documents.`, { id: toastId });
             router.push('/model-management');
         } catch (error) {
-            toast.error(error.message, { id: toastId });
+            toastError(error, 'Failed to start training. Please try again.', { id: toastId });
         }
     };
 

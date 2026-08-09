@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 import {
     abandonCaseReview,
@@ -52,7 +53,7 @@ export const CaseReviewBanner = ({ caseData, onUpdate }) => {
             });
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error('Failed to open the review.', { id: 'review-toast' });
+            toastError(error, 'Failed to open the review.', { id: 'review-toast' });
         } finally {
             setIsOpening(false);
         }
@@ -87,7 +88,7 @@ export const CaseReviewBanner = ({ caseData, onUpdate }) => {
             setOutcome('');
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error(`Failed to ${action} the review.`, { id: 'review-toast' });
+            toastError(error, `Failed to ${action} the review.`, { id: 'review-toast' });
         } finally {
             setIsClosing(false);
         }

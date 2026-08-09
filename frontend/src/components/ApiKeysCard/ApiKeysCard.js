@@ -25,6 +25,7 @@ import { useSession } from "@/contexts/SessionContext";
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { getApiKeys, createApiKey, revokeApiKey } from '@/services/apiKeyService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const ApiKeysCard = () => {
     const { session } = useSession();
@@ -70,7 +71,7 @@ export const ApiKeysCard = () => {
             setIsAdding(false);
             await mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to generate API key.');
+            toastError(e, 'Failed to generate API key.');
         } finally {
             setIsSubmitting(false);
         }
@@ -85,7 +86,7 @@ export const ApiKeysCard = () => {
             toast.success('API key revoked.');
             await mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to revoke API key.');
+            toastError(e, 'Failed to revoke API key.');
         } finally {
             setIsSubmitting(false);
         }

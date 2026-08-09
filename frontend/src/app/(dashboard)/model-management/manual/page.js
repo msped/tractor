@@ -5,7 +5,7 @@ import { Container, Typography, Card, CardContent } from "@mui/material";
 import { TrainingUpload } from "@/components/TrainingUpload";
 import { TrainingDocList } from "@/components/TrainingDocList";
 import { getTrainingDocs } from '@/services/trainingService';
-import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export default function TrainingPage() {
     const [docs, setDocs] = useState([]);
@@ -15,7 +15,7 @@ export default function TrainingPage() {
             const data = await getTrainingDocs();
             setDocs(data);
         } catch (error) {
-            toast.error(error.message);
+            toastError(error, 'Failed to load training documents. Please try again.');
         }
     }, []);
 

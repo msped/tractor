@@ -28,6 +28,7 @@ import {
 } from '@/services/redactionService';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const ExemptionTemplatesCard = () => {
     const { session } = useSession();
@@ -56,7 +57,7 @@ export const ExemptionTemplatesCard = () => {
             setIsAdding(false);
             await mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to add template.');
+            toastError(e, 'Failed to add template.');
         } finally {
             setIsSubmitting(false);
         }
@@ -71,7 +72,7 @@ export const ExemptionTemplatesCard = () => {
             toast.success('Exemption template deleted.');
             await mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to delete template.');
+            toastError(e, 'Failed to delete template.');
         } finally {
             setIsSubmitting(false);
         }

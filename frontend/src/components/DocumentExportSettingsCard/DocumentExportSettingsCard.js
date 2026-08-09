@@ -24,6 +24,7 @@ import {
 import { useSession } from "@/contexts/SessionContext";
 import { getExportSettings, updateExportSettings } from '@/services/caseService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const DocumentExportSettingsCard = () => {
     const { session } = useSession();
@@ -84,7 +85,7 @@ export const DocumentExportSettingsCard = () => {
             toast.success('Export settings saved.');
             setConfigureOpen(false);
         } catch (e) {
-            toast.error(e.message || 'Failed to save export settings.');
+            toastError(e, 'Failed to save export settings.');
         } finally {
             setIsSubmitting(false);
         }
