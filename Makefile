@@ -10,6 +10,7 @@ endef
 .PHONY: help \
 	be-run be-worker be-migrate be-makemigrations \
 	be-test be-test-cov be-lint be-format be-format-check \
+	be-audit be-check-deploy fe-audit sec-audit \
 	fe-dev fe-build fe-lint fe-cy-open fe-cy-run fe-cy-test \
 	test lint
 
@@ -66,8 +67,26 @@ fe-cy-run: ## Run Cypress tests headless
 fe-cy-test: ## Run Cypress tests with coverage report (80% threshold)
 	cd frontend && npm run cy:test
 
+# ── Security (report-only: for local triage before wiring into CI) ───────────
+
+be-audit: ## Scan Python deps for known CVEs (pip-audit)
+	$(call backend,pip-audit --desc on || true)
+
+be-check-deploy: ## Django production security checklist (check --deploy)
+	$(call backend,DJANGO_SETTINGS_MODULE=backend.settings.production \
+		SECRET_KEY=$${SECRET_KEY:-ci-dummy-secret-key-not-for-use} \
+		JWT_SIGNING_KEY=$${JWT_SIGNING_KEY:-ci-dummy-jwt-key-not-for-use} \
+		ALLOWED_HOSTS=$${ALLOWED_HOSTS:-localhost} \
+		FRONTEND_ORIGIN=$${FRONTEND_ORIGIN:-https://localhost} \
+		python manage.py check --deploy)
+
+fe-audit: ## Scan npm deps for known CVEs (report-only)
+	cd frontend && npm audit --omit=dev || true
+
 # ── Combined ─────────────────────────────────────────────────────────────────
 
 test: be-test fe-cy-run ## Run all tests (backend + frontend)
 
 lint: be-lint fe-lint ## Lint everything (backend + frontend)
+
+sec-audit: be-audit be-check-deploy fe-audit ## Run all security scans locally
