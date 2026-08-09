@@ -10,7 +10,15 @@ export function setClientToken(token) {
 }
 
 function onRefreshed(token) {
-    refreshSubscribers.forEach(cb => cb(token));
+    refreshSubscribers.forEach(({ onSuccess }) => onSuccess(token));
+    refreshSubscribers = [];
+}
+
+// Requests queued behind an in-flight refresh must be settled when that refresh
+// fails, not dropped. Clearing the array without calling anything left their
+// promises pending forever, so the UI sat on a spinner with no error.
+function onRefreshFailed(error) {
+    refreshSubscribers.forEach(({ onFailure }) => onFailure(error));
     refreshSubscribers = [];
 }
 
@@ -79,10 +87,13 @@ const apiClient = () => {
             }
 
             if (isRefreshing) {
-                return new Promise(resolve => {
-                    refreshSubscribers.push(token => {
-                        originalRequest.headers.Authorization = `Bearer ${token}`;
-                        resolve(instance(originalRequest));
+                return new Promise((resolve, reject) => {
+                    refreshSubscribers.push({
+                        onSuccess: token => {
+                            originalRequest.headers.Authorization = `Bearer ${token}`;
+                            resolve(instance(originalRequest));
+                        },
+                        onFailure: reject,
                     });
                 });
             }
@@ -102,16 +113,35 @@ const apiClient = () => {
                     body: {},
                     fetchOptions: { signal: controller.signal },
                 });
-                if (result.error) throw new Error("Refresh failed");
+                if (result.error) {
+                    const refreshError = new Error(
+                        result.error.message || 'Session refresh failed.'
+                    );
+                    refreshError.status = result.error.status;
+                    throw refreshError;
+                }
 
                 const newToken = result.data?.access_token;
                 clientToken = newToken;
                 onRefreshed(newToken);
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return instance(originalRequest);
-            } catch {
+            } catch (refreshError) {
+                // Only end the session when the refresh token itself was
+                // rejected. A backend outage, or the 15s abort above, used to
+                // hit this same branch and log the user out — indistinguishable
+                // from a genuine expiry, and it lost their unsaved work.
+                const sessionIsSpent = refreshError.status === 401;
+
                 clientToken = null;
-                refreshSubscribers = [];
+
+                if (!sessionIsSpent) {
+                    console.error('Token refresh failed; keeping session.', refreshError);
+                    onRefreshFailed(refreshError);
+                    return Promise.reject(refreshError);
+                }
+
+                onRefreshFailed(refreshError);
                 window.location.href = '/api/auth/force-logout';
                 return new Promise(() => {});
             } finally {
