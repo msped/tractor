@@ -210,6 +210,24 @@ class CustomRecognizerSerializerTests(NetworkBlockerMixin, TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("non_field_errors", serializer.errors)
 
+    def test_catastrophic_backtracking_regex_rejected(self):
+        """A valid-but-ReDoS pattern is rejected before it can hang a worker."""
+        data = self._make_recognizer(
+            patterns=[{"name": "redos", "regex": r"(a+)+$", "score": 0.5}]
+        )
+        serializer = CustomRecognizerSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("patterns", serializer.errors)
+
+    def test_overlong_regex_rejected(self):
+        """Patterns beyond the length cap are rejected."""
+        data = self._make_recognizer(
+            patterns=[{"name": "long", "regex": "a" * 1001, "score": 0.5}]
+        )
+        serializer = CustomRecognizerSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("patterns", serializer.errors)
+
     def test_update_replaces_patterns(self):
         recognizer = CustomRecognizer.objects.create(
             name="Old Recognizer",

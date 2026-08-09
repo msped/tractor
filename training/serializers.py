@@ -18,6 +18,43 @@ from .models import (
     TrainingRunTrainingDoc,
 )
 
+# Admin-supplied recognizer patterns run against every uploaded document with no
+# match-time timeout, so a catastrophic-backtracking regex would hang the worker.
+# We cap the pattern length and probe compiled patterns against adversarial inputs
+# under a wall-clock timeout to reject likely-ReDoS patterns at creation time.
+_MAX_REGEX_LENGTH = 1000
+_REDOS_PROBE_TIMEOUT = 0.25  # seconds
+_REDOS_PROBES = [
+    "a" * 4096 + "!",
+    "0" * 4096 + "!",
+    " " * 4096 + "!",
+    "a0 " * 1365 + "!",
+]
+
+
+def _is_catastrophic_regex(value):
+    """Return True if ``value`` exhibits catastrophic backtracking on a probe.
+
+    Uses the third-party ``regex`` module's match-time ``timeout``. If that module
+    is unavailable the check is skipped (syntactic validation still applies)."""
+    try:
+        import regex
+    except ImportError:  # pragma: no cover - regex is a transitive dependency
+        return False
+
+    try:
+        compiled = regex.compile(value)
+    except regex.error:
+        # Syntactic errors are reported by the caller's re.compile check.
+        return False
+
+    for probe in _REDOS_PROBES:
+        try:
+            compiled.search(probe, timeout=_REDOS_PROBE_TIMEOUT)
+        except TimeoutError:
+            return True
+    return False
+
 
 class CustomPatternSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,10 +63,19 @@ class CustomPatternSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def validate_regex(self, value):
+        if len(value) > _MAX_REGEX_LENGTH:
+            raise serializers.ValidationError(
+                f"Pattern is too long (max {_MAX_REGEX_LENGTH} characters)."
+            )
         try:
             re.compile(value)
         except re.error as exc:
             raise serializers.ValidationError(f"Invalid regex: {exc}") from exc
+        if _is_catastrophic_regex(value):
+            raise serializers.ValidationError(
+                "Pattern is too slow (possible catastrophic backtracking). "
+                "Simplify nested quantifiers such as (a+)+ or (a|a)*."
+            )
         return value
 
 

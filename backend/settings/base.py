@@ -175,7 +175,12 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "authentication.authentication.APIKeyAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
-    )
+    ),
+    # Rate limits are opt-in per view via `throttle_scope`; only the auth
+    # endpoints below are throttled (brute-force / credential-stuffing defence).
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+    },
 }
 
 REST_AUTH = {

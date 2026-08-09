@@ -6,10 +6,12 @@ from allauth.socialaccount.providers.microsoft.views import (
 )
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from dj_rest_auth.views import LoginView
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .authentication import IsAdminOrSuperuser
@@ -17,6 +19,15 @@ from .models import APIKey
 from .serializers import APIKeyCreateSerializer, APIKeySerializer
 
 User = get_user_model()
+
+
+class ThrottledLoginView(LoginView):
+    """Password login with per-IP rate limiting to blunt brute-force and
+    credential-stuffing attacks. Rate is set by the ``login`` throttle scope
+    (see REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
 
 class MicrosoftLogin(SocialLoginView):

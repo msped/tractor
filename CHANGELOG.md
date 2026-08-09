@@ -18,9 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Document.start_processing()` method to transition a document into processing state and dispatch the async task
 - Paste Text tab (alpha) on the Add Document dialog — allows creating a document by pasting plain text directly, without uploading a file. The pasted content is stored as a `.txt` file and processed through the same NER pipeline as uploaded documents. Table formatting is not preserved.
 - Makefile with backend and frontend targets for run, test, lint, format, and migrations
+- `sec-audit` Makefile target (`be-audit`, `be-check-deploy`, `fe-audit`): report-only local scans for Python/npm dependency CVEs (pip-audit, npm audit) and Django's `check --deploy` production checklist
 
 ### Security
 
+- WeasyPrint PDF export no longer fetches external resources while rendering — a custom URL fetcher rejects everything except `data:` URIs, closing off local-file-read and SSRF vectors via crafted document content or export header/footer/watermark settings
+- Fixed a CSS string-escaping bug in export header/footer/watermark text where a value ending in a backslash could break out of the quoted CSS string and inject arbitrary CSS (backslashes are now escaped before quotes)
+- Password login (`/api/account/login`) is now rate-limited to 10 requests/minute per IP, mitigating brute-force and credential-stuffing attacks
+- Custom recognizer regex patterns are now rejected at creation time if they exhibit catastrophic backtracking (ReDoS), probed under a wall-clock timeout; pattern length is also capped
+- DOCX uploads are now rejected if their declared inflated size or compression ratio is abnormally large (zip bomb protection), before the file is loaded into memory for text extraction
+- Added a `Content-Security-Policy` header to the frontend, restricting scripts/styles/images/connections to the app's own origin and blocking clickjacking/`<base>`/form-hijack vectors
 - Media files are now served through an authenticated backend view instead of directly by the web server; the view returns 404 for directory paths and files missing from storage
 - Case API endpoints hardened: bulk redaction update payloads are validated (400 on missing/invalid fields), export requests return 409 while an export is already processing, and `case_reference` length limits are enforced in forms
 - Blank entries filtered from `ALLOWED_HOSTS`
