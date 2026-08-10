@@ -148,7 +148,7 @@ describe('<DocumentExportSettingsCard />', () => {
         cy.wait('@getSettings');
         cy.contains('button', 'Save').click();
         cy.wait('@patchFail');
-        cy.contains('Failed to update export settings. Please try again.').should('be.visible');
+        cy.contains('Failed to save export settings.').should('be.visible');
     });
 
     it('changes font family when a different option is selected', () => {

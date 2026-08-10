@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import { DataGrid, Toolbar } from '@mui/x-data-grid';
 import { Box } from '@mui/system';
 import { getCases } from '@/services/caseService';
+import { resolveErrorMessage } from '@/api/apiError';
 
 const OPEN_IN_PROGRESS = ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW'];
 const COMPLETED_CLOSED = ['COMPLETED', 'CLOSED'];
@@ -164,8 +165,8 @@ export const DataTable = () => {
                     setRows(data.results);
                     setRowCount(data.count);
                 }
-            } catch {
-                if (!cancelled) setError('Failed to load cases. Please try again.');
+            } catch (error) {
+                if (!cancelled) setError(resolveErrorMessage(error, 'Failed to load cases. Please try again.'));
             } finally {
                 if (!cancelled) setLoading(false);
             }

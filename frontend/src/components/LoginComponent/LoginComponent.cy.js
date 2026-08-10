@@ -41,10 +41,10 @@ describe('<LoginComponent />', () => {
             cy.get('@router:push').should('have.been.calledWith', '/cases');
         });
 
-        it('shows an error on failed sign-in', () => {
+        it('shows the credentials message on a genuine 401', () => {
             cy.intercept('POST', '**/api/auth/sign-in/username', {
                 statusCode: 401,
-                body: { error: 'Invalid credentials' },
+                body: { message: 'Invalid username or password.' },
             }).as('signIn');
 
             cy.fullMount(<LoginComponent />);
@@ -52,7 +52,57 @@ describe('<LoginComponent />', () => {
             cy.get('input[name="password"]').type('user');
             cy.contains('button', 'Sign in').click();
 
-            cy.contains('Login failed. Please check your credentials.').should('be.visible');
+            cy.contains('Invalid username or password.').should('be.visible');
+        });
+
+        it('tells a throttled user to wait rather than to check their password', () => {
+            cy.intercept('POST', '**/api/auth/sign-in/username', {
+                statusCode: 429,
+                body: {
+                    message:
+                        'Too many sign-in attempts. Please wait a minute and try again.',
+                },
+            }).as('signIn');
+
+            cy.fullMount(<LoginComponent />);
+            cy.get('input[name="username"]').type(username);
+            cy.get('input[name="password"]').type(password);
+            cy.contains('button', 'Sign in').click();
+
+            cy.contains('Too many sign-in attempts').should('be.visible');
+            cy.contains('credentials').should('not.exist');
+        });
+
+        it('reports a backend outage as unavailable, not as bad credentials', () => {
+            cy.intercept('POST', '**/api/auth/sign-in/username', {
+                statusCode: 503,
+                body: {
+                    message:
+                        'Sign-in is temporarily unavailable. Please try again shortly.',
+                },
+            }).as('signIn');
+
+            cy.fullMount(<LoginComponent />);
+            cy.get('input[name="username"]').type(username);
+            cy.get('input[name="password"]').type(password);
+            cy.contains('button', 'Sign in').click();
+
+            cy.contains('temporarily unavailable').should('be.visible');
+            cy.contains('credentials').should('not.exist');
+        });
+
+        it('falls back to a generic message when the server sends none', () => {
+            cy.intercept('POST', '**/api/auth/sign-in/username', {
+                statusCode: 500,
+                body: {},
+            }).as('signIn');
+
+            cy.fullMount(<LoginComponent />);
+            cy.get('input[name="username"]').type(username);
+            cy.get('input[name="password"]').type(password);
+            cy.contains('button', 'Sign in').click();
+
+            cy.contains('Login failed. Please try again.').should('be.visible');
         });
     });
 

@@ -181,6 +181,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "login": "10/min",
     },
+    "EXCEPTION_HANDLER": "backend.exception_handler.api_exception_handler",
 }
 
 REST_AUTH = {
@@ -245,6 +246,63 @@ Q_CLUSTER = {
         "delete_original_files_daily": {
             "func": "cases.tasks.delete_original_files_past_threshold",
             "schedule_type": "D",
+        },
+    },
+}
+
+
+# Without an explicit LOGGING config, Django's default only wires the `django`
+# logger behind a require_debug_true filter. With DEBUG=False our own loggers
+# (cases.*, training.*, authentication.*) fall through to Python's lastResort
+# handler: stderr, WARNING and above, no timestamp, no logger name. Every
+# logger.info in the export/retention/training paths is dropped, and errors
+# arrive with no context. Wire the app loggers explicitly so container logs
+# capture them.
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": (
+                "{asctime} {levelname} {name} {module}:{lineno} {message}"
+            ),
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        # django.request logs 4xx at WARNING and 5xx at ERROR with the request
+        # path attached — the trail that was missing during the login outage.
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "authentication": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "cases": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "training": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
         },
     },
 }

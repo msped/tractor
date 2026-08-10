@@ -23,6 +23,7 @@ import { useSession } from "@/contexts/SessionContext";
 import { getModels, setActiveModel, deleteModel } from '@/services/trainingService';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 const INITIAL_DISPLAY_COUNT = 5;
 
@@ -48,7 +49,7 @@ export const ModelManagementCard = () => {
             toast.success('Model activated successfully!');
             await mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to activate model.');
+            toastError(e, 'Failed to activate model.');
         } finally {
             setIsSubmitting(null);
         }
@@ -63,7 +64,7 @@ export const ModelManagementCard = () => {
             toast.success('Model deleted successfully.');
             await mutate();
         } catch (e) {
-            toast.error(e.message || 'Failed to delete model.');
+            toastError(e, 'Failed to delete model.');
         } finally {
             setIsSubmitting(null);
         }

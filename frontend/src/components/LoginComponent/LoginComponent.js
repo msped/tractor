@@ -19,7 +19,13 @@ export const LoginComponent = ({ sessionError, socialProviders = [] }) => {
         setLoading(true);
         const result = await authClient.signIn.username({ username, password });
         if (result.error) {
-            setError("Login failed. Please check your credentials.");
+            // Show the reason the server actually gave. Hardcoding "check your
+            // credentials" here told throttled and backend-down users to
+            // re-check a password that was never the problem.
+            setError(
+                result.error.message ||
+                    "Login failed. Please try again."
+            );
             setLoading(false);
         } else {
             authClient.$store.notify("$sessionSignal");

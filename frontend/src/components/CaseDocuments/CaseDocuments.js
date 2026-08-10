@@ -31,6 +31,7 @@ import { uploadDocuments, deleteDocument, resubmitDocument, cancelProcessing } f
 import { DocumentListItem } from '@/components/DocumentListItem';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 
 export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, isUnderReview = false }) => {
@@ -116,7 +117,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, is
             toast.success('Document deleted.');
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error('Failed to delete document. Please try again.');
+            toastError(error, 'Failed to delete document. Please try again.');
         } finally {
             setIsDeletingDoc(false);
         }
@@ -130,7 +131,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, is
             toast.success('Document resubmitted for processing.');
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error('Failed to resubmit document. Please try again.');
+            toastError(error, 'Failed to resubmit document. Please try again.');
         }
     };
 
@@ -142,7 +143,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, is
             toast.success('Document processing cancelled.');
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error('Failed to cancel processing. Please try again.');
+            toastError(error, 'Failed to cancel processing. Please try again.');
         }
     };
 
@@ -162,7 +163,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, is
             toast.success('Documents uploaded successfully.');
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error(error.message || 'Failed to upload documents. Please try again.');
+            toastError(error, 'Failed to upload documents. Please try again.');
         }
     };
 
@@ -179,7 +180,7 @@ export const CaseDocuments = ({ caseId, documents, onUpdate, isCaseFinalised, is
             toast.success('Document created successfully.');
             if (onUpdate) await onUpdate();
         } catch (error) {
-            toast.error(error.message || 'Failed to create document. Please try again.');
+            toastError(error, 'Failed to create document. Please try again.');
         }
     };
 

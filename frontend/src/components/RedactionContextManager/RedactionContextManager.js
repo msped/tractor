@@ -10,6 +10,7 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import { toast } from 'react-hot-toast';
 import { updateRedactionContext, deleteRedactionContext } from '@/services/redactionService';
+import { resolveErrorMessage } from '@/api/apiError';
 
 
 export const RedactionContextManager = ({ redactionId, context, isEditing, onCancel, onContextSave }) => {
@@ -31,8 +32,7 @@ export const RedactionContextManager = ({ redactionId, context, isEditing, onCan
       onContextSave(redactionId, updatedContext.text);
       onCancel();
     } catch (err) {
-      setError('Failed to save context.');
-      console.error(err);
+      setError(resolveErrorMessage(err, 'Failed to save context.'));
     } finally {
       setIsLoading(false);
     }

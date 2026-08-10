@@ -3,6 +3,7 @@ import React from "react";
 import { IconButton, Tooltip } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import toast from "react-hot-toast";
+import { toastError } from '@/api/toastError';
 import { downloadFile } from "@/utils/downloadFile";
 
 export const DownloadTrainingDocButton = ({ fileUrl, filename }) => {
@@ -10,7 +11,7 @@ export const DownloadTrainingDocButton = ({ fileUrl, filename }) => {
         try {
             await downloadFile(fileUrl, filename);
         } catch (error) {
-            toast.error("Failed to download the document.");
+            toastError(error, "Failed to download the document.");
         }
     };
 

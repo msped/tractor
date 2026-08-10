@@ -84,7 +84,14 @@ describe('<TrainingDocList />', () => {
 
         it('shows an error toast if deletion fails', () => {
             const errorMessage = 'Permission denied.';
-            const deleteStub = cy.stub().as('deleteTrainingDoc').rejects(new Error(errorMessage));
+            // Match the shape the real service throws: `isServerMessage` marks
+            // the text as the backend's own words, which is what earns it a
+            // place in the toast ahead of the component's fallback.
+            const serviceError = Object.assign(new Error(errorMessage), {
+                status: 403,
+                isServerMessage: true,
+            });
+            const deleteStub = cy.stub().as('deleteTrainingDoc').rejects(serviceError);
 
             cy.fullMount(<TrainingDocList docs={mockDocs} deleteTrainingDoc={deleteStub} />, mountOptions);
 

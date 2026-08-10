@@ -255,7 +255,9 @@ describe('<RedactionContextManager />', () => {
 
             cy.wait('@updateContextFailed');
             cy.get('[role="alert"]').should('be.visible');
-            cy.contains('Failed to save context.').should('be.visible');
+            // The server explained itself, so its reason is shown rather than
+            // the generic fallback.
+            cy.contains('Server error').should('be.visible');
         });
     });
 

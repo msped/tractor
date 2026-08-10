@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export function useManualRedaction({
     documentId,
@@ -62,7 +63,7 @@ export function useManualRedaction({
                     ));
                 } catch (error) {
                     handleCloseManualRedactionPopover();
-                    toast.error("Failed to update redactions. Please try again.");
+                    toastError(error, "Failed to update redactions. Please try again.");
                     return;
                 }
 
@@ -104,7 +105,7 @@ export function useManualRedaction({
                     try {
                         currentCreatedIds = await fillGaps(gaps);
                     } catch (error) {
-                        toast.error("Failed to redact uncovered areas. Please try again.");
+                        toastError(error, "Failed to redact uncovered areas. Please try again.");
                     }
                 }
 
@@ -156,7 +157,7 @@ export function useManualRedaction({
                 );
             } catch (error) {
                 handleCloseManualRedactionPopover();
-                toast.error("Failed to update redaction. Please try again.");
+                toastError(error, "Failed to update redaction. Please try again.");
             }
             return;
         }
@@ -189,7 +190,7 @@ export function useManualRedaction({
             );
         } catch (error) {
             handleCloseManualRedactionPopover();
-            toast.error("Failed to create redaction. Please try again.");
+            toastError(error, "Failed to create redaction. Please try again.");
         }
     }, [newSelection, documentId, extractedText, handleCloseManualRedactionPopover, redactions, pushHistory, applyUpdates, setRedactions, onDsInfoCreate]);
 

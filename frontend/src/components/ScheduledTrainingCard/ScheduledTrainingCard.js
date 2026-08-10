@@ -12,6 +12,7 @@ import {
     deleteTrainingSchedule as realDeleteTrainingSchedule
 } from '@/services/trainingService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const ScheduledTrainingCard = ({
     schedule,
@@ -46,7 +47,7 @@ export const ScheduledTrainingCard = ({
             });
             toast.success("Training schedule created successfully.", { id: toastId });
         } catch (error) {
-            toast.error(error.message, { id: toastId });
+            toastError(error, 'Failed to create the training schedule. Please try again.', { id: toastId });
         } finally {
             setDialogOpen(false);
         }
@@ -59,7 +60,7 @@ export const ScheduledTrainingCard = ({
             await deleteTrainingSchedule(schedule.id);
             toast.success("Training schedule deleted.", { id: toastId });
         } catch (error) {
-            toast.error(error.message, { id: toastId });
+            toastError(error, 'Failed to delete the training schedule. Please try again.', { id: toastId });
         }
     };
 

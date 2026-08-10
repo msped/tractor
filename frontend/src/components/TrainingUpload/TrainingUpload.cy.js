@@ -84,7 +84,7 @@ describe('<TrainingUpload />', () => {
 
       cy.get('input[type="file"]').selectFile({ contents: Cypress.Buffer.from('a'), fileName: 'fail.docx' }, { force: true });
 
-      cy.contains('An error occurred during upload: Network Failure').should('be.visible');
+      cy.contains('Network Failure').should('be.visible');
     });
   });
 

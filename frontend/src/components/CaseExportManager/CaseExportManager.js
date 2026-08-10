@@ -7,6 +7,7 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { createCaseExport, updateCase } from '@/services/caseService';
 import { downloadFile } from '@/utils/downloadFile';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const CaseExportManager = ({ caseData, onUpdate }) => {
     const [isProcessing, setIsProcessing] = useState(false);
@@ -27,7 +28,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
             // Trigger a re-fetch of the case data to get the 'PROCESSING' status
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error('Failed to start export process.', { id: 'export-toast' });
+            toastError(error, 'Failed to start export process.', { id: 'export-toast' });
             setIsProcessing(false);
         }
     };
@@ -39,7 +40,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
                 `disclosure_package_${caseData.case_reference}.zip`
             );
         } catch (error) {
-            toast.error('Failed to download the export package.', { id: 'export-toast' });
+            toastError(error, 'Failed to download the export package.', { id: 'export-toast' });
         }
     };
 
@@ -51,7 +52,7 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
             toast.success('Case status updated.', { id: toastId });
             if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error('Failed to update case status.', { id: toastId });
+            toastError(error, 'Failed to update case status.', { id: toastId });
         }
     };
 

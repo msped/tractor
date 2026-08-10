@@ -5,8 +5,10 @@ from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.test import TestCase, override_settings
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from .exception_handler import api_exception_handler
 from .views import MediaServeView
 
 User = get_user_model()
@@ -61,3 +63,69 @@ class MediaServeViewTests(TestCase):
         for path in ("exports/test-case", "exports/test-case/", ""):
             response = self._get(path, user=self.user)
             self.assertEqual(response.status_code, 404)
+
+
+class ApiExceptionHandlerTests(TestCase):
+    """The handler guarantees a `detail` key so the frontend can always show a
+    real reason instead of its generic fallback."""
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.context = {
+            "view": MediaServeView(),
+            "request": self.factory.get("/api/thing"),
+        }
+
+    def test_unhandled_exception_returns_500_with_reference(self):
+        with self.assertLogs("backend.exception_handler", "ERROR") as logs:
+            response = api_exception_handler(
+                RuntimeError("boom"), self.context
+            )
+
+        self.assertEqual(response.status_code, 500)
+        reference = response.data["reference"]
+        self.assertEqual(len(reference), 8)
+        # The reference ties the user-facing message to the logged traceback.
+        self.assertIn(reference, response.data["detail"])
+        self.assertIn(reference, logs.output[0])
+        self.assertIn("RuntimeError: boom", logs.output[0])
+
+    def test_handled_4xx_keeps_detail_and_logs_at_info(self):
+        with self.assertLogs("backend.exception_handler", "INFO") as logs:
+            response = api_exception_handler(
+                NotFound("No such case."), self.context
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["detail"], "No such case.")
+        self.assertIn("404", logs.output[0])
+
+    def test_field_validation_error_gains_detail(self):
+        with self.assertLogs("backend.exception_handler", "INFO"):
+            response = api_exception_handler(
+                ValidationError({"name": ["This field is required."]}),
+                self.context,
+            )
+
+        self.assertEqual(response.status_code, 400)
+        # Per-field data is preserved for forms; `detail` is added alongside.
+        self.assertEqual(response.data["name"], ["This field is required."])
+        self.assertEqual(response.data["detail"], "This field is required.")
+
+    def test_non_dict_error_body_is_left_alone(self):
+        with self.assertLogs("backend.exception_handler", "INFO"):
+            response = api_exception_handler(
+                ValidationError(["Bad request."]), self.context
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data, ["Bad request."])
+
+    def test_handled_5xx_logs_with_traceback(self):
+        with self.assertLogs("backend.exception_handler", "ERROR") as logs:
+            response = api_exception_handler(
+                APIException("Upstream is down."), self.context
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("Upstream is down.", logs.output[0])

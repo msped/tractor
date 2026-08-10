@@ -18,6 +18,7 @@ import {
 import { useSession } from "@/contexts/SessionContext";
 import { getLLMPromptSettings, updateLLMPromptSettings } from '@/services/trainingService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export const LLMPromptSettingsCard = () => {
     const { session } = useSession();
@@ -60,7 +61,7 @@ export const LLMPromptSettingsCard = () => {
             toast.success('Prompt settings saved.');
             setConfigureOpen(false);
         } catch (e) {
-            toast.error(e.message || 'Failed to update prompt settings.');
+            toastError(e, 'Failed to update prompt settings.');
         } finally {
             setIsSubmitting(false);
         }

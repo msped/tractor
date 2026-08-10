@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 export function useRemoveRedaction({
     documentId,
@@ -64,7 +65,7 @@ export function useRemoveRedaction({
                 );
             }
         } catch (error) {
-            toast.error("Failed to remove redaction. Please try again.");
+            toastError(error, "Failed to remove redaction. Please try again.");
         }
     }, [redactions, pushHistory, _removeRedactionById, documentId, applySingle, setRedactions]);
 
@@ -129,8 +130,8 @@ export function useRemoveRedaction({
                     splitCreatedId = createdSecond.id;
                 }
             }
-        } catch {
-            toast.error("Failed to modify redaction. Please try again.");
+        } catch (error) {
+            toastError(error, "Failed to modify redaction. Please try again.");
             return;
         }
 
@@ -227,8 +228,8 @@ export function useRemoveRedaction({
 
         try {
             await Promise.all(snapshots.map(snap => _removeRedactionById(snap)));
-        } catch {
-            toast.error("Failed to remove redaction. Please try again.");
+        } catch (error) {
+            toastError(error, "Failed to remove redaction. Please try again.");
             return;
         }
 

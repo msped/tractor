@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { bulkMarkByText } from '@/services/redactionService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 /**
  * Manages case-wide accept/reject for a specific text+redaction_type pair.
@@ -36,8 +37,8 @@ export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, clos
                 )
             );
             toast.success(`Accepted ${updated} redaction${updated !== 1 ? 's' : ''} across this case.`);
-        } catch {
-            toast.error('Failed to mark all in case. Please try again.');
+        } catch (error) {
+            toastError(error, 'Failed to mark all in case. Please try again.');
         }
     }, [markAllInCaseTarget, caseId, setRedactions]);
 
@@ -56,8 +57,8 @@ export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, clos
                 )
             );
             toast.success(`Rejected ${updated} redaction${updated !== 1 ? 's' : ''} across this case.`);
-        } catch {
-            toast.error('Failed to mark all in case. Please try again.');
+        } catch (error) {
+            toastError(error, 'Failed to mark all in case. Please try again.');
         }
     }, [markAllInCaseTarget, caseId, setRedactions, closeRejectDialog]);
 

@@ -362,7 +362,7 @@ describe('<CaseDocuments />', () => {
         cy.get('[role="dialog"]').contains('button', 'Create').click();
 
         cy.wait('@createRequest');
-        cy.contains('Failed to upload document(s). Please try again.').should('be.visible');
+        cy.contains('Failed to create document. Please try again.').should('be.visible');
       });
 
       it('resets paste fields when dialog is closed and reopened', () => {

@@ -117,6 +117,6 @@ describe('<LLMPromptSettingsCard />', () => {
         cy.wait('@getSettings');
         cy.contains('button', 'Save').click();
         cy.wait('@patchFail');
-        cy.contains('Failed to update LLM prompt settings.').should('be.visible');
+        cy.contains('Failed to update prompt settings.').should('be.visible');
     });
 });

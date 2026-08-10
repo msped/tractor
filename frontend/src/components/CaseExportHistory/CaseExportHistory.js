@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 import {
     getCaseDisclosureDiff,
@@ -102,7 +102,7 @@ const DisclosureRow = ({ caseData, exportItem }) => {
                 `disclosure_package_${caseData.case_reference}_${exportItem.sequence}.zip`
             );
         } catch (error) {
-            toast.error('Failed to download the export package.', {
+            toastError(error, 'Failed to download the export package.', {
                 id: 'export-history-toast',
             });
         }

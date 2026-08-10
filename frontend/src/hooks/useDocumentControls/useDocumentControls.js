@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { markAsComplete, resubmitDocument } from '@/services/documentService';
 import toast from 'react-hot-toast';
+import { toastError } from '@/api/toastError';
 
 const FONT_SIZE_STEPS = [0.75, 0.85, 1, 1.15, 1.3, 1.5];
 
@@ -87,7 +88,7 @@ export function useDocumentControls({ undo, redo, clearHistory, currentDocument,
             toast.success("Document is ready for disclosure.");
             router.push(`/cases/${currentDocument.case}`);
         } catch (error) {
-            toast.error("Failed to mark document as complete. Please try again.");
+            toastError(error, "Failed to mark document as complete. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -101,7 +102,7 @@ export function useDocumentControls({ undo, redo, clearHistory, currentDocument,
             toast.success("Document resubmitted for processing.");
             router.push(`/cases/${currentDocument.case}`);
         } catch (error) {
-            toast.error("Failed to resubmit document. Please try again.");
+            toastError(error, "Failed to resubmit document. Please try again.");
         } finally {
             setIsResubmitting(false);
             setResubmitDialogOpen(false);
