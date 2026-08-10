@@ -108,24 +108,27 @@ function authFailure(error, context) {
         error?.cause ?? ""
     );
 
+    // better-call's second argument is the response *body*, so the message must
+    // be wrapped in an object. Passing a bare string (as APIError.from did here
+    // previously) drops it silently and serialises the body to `{}`, which is
+    // why no message from this file ever reached the browser.
     switch (kind) {
         case "credentials":
-            return APIError.from(
-                "UNAUTHORIZED",
-                "Invalid username or password."
-            );
+            return new APIError("UNAUTHORIZED", {
+                message: "Invalid username or password.",
+            });
         case "throttled":
-            return APIError.from(
-                "TOO_MANY_REQUESTS",
-                "Too many sign-in attempts. Please wait a minute and try again."
-            );
+            return new APIError("TOO_MANY_REQUESTS", {
+                message:
+                    "Too many sign-in attempts. Please wait a minute and try again.",
+            });
         default:
             // network / upstream: the user's credentials may be perfectly fine,
             // so never tell them to check them.
-            return APIError.from(
-                "SERVICE_UNAVAILABLE",
-                "Sign-in is temporarily unavailable. Please try again shortly."
-            );
+            return new APIError("SERVICE_UNAVAILABLE", {
+                message:
+                    "Sign-in is temporarily unavailable. Please try again shortly.",
+            });
     }
 }
 
@@ -233,7 +236,7 @@ function djangoCredentialsPlugin() {
                     const cookieHeader = ctx.request.headers.get("cookie");
                     const refreshToken = parseRefreshCookie(cookieHeader);
                     if (!refreshToken) {
-                        throw APIError.from("UNAUTHORIZED", "No refresh token");
+                        throw new APIError("UNAUTHORIZED", { message: "No refresh token" });
                     }
 
                     const sessionDataCookie = getChunkedCookie(
@@ -241,7 +244,7 @@ function djangoCredentialsPlugin() {
                         ctx.context.authCookies.sessionData.name
                     );
                     if (!sessionDataCookie) {
-                        throw APIError.from("UNAUTHORIZED", "No session");
+                        throw new APIError("UNAUTHORIZED", { message: "No session" });
                     }
 
                     const payload = await symmetricDecodeJWT(
@@ -250,7 +253,7 @@ function djangoCredentialsPlugin() {
                         "better-auth-session"
                     );
                     if (!payload?.session || !payload?.user) {
-                        throw APIError.from("UNAUTHORIZED", "Invalid session");
+                        throw new APIError("UNAUTHORIZED", { message: "Invalid session" });
                     }
 
                     let djangoData;
@@ -337,10 +340,7 @@ function buildMicrosoftProvider() {
                             `[auth] Microsoft Graph unreachable: ${cause.message}`,
                             cause
                         );
-                        throw APIError.from(
-                            "SERVICE_UNAVAILABLE",
-                            "Could not reach Microsoft. Please try again shortly."
-                        );
+                        throw new APIError("SERVICE_UNAVAILABLE", { message: "Could not reach Microsoft. Please try again shortly." });
                     }
 
                     if (!graphRes.ok) {
@@ -348,10 +348,7 @@ function buildMicrosoftProvider() {
                         console.error(
                             `[auth] Microsoft Graph responded ${graphRes.status}: ${body.slice(0, 500)}`
                         );
-                        throw APIError.from(
-                            "BAD_REQUEST",
-                            "Microsoft sign-in failed. Please try again."
-                        );
+                        throw new APIError("BAD_REQUEST", { message: "Microsoft sign-in failed. Please try again." });
                     }
                     const graphUser = await graphRes.json();
 
