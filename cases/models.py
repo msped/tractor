@@ -491,8 +491,10 @@ class InternalReview(models.Model):
     A single post-disclosure re-review episode on a case (opened when a data
     subject challenges a disclosure).
 
-    This slice defines the record only; the open/complete/abandon lifecycle
-    service and the provenance lock that guard it are added in a later slice.
+    The open/complete/abandon lifecycle lives in ``cases/reviews.py``; the
+    provenance lock that freezes a disclosed case's decisions re-engages
+    automatically whenever no review is open. See
+    ``docs/user-guide/internal-review.md`` for the user-facing workflow.
     """
 
     class Status(models.TextChoices):
