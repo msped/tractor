@@ -1,6 +1,6 @@
 {
   "name": "tractor-frontend",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "Document redaction application with ML-powered Named Entity Recognition",
   "private": true,
   "engines": {
