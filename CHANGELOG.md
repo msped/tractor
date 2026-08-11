@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] - 2026-08-11
+
 ### Added
 
 - **Auto-accept review mode**: admin toggle (Settings → Review Workflow) that automatically accepts all NER redaction suggestions when a document is processed. Reviewers must scroll through the full document before marking it complete, and auto-accepted redactions are excluded from SpanCat training
@@ -26,11 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - WeasyPrint PDF export no longer fetches external resources while rendering — a custom URL fetcher rejects everything except `data:` URIs, closing off local-file-read and SSRF vectors via crafted document content or export header/footer/watermark settings
 - Fixed a CSS string-escaping bug in export header/footer/watermark text where a value ending in a backslash could break out of the quoted CSS string and inject arbitrary CSS (backslashes are now escaped before quotes)
-- Password login (`/api/account/login`) is now rate-limited to 10 requests/minute per IP, mitigating brute-force and credential-stuffing attacks
+- **BREAKING:** Password login (`/api/account/login`) is now rate-limited to 10 requests/minute per IP, mitigating brute-force and credential-stuffing attacks. API clients must handle `429 Too Many Requests` from this endpoint, which it never previously returned
 - Custom recognizer regex patterns are now rejected at creation time if they exhibit catastrophic backtracking (ReDoS), probed under a wall-clock timeout; pattern length is also capped
 - DOCX uploads are now rejected if their declared inflated size or compression ratio is abnormally large (zip bomb protection), before the file is loaded into memory for text extraction
 - Added a `Content-Security-Policy` header to the frontend, restricting scripts/styles/images/connections to the app's own origin and blocking clickjacking/`<base>`/form-hijack vectors
-- Media files are now served through an authenticated backend view instead of directly by the web server; the view returns 404 for directory paths and files missing from storage
+- **BREAKING:** Media files are now served through an authenticated backend view instead of directly by the web server; the view returns 404 for directory paths and files missing from storage. Any existing direct link to a `/media/` URL will now require authentication, and unauthenticated integrations relying on those URLs will stop working
 - Case API endpoints hardened: bulk redaction update payloads are validated (400 on missing/invalid fields), export requests return 409 while an export is already processing, and `case_reference` length limits are enforced in forms
 - Blank entries filtered from `ALLOWED_HOSTS`
 
