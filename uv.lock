@@ -3114,7 +3114,7 @@ wheels = [
 
 [[package]]
 name = "tractor"
-version = "0.0.1"
+version = "0.6.0"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },
