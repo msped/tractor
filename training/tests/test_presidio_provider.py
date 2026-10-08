@@ -401,3 +401,68 @@ class PresidioIntegrationTests(NetworkBlockerMixin, TestCase):
             r["text"] for r in second.extract_custom("Officer BADGE-1234.")
         ]
         self.assertIn("BADGE-1234", texts)
+
+
+# Patterns for the structures that appear in an occurrence enquiry log (OEL).
+# Kept here as the reference values for the recognizers configured via the
+# Settings page, so a width regression is caught in CI rather than in review.
+OEL_COLLAR_NUMBER_REGEX = r"#07\d{4,6}\b"
+OEL_GRADING_CODE_REGEX = r"\[G\d+[A-Z]{0,2}\]"
+
+
+class OELPatternRegressionTests(NetworkBlockerMixin, TestCase):
+    """Collar numbers and grading codes as they really occur in an OEL."""
+
+    def setUp(self):
+        PresidioEngineProvider.reset_for_tests()
+        rec = _make_recognizer(
+            name="Collar number",
+            entity_type=CustomRecognizer.EntityType.OPERATIONAL,
+        )
+        CustomPattern.objects.create(
+            recognizer=rec, regex=OEL_COLLAR_NUMBER_REGEX, score=0.9
+        )
+
+    def tearDown(self):
+        PresidioEngineProvider.reset_for_tests()
+
+    def _operational_texts(self, text):
+        snapshot = PresidioEngineProvider.get_instance().acquire_snapshot()
+        return [r["text"] for r in snapshot.extract_operational(text)]
+
+    def test_collar_number_widths_matched_whole(self):
+        """4, 5 and 6 digits after the `07` prefix all occur in real logs.
+
+        A `\\d{4,5}` bound matches only the first 7 characters of the 6-digit
+        form, leaving the final digit in the clear — a partial redaction,
+        which reads as handled but is not.
+        """
+        for collar in ("#071234", "#0712345", "#07123456"):
+            with self.subTest(collar=collar):
+                texts = self._operational_texts(
+                    f"Dispatched officer / {collar} / CHP / Police officer"
+                )
+                self.assertIn(collar, texts)
+
+    def test_collar_number_not_truncated_mid_digits(self):
+        texts = self._operational_texts("Loggist / #07123456 / CHP")
+
+        self.assertNotIn("#0712345", texts)
+
+    def test_grading_code_matched_regardless_of_surrounding_label(self):
+        """`[G2]` sits inside a third-party name span and `[G4V]` inside the
+        data subject's own entry, yet both stay operational."""
+        rec = _make_recognizer(
+            name="Grading code",
+            entity_type=CustomRecognizer.EntityType.OPERATIONAL,
+        )
+        CustomPattern.objects.create(
+            recognizer=rec, regex=OEL_GRADING_CODE_REGEX, score=0.9
+        )
+
+        texts = self._operational_texts(
+            "SMITH, John [G2] / Suspect\nBLOGGS, Joe [G4V] / Person reporting"
+        )
+
+        self.assertIn("[G2]", texts)
+        self.assertIn("[G4V]", texts)
