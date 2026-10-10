@@ -24,6 +24,7 @@ from .ds_info_propagation import (
     propagate_term_across_case,
     propagate_terms_to_document,
 )
+from .identity import IdentityMatch, match_person, matches_dob_text
 from .models import (
     Case,
     Document,
@@ -45,59 +46,58 @@ ENTITY_LABEL_TO_REDACTION_TYPE = {
     "OPERATIONAL": Redaction.RedactionType.OPERATIONAL_DATA,
 }
 
-# Common date formats for matching data subject DOB
-_DOB_FORMATS = [
-    "%d/%m/%Y",
-    "%d-%m-%Y",
-    "%d/%m/%y",
-    "%d-%m-%y",
-    "%Y-%m-%d",
-    "%d %B %Y",
-    "%d %b %Y",
-    "%-d %B %Y",
-    "%-d %b %Y",
-]
-
 
 def _matches_data_subject(text, case):
-    """Return True if entity_text matches the case data subject's name or date of birth."""
-    text_lower = text.strip().lower()
-    if not text_lower:
-        return False
+    """
+    True if a detected span is unambiguously the data subject's own name or
+    date of birth.
 
-    # Check against data subject name
-    ds_name = getattr(case, "data_subject_name", None)
-    if ds_name:
-        ds_name_lower = ds_name.strip().lower()
-        # Full name match (case-insensitive)
-        if text_lower == ds_name_lower or ds_name_lower in text_lower:
-            return True
-        # Part-set match: handles format differences between storage and document
-        # (e.g. stored as "Alex Cooper", document has "COOPER, ALEX")
-        text_word_parts = {
-            p for p in re.findall(r"[a-z]+", text_lower) if len(p) > 1
-        }
-        name_word_parts = {
-            p for p in re.findall(r"[a-z]+", ds_name_lower) if len(p) > 1
-        }
-        if name_word_parts and name_word_parts.issubset(text_word_parts):
-            return True
-        # Single part: entity text is one word from the name
-        if text_word_parts and text_word_parts.issubset(name_word_parts):
-            return True
-
-    # Check against data subject DOB
+    Only an unambiguous identity match qualifies.  A span that merely overlaps
+    the data subject's name — a shared surname, or a span that swallows a
+    second person — comes back uncertain and is left as third-party, because
+    resolving uncertainty toward the data subject is what discloses someone
+    else's details.
+    """
     ds_dob = getattr(case, "data_subject_dob", None)
-    if ds_dob:
-        for fmt in _DOB_FORMATS:
-            try:
-                formatted = ds_dob.strftime(fmt)
-                if text_lower == formatted.lower():
-                    return True
-            except ValueError:
-                continue
+    if matches_dob_text(text, ds_dob):
+        return True
 
-    return False
+    return (
+        match_person(
+            text,
+            ds_name=getattr(case, "data_subject_name", None),
+            ds_dob=ds_dob,
+        )
+        is IdentityMatch.MATCH
+    )
+
+
+def _redaction_type_for(suggestion, case):
+    """
+    Decide a detected span's redaction type.
+
+    A span the system believes is the data subject's own information is
+    labelled as such, rather than being dropped.  The suggestion was
+    previously discarded outright on a data-subject match, which meant the
+    system's belief about whose data it was never reached the person reviewing
+    it: a wrong call could not be seen, corrected, or audited, and a span
+    covering a third party as well as the data subject disappeared with them.
+    Labelling it keeps the judgement on screen and reversible.
+
+    Operational markings are never reattributed.  They stay operational even
+    when they sit inside the data subject's own details, because what makes
+    them redactable is the marking, not whose record they appear in.
+    """
+    mapped = ENTITY_LABEL_TO_REDACTION_TYPE.get(
+        suggestion["label"],
+        Redaction.RedactionType.THIRD_PARTY_PII,  # fallback default
+    )
+
+    if mapped == Redaction.RedactionType.OPERATIONAL_DATA:
+        return mapped
+    if _matches_data_subject(suggestion["text"], case):
+        return Redaction.RedactionType.DS_INFORMATION
+    return mapped
 
 
 def process_document_and_create_redactions(document_id):
@@ -160,12 +160,14 @@ def process_document_and_create_redactions(document_id):
     with transaction.atomic():
         redactions_to_create = []
         for suggestion in ai_suggestions:
-            # Filter out entities matching the data subject's name/DOB
-            if _matches_data_subject(suggestion["text"], case):
-                continue
-            redaction_type = ENTITY_LABEL_TO_REDACTION_TYPE.get(
-                suggestion["label"],
-                Redaction.RedactionType.THIRD_PARTY_PII,  # fallback default
+            redaction_type = _redaction_type_for(suggestion, case)
+            # The data subject's name and date of birth come from the case
+            # record, so a match against them is not an inference needing
+            # confirmation — it is the case owner's own entry recognised in the
+            # document.  Born accepted, under provenance of its own so the
+            # audit trail distinguishes it from a reviewer's judgement.
+            is_data_subject = (
+                redaction_type == Redaction.RedactionType.DS_INFORMATION
             )
             redactions_to_create.append(
                 Redaction(
@@ -175,7 +177,12 @@ def process_document_and_create_redactions(document_id):
                     text=suggestion["text"],
                     redaction_type=redaction_type,
                     is_suggestion=True,
-                    is_accepted=False,
+                    is_accepted=is_data_subject,
+                    decided_by=(
+                        Redaction.DecidedBy.DS_RECORD_MATCH
+                        if is_data_subject
+                        else None
+                    ),
                     source=suggestion.get("source", Redaction.Source.NER),
                 )
             )

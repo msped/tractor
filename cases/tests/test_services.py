@@ -1003,10 +1003,15 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
     @patch("cases.services.extract_entities_from_text")
     @patch("cases.services.SpanCatModelManager")
     @patch("cases.services.GLiNERModelManager")
-    def test_process_document_filters_data_subject_entities(
+    def test_process_document_labels_data_subject_entities(
         self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
     ):
-        """Test that entities matching the data subject name/DOB are excluded."""
+        """
+        Entities matching the data subject's name or DOB are labelled as the
+        data subject's own information and born accepted, rather than being
+        dropped — the system's belief about whose data it is has to reach the
+        reviewer to be correctable.
+        """
         mock_gliner_manager.get_instance.return_value = MagicMock()
         mock_spancat_manager.get_instance.return_value = MagicMock(
             get_model_entry=MagicMock(return_value=None)
@@ -1043,10 +1048,153 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         process_document_and_create_redactions(self.document.id)
 
         self.document.refresh_from_db()
-        # "John Doe" (full name match) and "01/01/1990" (DOB match) should be filtered out
+        self.assertEqual(self.document.redactions.count(), 3)
+        by_text = {r.text: r for r in self.document.redactions.all()}
+
+        for text in ("John Doe", "01/01/1990"):
+            with self.subTest(text=text):
+                redaction = by_text[text]
+                self.assertEqual(
+                    redaction.redaction_type,
+                    Redaction.RedactionType.DS_INFORMATION,
+                )
+                self.assertTrue(redaction.is_accepted)
+                self.assertEqual(
+                    redaction.decided_by,
+                    Redaction.DecidedBy.DS_RECORD_MATCH,
+                )
+
+        london = by_text["London"]
+        self.assertEqual(
+            london.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        self.assertIsNone(london.decided_by)
+
+    @patch("django_q.tasks.async_task")
+    @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
+    @patch("cases.services.GLiNERModelManager")
+    def test_process_document_does_not_propagate_its_own_ds_info(
+        self,
+        mock_gliner_manager,
+        mock_spancat_manager,
+        mock_extract_entities,
+        mock_async_task,
+    ):
+        """
+        Labelling the data subject's own details must not kick off case-wide
+        propagation.  Every document resolves the data subject for itself
+        during its own processing, so there is nothing to push outward;
+        propagation stays reserved for a reviewer's decision.
+        """
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=None)
+        )
+        mock_extract_entities.return_value = (
+            "John Doe lives in London.",
+            [
+                {
+                    "start_char": 0,
+                    "end_char": 8,
+                    "text": "John Doe",
+                    "label": "THIRD_PARTY",
+                }
+            ],
+            [],
+            None,
+        )
+
+        process_document_and_create_redactions(self.document.id)
+
+        self.assertEqual(
+            self.document.redactions.filter(
+                redaction_type=Redaction.RedactionType.DS_INFORMATION
+            ).count(),
+            1,
+        )
+        mock_async_task.assert_not_called()
+
+    @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
+    @patch("cases.services.GLiNERModelManager")
+    def test_process_document_keeps_operational_spans_operational(
+        self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
+    ):
+        """
+        An operational marking stays operational even when it carries the data
+        subject's own name.  What makes it redactable is the marking, not whose
+        record it appears in.
+        """
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=None)
+        )
+        mock_extract_entities.return_value = (
+            "Officer DOE, John attended.",
+            [
+                {
+                    "start_char": 8,
+                    "end_char": 17,
+                    "text": "DOE, John",
+                    "label": "OPERATIONAL",
+                }
+            ],
+            [],
+            None,
+        )
+
+        process_document_and_create_redactions(self.document.id)
+
+        self.document.refresh_from_db()
+        redaction = self.document.redactions.get()
+        self.assertEqual(
+            redaction.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        self.assertIsNone(redaction.decided_by)
+
+    @patch("cases.services.extract_entities_from_text")
+    @patch("cases.services.SpanCatModelManager")
+    @patch("cases.services.GLiNERModelManager")
+    def test_process_document_keeps_third_party_sharing_a_surname(
+        self, mock_gliner_manager, mock_spancat_manager, mock_extract_entities
+    ):
+        """
+        A relative who shares the data subject's surname must still get a
+        redaction suggestion.  Treating a bare surname as the data subject
+        discarded the suggestion outright, leaving that third party's name
+        unredacted and absent from the review queue entirely.
+        """
+        mock_gliner_manager.get_instance.return_value = MagicMock()
+        mock_spancat_manager.get_instance.return_value = MagicMock(
+            get_model_entry=MagicMock(return_value=None)
+        )
+
+        extracted_text = "Doe was interviewed by police."
+        mock_extract_entities.return_value = (
+            extracted_text,
+            [
+                {
+                    "start_char": 0,
+                    "end_char": 3,
+                    "text": "Doe",
+                    "label": "THIRD_PARTY",
+                }
+            ],
+            [],
+            None,
+        )
+
+        process_document_and_create_redactions(self.document.id)
+
+        self.document.refresh_from_db()
         self.assertEqual(self.document.redactions.count(), 1)
         redaction = self.document.redactions.first()
-        self.assertEqual(redaction.text, "London")
+        self.assertEqual(redaction.text, "Doe")
+        self.assertEqual(
+            redaction.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        self.assertIsNone(redaction.decided_by)
 
     def test_matches_data_subject_full_name(self):
         """Test full name matching (case-insensitive, bidirectional)."""
@@ -1054,10 +1202,25 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(_matches_data_subject("john doe", self.case))
         self.assertTrue(_matches_data_subject("JOHN DOE", self.case))
 
-    def test_matches_data_subject_name_parts(self):
-        """Test individual name parts match."""
-        self.assertTrue(_matches_data_subject("John", self.case))
-        self.assertTrue(_matches_data_subject("Doe", self.case))
+    def test_matches_data_subject_rejects_partial_name(self):
+        """
+        A single part of the data subject's name is not the data subject — it
+        is very often a relative in the same case, so it keeps its suggestion.
+        """
+        self.assertFalse(_matches_data_subject("John", self.case))
+        self.assertFalse(_matches_data_subject("Doe", self.case))
+
+    def test_matches_data_subject_rejects_span_covering_another_person(self):
+        """A span that swallows a third party must not be discarded."""
+        self.assertFalse(
+            _matches_data_subject("John Doe and Jane Roe", self.case)
+        )
+
+    def test_matches_data_subject_ignores_honorific(self):
+        self.assertTrue(_matches_data_subject("Mr John Doe", self.case))
+
+    def test_matches_data_subject_reordered_name(self):
+        self.assertTrue(_matches_data_subject("DOE, JOHN", self.case))
 
     def test_matches_data_subject_no_match(self):
         """Test non-matching text."""
@@ -1080,7 +1243,8 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
             data_subject_name="Alice Test",
             created_by=self.user,
         )
-        self.assertTrue(_matches_data_subject("Alice", case_no_dob))
+        self.assertTrue(_matches_data_subject("Alice Test", case_no_dob))
+        self.assertFalse(_matches_data_subject("Alice", case_no_dob))
         self.assertFalse(_matches_data_subject("01/01/1990", case_no_dob))
 
     def test_matches_data_subject_empty_text(self):
