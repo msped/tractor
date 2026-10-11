@@ -6,12 +6,12 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 from django_q.models import Task
-from docx import Document as DocxDocument
 from spacy.training import Example
 from spacy.util import compounding, minibatch
 
 from cases.models import Document
 
+from .extraction import extract_annotated_text
 from .models import (
     Model,
     TrainingDocument,
@@ -37,6 +37,27 @@ REDACTION_TYPE_TO_ENTITY_LABEL = {
 CUSTOM_NER_LABELS = ["THIRD_PARTY", "OPERATIONAL"]
 
 
+def _trim_spans(spans, text):
+    """
+    Drop whitespace from the edges of each highlighted span, and discard any
+    span that is nothing but whitespace.
+
+    An annotator's highlight routinely runs a space past the word it covers.
+    Left alone those edges straddle token boundaries, and spaCy cannot align a
+    span to tokens it only partly covers — the example is silently dropped.
+    """
+    trimmed = []
+    for start, end, label in spans:
+        fragment = text[start:end]
+        stripped = fragment.strip()
+        if not stripped:
+            continue
+        lead = len(fragment) - len(fragment.lstrip())
+        trail = len(fragment) - len(fragment.rstrip())
+        trimmed.append((start + lead, end - trail, label))
+    return trimmed
+
+
 def collect_training_data_detailed(source="both"):
     """Collect labelled training examples from training documents and/or accepted case redactions."""
     train_data = []
@@ -48,152 +69,18 @@ def collect_training_data_detailed(source="both"):
         training_docs = TrainingDocument.objects.all()
         for tdoc in training_docs:
             try:
-                doc = DocxDocument(tdoc.original_file.path)
-                full_text = ""
-                entities = []
-                current_pos = 0
+                full_text, spans = extract_annotated_text(
+                    tdoc.original_file.path, HIGHLIGHT_COLOR_TO_LABEL
+                )
+                if not full_text:
+                    continue
 
-                # Track current highlighted section for merging adjacent runs
-                current_entity_start = None
-                current_entity_end = None
-                current_entity_label = None
-
-                def close_current_entity(entities_list, text):
-                    """Close the current entity if one is open and has content."""
-                    nonlocal \
-                        current_entity_start, \
-                        current_entity_end, \
-                        current_entity_label
-                    if (
-                        current_entity_start is not None
-                        and current_entity_label is not None
-                    ):
-                        # Check if the entity text has actual content (not just whitespace)
-                        entity_text = text[
-                            current_entity_start:current_entity_end
-                        ]
-                        stripped_text = entity_text.strip()
-                        if stripped_text:
-                            # Adjust boundaries to exclude leading/trailing whitespace
-                            # This ensures alignment with token boundaries
-                            leading_ws = len(entity_text) - len(
-                                entity_text.lstrip()
-                            )
-                            trailing_ws = len(entity_text) - len(
-                                entity_text.rstrip()
-                            )
-                            adjusted_start = current_entity_start + leading_ws
-                            adjusted_end = current_entity_end - trailing_ws
-                            entities_list.append(
-                                (
-                                    adjusted_start,
-                                    adjusted_end,
-                                    current_entity_label,
-                                )
-                            )
-                    current_entity_start = None
-                    current_entity_end = None
-                    current_entity_label = None
-
-                def process_run(run, _entities=entities):
-                    nonlocal \
-                        full_text, \
-                        current_pos, \
-                        current_entity_start, \
-                        current_entity_end, \
-                        current_entity_label
-                    run_text = run.text
-                    start_char = current_pos
-                    end_char = current_pos + len(run_text)
-
-                    run_label = None
-                    if run.font.highlight_color:
-                        color_enum_member = run.font.highlight_color
-                        color_name = (
-                            color_enum_member.name
-                            if color_enum_member
-                            else None
-                        )
-                        run_label = HIGHLIGHT_COLOR_TO_LABEL.get(color_name)
-
-                    if run_label:
-                        if current_entity_label == run_label:
-                            current_entity_end = end_char
-                        else:
-                            close_current_entity(_entities, full_text)
-                            current_entity_start = start_char
-                            current_entity_end = end_char
-                            current_entity_label = run_label
-                    else:
-                        close_current_entity(_entities, full_text)
-
-                    full_text += run_text
-                    current_pos = end_char
-
-                # Build lookup dicts for O(1) matching during body iteration
-                para_map = {para._element: para for para in doc.paragraphs}
-                table_map = {tbl._tbl: tbl for tbl in doc.tables}
-
-                for element in doc.element.body:
-                    tag = element.tag.split("}")[-1]
-
-                    if tag == "p":
-                        para = para_map.get(element)
-                        if para is None:
-                            continue
-                        for run in para.runs:
-                            process_run(run)
-                        close_current_entity(entities, full_text)
-                        full_text += "\n"
-                        current_pos += 1
-
-                    elif tag == "tbl":
-                        tbl = table_map.get(element)
-                        if tbl is None:
-                            continue
-                        seen_tc = set()
-                        first_row = True
-                        for row in tbl.rows:
-                            if not first_row:
-                                close_current_entity(entities, full_text)
-                                full_text += "\n"
-                                current_pos += 1
-                            first_row = False
-                            first_cell = True
-                            for cell in row.cells:
-                                if cell._tc in seen_tc:
-                                    continue
-                                seen_tc.add(cell._tc)
-                                if not first_cell:
-                                    close_current_entity(entities, full_text)
-                                    full_text += "\t"
-                                    current_pos += 1
-                                first_cell = False
-                                first_para_in_cell = True
-                                for para in cell.paragraphs:
-                                    if not first_para_in_cell:
-                                        close_current_entity(
-                                            entities, full_text
-                                        )
-                                        full_text += " "
-                                        current_pos += 1
-                                    first_para_in_cell = False
-                                    for run in para.runs:
-                                        process_run(run)
-                                    close_current_entity(entities, full_text)
-                        close_current_entity(entities, full_text)
-                        full_text += "\n"
-                        current_pos += 1
-
-                # Close any remaining entity
-                close_current_entity(entities, full_text)
+                entities = _trim_spans(spans, full_text)
 
                 if entities:
-                    tdoc.extracted_text = full_text.strip()
+                    tdoc.extracted_text = full_text
                     tdoc.save(update_fields=["extracted_text"])
-                    train_data.append(
-                        (tdoc.extracted_text, {"entities": entities})
-                    )
+                    train_data.append((full_text, {"entities": entities}))
                     training_docs_used.append(tdoc)
             except Exception as e:
                 logger.error(
