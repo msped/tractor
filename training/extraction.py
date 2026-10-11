@@ -92,6 +92,54 @@ class DocumentStructure:
         return violations
 
 
+def _iter_runs(para):
+    """
+    Every run in a paragraph, in document order, including runs nested inside
+    hyperlinks.
+
+    ``paragraph.runs`` omits those, so walking it silently drops hyperlinked
+    text — and with it any highlight an annotator applied to that text. Joining
+    these runs reproduces ``paragraph.text`` exactly, which is what lets a run's
+    highlight be mapped onto an offset in the extracted text.
+    """
+    from docx.text.hyperlink import Hyperlink
+    from docx.text.run import Run
+
+    for item in para.iter_inner_content():
+        if isinstance(item, Run):
+            yield item
+        elif isinstance(item, Hyperlink):
+            yield from item.runs
+
+
+def _highlights_in(para, offset, labels):
+    """
+    Labelled spans for the highlighted runs of *para*, in absolute coordinates.
+
+    *offset* is where this paragraph's text begins in the extracted text, and
+    *labels* maps a highlight colour name to a label. Consecutive runs sharing
+    a label merge into one span, so a phrase broken into several runs by
+    formatting comes back whole. Spans are reported unstripped; the caller
+    decides how to trim them.
+    """
+    spans = []
+    pos = offset
+    for run in _iter_runs(para):
+        start, end = pos, pos + len(run.text)
+        pos = end
+
+        colour = run.font.highlight_color
+        label = labels.get(colour.name) if colour else None
+        if label is None:
+            continue
+
+        if spans and spans[-1][2] == label and spans[-1][1] == start:
+            spans[-1] = (spans[-1][0], end, label)
+        else:
+            spans.append((start, end, label))
+    return spans
+
+
 def _paragraph_is_hidden(para) -> bool:
     """Return True if every text-bearing run has white (#FFFFFF) colour."""
     text_runs = [r for r in para.runs if r.text.strip()]
@@ -283,21 +331,30 @@ def extract_table_with_styling(
     return html, cells
 
 
-def extract_document_structure(path: str):
-    """Extract headings, paragraphs, and tables from a DOCX file.
+def _walk_docx(path: str, labels=None):
+    """Walk a DOCX once, producing everything any caller needs from it.
 
-    Returns (elements, tables, full_text) on success, or (None, None) for
-    non-DOCX paths and parse failures.
+    Returns (elements, tables, full_text, highlights), or None for non-DOCX
+    paths and parse failures. When *labels* is given (a highlight-colour name
+    to label mapping), *highlights* holds (start, end, label) spans in
+    full_text coordinates; otherwise it is empty.
+
+    One walk serves both extraction and annotation deliberately. Building the
+    NER text twice, in two places, meant training and inference disagreed about
+    what the document said — over blank paragraphs, and over hyperlinked text
+    that one path dropped entirely.
     """
     if not path.lower().endswith(".docx"):
-        return None, None
+        return None
 
     try:
         doc = Document(path)
     except Exception as e:
         logger.error("Failed to parse DOCX at %s: %s", path, e)
-        return None, None
+        return None
 
+    labels = labels or {}
+    highlights = []
     cursor = _PositionCursor()
     elements = []
     tables_data = []
@@ -329,6 +386,8 @@ def extract_document_structure(path: str):
                             level = 1
 
                     start, end = cursor.consume(text)
+                    if labels:
+                        highlights.extend(_highlights_in(para, start, labels))
                     elements.append(
                         {
                             "type": element_type,
@@ -345,14 +404,20 @@ def extract_document_structure(path: str):
                 if tbl._tbl is element:
                     seen_tc_global = set()
                     text_rows = []
+                    rows_cells = []
                     for row in tbl.rows:
                         row_cells = []
+                        row_objects = []
                         for cell in row.cells:
                             if cell._tc not in seen_tc_global:
                                 seen_tc_global.add(cell._tc)
                                 row_cells.append(cell.text.replace("\n", " "))
+                                row_objects.append(cell)
                         if row_cells:
                             text_rows.append("\t".join(row_cells))
+                            rows_cells.append(
+                                list(zip(row_objects, row_cells, strict=True))
+                            )
                     table_text = "\n".join(text_rows)
 
                     has_borders = _table_has_borders(tbl)
@@ -361,6 +426,30 @@ def extract_document_structure(path: str):
                         tbl, table_start, has_borders
                     )
                     start, end = cursor.consume(table_text)
+
+                    if labels:
+                        # Rows are joined with "\n" and cells within a row with
+                        # "\t", so each separator costs exactly one character —
+                        # which makes a cell's offset its row's offset plus the
+                        # cells before it. Inside a cell, python-docx joins the
+                        # paragraphs with "\n" (flattened to a space here), one
+                        # character again.
+                        row_offset = start
+                        for row_pairs in rows_cells:
+                            cell_offset = row_offset
+                            for cell, cell_text in row_pairs:
+                                para_offset = cell_offset
+                                for para in cell.paragraphs:
+                                    highlights.extend(
+                                        _highlights_in(
+                                            para, para_offset, labels
+                                        )
+                                    )
+                                    para_offset += len(para.text) + 1
+                                cell_offset += len(cell_text) + 1
+                            row_offset += (
+                                len("\t".join(t for _, t in row_pairs)) + 1
+                            )
 
                     col_widths = []
                     try:
@@ -399,7 +488,38 @@ def extract_document_structure(path: str):
                     table_index += 1
                     break
 
-    return elements, tables_data, cursor.build_full_text()
+    return elements, tables_data, cursor.build_full_text(), highlights
+
+
+def extract_document_structure(path: str):
+    """Extract headings, paragraphs, and tables from a DOCX file.
+
+    Returns (elements, tables, full_text) on success, or (None, None) for
+    non-DOCX paths and parse failures.
+    """
+    result = _walk_docx(path)
+    if result is None:
+        return None, None
+    elements, tables, full_text, _ = result
+    return elements, tables, full_text
+
+
+def extract_annotated_text(path: str, labels):
+    """Extract a DOCX's NER text together with its highlighted spans.
+
+    *labels* maps a highlight-colour name to the label it denotes. Returns
+    (full_text, [(start, end, label), ...]), or (None, None) when the file
+    cannot be read as a DOCX.
+
+    The text is the same string the extraction pipeline produces for this
+    document, character for character, so a model trained on it sees what it
+    will be asked to label later.
+    """
+    result = _walk_docx(path, labels)
+    if result is None:
+        return None, None
+    _, _, full_text, highlights = result
+    return full_text, highlights
 
 
 def _extract_text_from_pdf(path: str) -> str:
