@@ -367,9 +367,23 @@ class DocumentReviewSerializer(serializers.ModelSerializer):
     redactions = RedactionSerializer(many=True, read_only=True)
     merge_structure = serializers.SerializerMethodField()
     active_review = serializers.SerializerMethodField()
+    auto_accept_mode = serializers.SerializerMethodField()
 
     def get_merge_structure(self, obj):
         return serialize_merge_structure(obj.redactions.all())
+
+    def get_auto_accept_mode(self, obj):
+        """
+        Whether the auto-accept review mode is switched on.
+
+        The review UI used to infer this from the redactions themselves —
+        any row accepted by something other than a human implied the mode.
+        That was never reliable (propagated acceptances look the same) and
+        broke outright once the data subject's own details started arriving
+        machine-accepted on every document.  The setting is the only honest
+        source.
+        """
+        return ReviewWorkflowSettings.get().auto_accept_enabled
 
     def get_active_review(self, obj):
         """
@@ -395,6 +409,7 @@ class DocumentReviewSerializer(serializers.ModelSerializer):
             "redactions",
             "merge_structure",
             "active_review",
+            "auto_accept_mode",
         ]
         read_only_fields = [
             "id",

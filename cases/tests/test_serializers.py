@@ -403,6 +403,31 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertNotIn("uploaded_at", data)
         self.assertNotIn("original_file", data)
 
+    def test_document_review_serializer_reports_auto_accept_mode(self):
+        """
+        The review UI reads the mode from the setting, not by inferring it from
+        machine-accepted rows — the data subject's own details now arrive
+        machine-accepted on ordinary documents, which would have looked
+        identical to the mode being on.
+        """
+        from ..models import ReviewWorkflowSettings
+
+        self.assertFalse(
+            DocumentReviewSerializer(instance=self.document).data[
+                "auto_accept_mode"
+            ]
+        )
+
+        settings_row = ReviewWorkflowSettings.get()
+        settings_row.auto_accept_enabled = True
+        settings_row.save()
+
+        self.assertTrue(
+            DocumentReviewSerializer(instance=self.document).data[
+                "auto_accept_mode"
+            ]
+        )
+
     def test_document_review_serializer_exposes_open_review(self):
         from ..models import InternalReview
 

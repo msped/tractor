@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from ..extractors.presidio_provider import (
+    _BUILTIN_THIRD_PARTY_PATTERNS,
     PresidioEngineProvider,
     PresidioSnapshot,
     RecognizerSpec,
@@ -189,9 +190,10 @@ class PresidioSnapshotUnitTests(NetworkBlockerMixin, TestCase):
         snapshot = PresidioSnapshot("fp", (self._spec(),))
         snapshot.extract_third_party("text")
 
-        # 2 builtin UK PII recognizers + 1 custom
+        # every builtin third-party recognizer + 1 custom
         self.assertEqual(
-            mock_engine_instance.registry.add_recognizer.call_count, 3
+            mock_engine_instance.registry.add_recognizer.call_count,
+            len(_BUILTIN_THIRD_PARTY_PATTERNS) + 1,
         )
         mock_recognizer.assert_any_call(
             supported_entity=f"CUSTOM_{'a' * 32}",
@@ -320,6 +322,36 @@ class PresidioIntegrationTests(NetworkBlockerMixin, TestCase):
         self.assertIn("SW1A 1AA", texts)
         self.assertIn("AB 12 34 56 C", texts)
         self.assertTrue(all(r["label"] == "THIRD_PARTY" for r in results))
+
+    def test_person_name_layouts_detected(self):
+        """
+        Record-style name entries are matched whole.  A general NER model
+        reads "SURNAME, Forename" poorly and tends to return the surname on
+        its own, which cannot be matched against anyone with confidence.
+        """
+        results = self._snapshot().extract_third_party(
+            "BLOGGS, Joe reported it to HUGHES, R. and SMITH, John Paul, "
+            "with Mr Alan Turing present."
+        )
+
+        texts = [r["text"] for r in results]
+        self.assertIn("BLOGGS, Joe", texts)
+        self.assertIn("HUGHES, R.", texts)
+        self.assertIn("SMITH, John Paul", texts)
+        self.assertIn("Mr Alan Turing", texts)
+        self.assertTrue(all(r["label"] == "THIRD_PARTY" for r in results))
+
+    def test_capitalised_prose_is_not_matched_as_a_name(self):
+        """
+        A bare "Forename Surname" has no structural marker and cannot be
+        told from ordinary capitalised prose, so the patterns deliberately
+        do not reach for it — that stays the NER models' job.
+        """
+        results = self._snapshot().extract_third_party(
+            "Report of a Domestic Incident at Cheshire Police HQ."
+        )
+
+        self.assertEqual([r["text"] for r in results], [])
 
     def test_builtin_operational_patterns_detected(self):
         results = self._snapshot().extract_operational(

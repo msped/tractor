@@ -389,6 +389,7 @@ class Redaction(models.Model):
         AUTO_ACCEPT = "AUTO", "Auto-accept review mode"
         CASE_PROPAGATION = "CASE_PROP", "Unanimous case-decision propagation"
         DS_INFO_PROPAGATION = "DS_PROP", "DS information propagation"
+        DS_RECORD_MATCH = "DS_MATCH", "Data subject record match"
 
     objects = RedactionQuerySet.as_manager()
 

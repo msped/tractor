@@ -32,6 +32,7 @@ _PRESIDIO_ENTITIES = [
     "UK_NHS",
     "UK_POSTCODE",
     "UK_NI_NUMBER",
+    "PERSON_NAME",
 ]
 
 _OPERATIONAL_ENTITIES = [
@@ -52,6 +53,40 @@ _BUILTIN_THIRD_PARTY_PATTERNS = (
         "uk_ni_number",
         r"\b(?!BG|GB|NK|KN|NT|TN|ZZ)[A-CEGHJ-PR-TW-Z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D]\b",
         0.85,
+    ),
+    # Person names written in layouts a general NER model reads poorly. A
+    # record-style entry puts the surname first in capitals, which reads as a
+    # heading rather than a name, and models tend to return the surname alone
+    # or nothing at all — leaving a name split into fragments that cannot be
+    # matched against anyone.  Matching the whole entry gives the identity
+    # matcher something it can actually resolve.
+    #
+    # Each pattern needs a structural marker: a comma, a full stop, a title.
+    # A bare "Forename Surname" has none, and cannot be told from ordinary
+    # capitalised prose by pattern alone ("Police HQ", "Domestic Incident"),
+    # so it is deliberately left to the NER models.
+    #
+    # These are wrapped in (?-i:...) because Presidio compiles every pattern
+    # case-insensitively by default. Capitalisation is the entire signal here
+    # — without the scoped flag "[A-Z][a-z]+" matches any word at all, and
+    # "BLOGGS, Joe reported" comes back as one name.
+    (
+        "PERSON_NAME",
+        "surname_comma_forename",
+        r"(?-i:\b[A-Z][A-Z'’-]+,\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]{2,})?\b)",
+        0.7,
+    ),
+    (
+        "PERSON_NAME",
+        "surname_comma_initial",
+        r"(?-i:\b[A-Z][A-Z'’-]+,\s+[A-Z]\.(?!\w))",
+        0.7,
+    ),
+    (
+        "PERSON_NAME",
+        "honorific_name",
+        r"(?-i:\b(?:Mr|Mrs|Ms|Mx|Miss|Dr|Prof)\.?\s+[A-Z][a-z]+(?:\s+[A-Z][A-Za-z'’-]+)?\b)",
+        0.6,
     ),
 )
 

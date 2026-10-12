@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Alert, Box, Typography, Button, Container, Tooltip, CircularProgress, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import TextDecreaseIcon from '@mui/icons-material/TextDecrease';
 import TextIncreaseIcon from '@mui/icons-material/TextIncrease';
@@ -35,10 +35,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     const store = useRedactionState({ document: currentDocument, initialRedactions, router });
     const { layout, document: docState, markAllInCase, rejectionDialog } = store;
 
-    const isAutoAcceptMode = useMemo(
-        () => initialRedactions.some(r => r.auto_accepted),
-        [initialRedactions]
-    );
+    const isAutoAcceptMode = Boolean(currentDocument?.auto_accept_mode);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const handleScrolledToBottom = useCallback(() => setHasScrolledToBottom(true), []);
 
