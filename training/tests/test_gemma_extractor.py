@@ -48,6 +48,9 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
         )
         self.assertEqual(result[0]["label"], "OP_DATA")
         self.assertEqual(result[0]["source"], "LLM")
+        # The prompt asks only for a coarse redaction type, so there is no
+        # fine-grained label to carry — but the key is present regardless.
+        self.assertIsNone(result[0]["entity_type"])
 
     @patch("training.extractors.gemma_extractor.requests.post")
     def test_duplicate_phrase_produces_two_spans(self, mock_post):

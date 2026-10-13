@@ -256,6 +256,7 @@ class PresidioSnapshotUnitTests(NetworkBlockerMixin, TestCase):
         result = MagicMock()
         result.start = 11
         result.end = 25
+        result.entity_type = "PHONE_NUMBER"
         mock_engine.analyze.return_value = [result]
         snapshot._engines["third_party"] = (mock_engine, [])
 
@@ -270,6 +271,7 @@ class PresidioSnapshotUnitTests(NetworkBlockerMixin, TestCase):
                     "label": "THIRD_PARTY",
                     "start_char": 11,
                     "end_char": 25,
+                    "entity_type": "PHONE_NUMBER",
                 }
             ],
         )
@@ -339,6 +341,22 @@ class PresidioIntegrationTests(NetworkBlockerMixin, TestCase):
         self.assertIn("HUGHES, R.", texts)
         self.assertIn("SMITH, John Paul", texts)
         self.assertIn("Mr Alan Turing", texts)
+        self.assertTrue(all(r["label"] == "THIRD_PARTY" for r in results))
+
+    def test_entity_type_distinguishes_name_from_detail(self):
+        """
+        Presidio collapses every builtin hit to THIRD_PARTY, so ``label``
+        alone cannot tell a person from a contact detail. ``entity_type``
+        carries Presidio's own label through for block attribution.
+        """
+        results = self._snapshot().extract_third_party(
+            "BLOGGS, Joe is on 07700 900000 at SW1A 1AA."
+        )
+
+        by_text = {r["text"]: r["entity_type"] for r in results}
+        self.assertEqual(by_text.get("BLOGGS, Joe"), "PERSON_NAME")
+        self.assertEqual(by_text.get("07700 900000"), "PHONE_NUMBER")
+        self.assertEqual(by_text.get("SW1A 1AA"), "UK_POSTCODE")
         self.assertTrue(all(r["label"] == "THIRD_PARTY" for r in results))
 
     def test_capitalised_prose_is_not_matched_as_a_name(self):

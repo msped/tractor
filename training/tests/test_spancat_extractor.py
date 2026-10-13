@@ -91,3 +91,18 @@ class ExtractWithSpanCatTests(NetworkBlockerMixin, TestCase):
         self.assertIn("label", results[0])
         self.assertIn("start_char", results[0])
         self.assertIn("end_char", results[0])
+        self.assertIn("entity_type", results[0])
+
+    def test_entity_type_is_none(self):
+        """
+        SpanCat is trained on the coarse labels alone, so it has no
+        fine-grained type to report — but it must still carry the key so
+        downstream consumers can read it uniformly across extractors.
+        """
+        spans = [
+            _make_span("Jane Doe", "THIRD_PARTY", 0, 8),
+            _make_span("attended the scene", "OPERATIONAL", 9, 27),
+        ]
+        nlp = _make_nlp(spans)
+        results = extract_with_spancat(nlp, "Jane Doe attended the scene")
+        self.assertEqual([r["entity_type"] for r in results], [None, None])
