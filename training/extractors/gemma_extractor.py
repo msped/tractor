@@ -185,6 +185,7 @@ def _call_ollama(
                     "start_char": chunk_offset + start,
                     "end_char": chunk_offset + end,
                     "label": item.get("redaction_type", "PII"),
+                    "entity_type": None,
                     "source": "LLM",
                 }
             )
@@ -199,6 +200,8 @@ def extract_with_gemma(
     Calls Ollama with a structured output schema. Splits large documents into
     overlapping chunks so no content exceeds the model's context limit. Returns
     a list of entity dicts with start_char/end_char in full-document coordinates.
+    ``entity_type`` is always None — the prompt asks only for a coarse redaction
+    type, so there is no fine-grained label to carry.
 
     Returns an empty list if OLLAMA_ENABLED is falsy or if all requests fail.
     """
