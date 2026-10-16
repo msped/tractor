@@ -296,6 +296,7 @@ class RedactionSerializer(serializers.ModelSerializer):
             "text",
             "redaction_type",
             "justification",
+            "rationale",
             "is_suggestion",
             "is_accepted",
             "auto_accepted",
@@ -303,7 +304,14 @@ class RedactionSerializer(serializers.ModelSerializer):
             "created_at",
             "context",
         ]
-        read_only_fields = ["id", "auto_accepted", "created_at"]
+        # rationale is the system's own explanation of why it classified a
+        # span as it did — never a client's to write or revise.
+        read_only_fields = [
+            "id",
+            "rationale",
+            "auto_accepted",
+            "created_at",
+        ]
 
 
 class BulkRedactionUpdateSerializer(serializers.Serializer):
