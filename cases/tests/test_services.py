@@ -2335,10 +2335,12 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
             collar.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
         )
 
-    def test_auto_accept_leaves_an_inferred_disclosure_pending(self):
+    def test_auto_accept_accepts_an_inferred_attribution_too(self):
         """
-        Auto-accepting a redaction over-redacts when wrong; auto-accepting
-        DS_INFO *discloses* when wrong. The inference waits for a human.
+        Auto-accept covers inferred DS_INFO like everything else: the mode
+        pre-makes every decision and the reviewer checks the document, which
+        they cannot complete without scrolling all of it. Rows carry AUTO
+        provenance so a machine decision stays distinguishable from a human's.
         """
         settings_obj = ReviewWorkflowSettings.get()
         settings_obj.auto_accept_enabled = True
@@ -2356,8 +2358,14 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
         )
 
         inferred = self.document.redactions.get(text="07700 900000")
-        self.assertIsNone(inferred.decided_by)
-        self.assertFalse(inferred.is_accepted)
+        self.assertEqual(
+            inferred.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertEqual(inferred.decided_by, Redaction.DecidedBy.AUTO_ACCEPT)
+        self.assertTrue(inferred.is_accepted)
+        # The reason it was attributed survives the acceptance, so a reviewer
+        # scanning an auto-accepted document can still see why.
+        self.assertIn("Joe Bloggs", inferred.rationale)
 
         third_party = self.document.redactions.get(text="07700 900111")
         self.assertEqual(
