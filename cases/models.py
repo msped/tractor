@@ -408,6 +408,18 @@ class Redaction(models.Model):
         null=True,
         help_text="Reason for a manual redaction or for rejecting a suggestion.",
     )
+    rationale = models.TextField(
+        blank=True,
+        null=True,
+        help_text=(
+            "Why the system classified this span as it did, written once at "
+            "creation so a reviewer can judge an inferred suggestion rather "
+            "than take it on trust. Distinct from justification, which is a "
+            "human's reason for their own decision: that one is cleared on "
+            "accept and overwritten on reject, and the review UI reads its "
+            "presence as 'rejected'."
+        ),
+    )
 
     redaction_type = models.CharField(
         max_length=10, choices=RedactionType.choices
