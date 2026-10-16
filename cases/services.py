@@ -133,19 +133,9 @@ def process_document_and_create_redactions(document_id):
         Redaction.objects.bulk_create(redactions_to_create)
 
     if ReviewWorkflowSettings.get().auto_accept_enabled:
-        # Auto-accept deliberately stops short of DS_INFO.  Accepting a
-        # third-party suggestion means redacting it, so being wrong
-        # over-redacts; accepting DS_INFO means *disclosing* it, so being
-        # wrong discloses someone else's details.  An inferred attribution is
-        # the system's guess at whose a detail is, and no amount of reviewer
-        # convenience justifies disclosing it unread — those rows stay
-        # pending, which also keeps the document off "complete" until a human
-        # has decided.  Rows already accepted under DS_RECORD_MATCH are
-        # untouched: they are recognition of the case's own record, not a
-        # guess, and they are not pending to begin with.
-        document.redactions.pending().exclude(
-            redaction_type=Redaction.RedactionType.DS_INFORMATION
-        ).accept(by=Redaction.DecidedBy.AUTO_ACCEPT)
+        document.redactions.pending().accept(
+            by=Redaction.DecidedBy.AUTO_ACCEPT
+        )
 
     # Run case-decision propagation in its own transaction so a failure here
     # does not roll back the committed redactions above.
