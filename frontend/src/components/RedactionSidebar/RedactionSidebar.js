@@ -192,6 +192,16 @@ const RedactionSidebarComponent = ({
                             </Box>
                             <Typography variant="caption" color="text.secondary">Source: {item.source === 'LLM' ? 'AI (Contextual)' : item.is_suggestion ? 'AI' : 'User'}</Typography>
                         </Box>
+                        {item.rationale && (
+                            <Typography
+                                variant="caption"
+                                component="p"
+                                color="text.secondary"
+                                sx={{ mt: 1, fontStyle: 'italic' }}
+                            >
+                                {item.rationale}
+                            </Typography>
+                        )}
                         {item.justification && (
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Reason for rejection: {item.justification}</Typography>
                         )}
