@@ -2372,3 +2372,92 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
             third_party.decided_by, Redaction.DecidedBy.AUTO_ACCEPT
         )
         self.assertTrue(third_party.is_accepted)
+
+    def test_a_correction_in_one_document_sticks_for_the_next(self):
+        """
+        Story 13 through the real workflow: the reviewer corrects a wrong
+        attribution by marking the text third-party (what they would actually
+        do, since that is the action that redacts it), and the next document
+        does not propose it as the data subject's again.
+        """
+        text = "Joe Bloggs\t07700 900000"
+        suggestions = [
+            self._span("Joe Bloggs", 0, "PERSON_NAME"),
+            self._span("07700 900000", 11, "PHONE_NUMBER"),
+        ]
+        self._process(text, suggestions)
+
+        # The reviewer disagrees: that number is the witness's, not Joe's.
+        phone = self.document.redactions.get(text="07700 900000")
+        phone.redaction_type = Redaction.RedactionType.THIRD_PARTY_PII
+        phone.is_accepted = True
+        phone.decided_by = Redaction.DecidedBy.HUMAN
+        phone.save()
+
+        second = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("record2.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.document = second
+        self._process(text, suggestions)
+
+        self.assertEqual(
+            second.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+    def test_without_a_correction_the_next_document_still_infers(self):
+        """The control for the test above — the suppression is the correction."""
+        text = "Joe Bloggs\t07700 900000"
+        suggestions = [
+            self._span("Joe Bloggs", 0, "PERSON_NAME"),
+            self._span("07700 900000", 11, "PHONE_NUMBER"),
+        ]
+        self._process(text, suggestions)
+
+        second = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("record3.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.document = second
+        self._process(text, suggestions)
+
+        self.assertEqual(
+            second.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
+
+    def test_a_correction_in_another_case_does_not_leak_across(self):
+        """Whose a phone number is depends entirely on the case."""
+        other_case = Case.objects.create(
+            case_reference="RES002", data_subject_name="Someone Else"
+        )
+        other_document = Document.objects.create(
+            case=other_case,
+            original_file=SimpleUploadedFile("other.txt", b"content"),
+            status=Document.Status.READY_FOR_REVIEW,
+        )
+        Redaction.objects.create(
+            document=other_document,
+            start_char=0,
+            end_char=12,
+            text="07700 900000",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        self._process(
+            "Joe Bloggs\t07700 900000",
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span("07700 900000", 11, "PHONE_NUMBER"),
+            ],
+        )
+
+        self.assertEqual(
+            self.document.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )

@@ -285,5 +285,73 @@ class ResolveSpansTests(SimpleTestCase):
                 result.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
             )
 
+    # ---- a human correction outranks the layout ----
+
+    def test_text_ruled_third_party_is_not_proposed_again(self):
+        """
+        Story 13: a correction has to stick, or the reviewer re-makes it on
+        every document in the case.
+        """
+        text = "Joe Bloggs\t07700 900000"
+        spans = [
+            _span("Joe Bloggs", 0, "PERSON_NAME"),
+            _span("07700 900000", 11, "PHONE_NUMBER"),
+        ]
+
+        _, phone = self._resolve(
+            text, spans, ruled_third_party={"07700 900000"}
+        )
+
+        self.assertEqual(
+            phone.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        self.assertIsNone(phone.rationale)
+
+    def test_the_ruling_is_matched_regardless_of_case(self):
+        text = "Joe Bloggs\tJOE@EXAMPLE.COM"
+        spans = [
+            _span("Joe Bloggs", 0, "PERSON_NAME"),
+            _span("JOE@EXAMPLE.COM", 11, "EMAIL_ADDRESS"),
+        ]
+
+        _, email = self._resolve(
+            text, spans, ruled_third_party={"joe@example.com"}
+        )
+
+        self.assertEqual(
+            email.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
+        )
+
+    def test_a_ruling_does_not_suppress_a_case_record_match(self):
+        """
+        Only inference is suppressed. The name held on the case record is not
+        a guess, so a stray third-party ruling cannot override it.
+        """
+        spans = [_span("Joe Bloggs", 0, "PERSON_NAME")]
+
+        [name] = self._resolve(
+            "Joe Bloggs", spans, ruled_third_party={"Joe Bloggs"}
+        )
+
+        self.assertEqual(
+            name.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertTrue(name.is_accepted)
+
+    def test_a_ruling_on_other_text_changes_nothing(self):
+        text = "Joe Bloggs\t07700 900000"
+        spans = [
+            _span("Joe Bloggs", 0, "PERSON_NAME"),
+            _span("07700 900000", 11, "PHONE_NUMBER"),
+        ]
+
+        _, phone = self._resolve(
+            text, spans, ruled_third_party={"07700 999999"}
+        )
+
+        self.assertEqual(
+            phone.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+
     def test_no_spans_resolves_to_nothing(self):
         self.assertEqual(self._resolve("some text", []), [])
