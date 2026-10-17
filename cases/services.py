@@ -40,6 +40,28 @@ from .span_merging import absorb_prefix_symbols, merge_spans_for_removal
 logger = logging.getLogger(__name__)
 
 
+def _texts_ruled_third_party(case):
+    """
+    Text a human has decided is a third party's, anywhere in *case*.
+
+    No separate record is kept for this: the reclassified redaction *is* the
+    record.  A reviewer correcting a wrong attribution marks the text as
+    third-party and accepts it, which leaves a row saying exactly that, with
+    provenance — so the correction is read back off the decisions themselves
+    rather than mirrored into a second table that could drift from them.
+    """
+    return set(
+        Redaction.objects.filter(
+            document__case=case,
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        .values_list("text", flat=True)
+        .distinct()
+    )
+
+
 def process_document_and_create_redactions(document_id):
     """Extract text from a document and create Redaction suggestions via the NLP pipeline."""
     try:
@@ -110,6 +132,7 @@ def process_document_and_create_redactions(document_id):
         extracted_text=extracted_text,
         structure=structure,
         tables=tables,
+        ruled_third_party=_texts_ruled_third_party(case),
     )
 
     with transaction.atomic():

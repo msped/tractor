@@ -118,7 +118,13 @@ def _inference_rationale(person_text, block):
 
 
 def resolve_spans(
-    spans, case, *, extracted_text=None, structure=None, tables=None
+    spans,
+    case,
+    *,
+    extracted_text=None,
+    structure=None,
+    tables=None,
+    ruled_third_party=(),
 ):
     """
     Resolve detected spans against the case record and the document layout.
@@ -126,10 +132,19 @@ def resolve_spans(
     Returns one ``SpanResolution`` per span, in the order the spans were given,
     so a caller can zip it against its own suggestion list.
 
+    *ruled_third_party* is text a human has already ruled is a third party's
+    somewhere in this case.  An attribution is a reading of a layout and can
+    be wrong; when a reviewer corrects one, that correction has to stick, or
+    the next document proposes the same thing again and they re-do the work on
+    every document in the case.  A human decision outranks the layout, so such
+    text is never proposed as the data subject's again — only inference is
+    suppressed, never a match against the case record, which is not a guess.
+
     Attribution is skipped when there is no text to build blocks from, which
     leaves a caller that has only spans behaving exactly as it did before
     block attribution existed.
     """
+    ruled_out = {text.casefold() for text in ruled_third_party if text}
     attributions_by_offset = {}
     if extracted_text:
         blocks = build_blocks(extracted_text, structure, tables)
@@ -173,6 +188,7 @@ def resolve_spans(
         if (
             attribution is not None
             and attribution.is_resolved
+            and span["text"].casefold() not in ruled_out
             and _is_data_subject_person(attribution.person, case)
         ):
             # The layout says this detail is the data subject's; nothing
