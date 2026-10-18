@@ -20,6 +20,7 @@ from ..models import (
     TrainingRunTrainingDoc,
 )
 from ..tasks import (
+    TrainingStopped,
     _build_spancat_pipeline,
     _prepare_examples,
     _run_training_loop,
@@ -549,14 +550,11 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         mock_nlp.pipe_names = []
         mock_build_pipeline.return_value = mock_nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = (
-            {
-                "spans_sc_p": 0.8,
-                "spans_sc_r": 0.75,
-                "spans_sc_f": 0.77,
-            },
-            False,
-        )
+        mock_run_loop.return_value = {
+            "spans_sc_p": 0.8,
+            "spans_sc_r": 0.75,
+            "spans_sc_f": 0.77,
+        }
 
         initial_model_count = Model.objects.count()
         train_model(source="redactions")
@@ -641,14 +639,11 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         mock_nlp.pipe_names = []
         mock_build_pipeline.return_value = mock_nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = (
-            {
-                "spans_sc_p": 0.8,
-                "spans_sc_r": 0.75,
-                "spans_sc_f": 0.77,
-            },
-            False,
-        )
+        mock_run_loop.return_value = {
+            "spans_sc_p": 0.8,
+            "spans_sc_r": 0.75,
+            "spans_sc_f": 0.77,
+        }
 
         train_model(source="both")
 
@@ -760,14 +755,11 @@ class RunTrainingLoopTests(NetworkBlockerMixin, TestCase):
         }
 
         with tempfile.TemporaryDirectory() as output_dir:
-            result, cancelled = _run_training_loop(
-                mock_nlp, [], [], output_dir
-            )
+            result = _run_training_loop(mock_nlp, [], [], output_dir)
 
         # When best_f1==0.0, nlp.to_disk is still called after the loop
         mock_nlp.to_disk.assert_called_once()
         self.assertEqual(result.get("spans_sc_f"), 0.0)
-        self.assertFalse(cancelled)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_edge"))
@@ -852,29 +844,59 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
         }
         return nlp
 
-    def test_loop_stops_at_the_first_epoch_check(self):
+    def _request_stop(self):
         control = TrainingControl.get()
         control.cancel_requested = True
         control.save()
+
+    def test_loop_stops_at_the_first_epoch_check(self):
+        self._request_stop()
         nlp = self._nlp()
 
         with tempfile.TemporaryDirectory() as output_dir:
-            scores, cancelled = _run_training_loop(nlp, [], [], output_dir)
+            with self.assertRaises(TrainingStopped):
+                _run_training_loop(nlp, [], [], output_dir)
 
-        self.assertTrue(cancelled)
         # Abandoned before any training happened at all.
         nlp.update.assert_not_called()
         nlp.evaluate.assert_not_called()
-        self.assertEqual(scores, {})
 
     def test_loop_runs_normally_when_no_stop_is_requested(self):
         nlp = self._nlp()
 
         with tempfile.TemporaryDirectory() as output_dir:
-            _, cancelled = _run_training_loop(nlp, [], [], output_dir)
+            _run_training_loop(nlp, [], [], output_dir)
 
-        self.assertFalse(cancelled)
         self.assertTrue(nlp.evaluate.called)
+
+    def test_preparing_examples_is_interruptible(self):
+        """
+        The slowest phase of a long run, and the one that had no check: a stop
+        during it used to appear to do nothing until epoch 1 began.
+        """
+        import spacy
+
+        self._request_stop()
+        nlp = spacy.blank("en")
+        train_data = [(f"text {i}", {"entities": []}) for i in range(40)]
+
+        with patch.object(nlp, "make_doc", wraps=nlp.make_doc) as spy:
+            with self.assertRaises(TrainingStopped):
+                _prepare_examples(nlp, train_data)
+
+        # Gave up partway rather than building all forty.
+        self.assertGreater(spy.call_count, 0)
+        self.assertLess(spy.call_count, len(train_data))
+
+    def test_preparing_examples_completes_when_not_stopped(self):
+        import spacy
+
+        nlp = spacy.blank("en")
+        train_data = [(f"text {i}", {"entities": []}) for i in range(40)]
+
+        examples = _prepare_examples(nlp, train_data)
+
+        self.assertEqual(len(examples), 40)
 
     @patch("training.tasks._run_training_loop")
     @patch("training.tasks._prepare_examples")
@@ -908,7 +930,7 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
         def _cancel(nlp_, train, dev, output_dir):
             # The real loop has already made the directory by this point.
             created.append(Path(output_dir))
-            return {}, True
+            raise TrainingStopped("during epoch 1")
 
         mock_run_loop.side_effect = _cancel
 
@@ -953,10 +975,11 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
         nlp.pipe_names = []
         mock_build_pipeline.return_value = nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = (
-            {"spans_sc_p": 0.9, "spans_sc_r": 0.9, "spans_sc_f": 0.9},
-            False,
-        )
+        mock_run_loop.return_value = {
+            "spans_sc_p": 0.9,
+            "spans_sc_r": 0.9,
+            "spans_sc_f": 0.9,
+        }
 
         train_model(source="redactions")
 
