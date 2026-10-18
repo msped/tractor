@@ -1,4 +1,5 @@
 import io
+import logging
 import multiprocessing
 import re
 import zipfile
@@ -30,6 +31,8 @@ from .serializers import (
     TrainingDocumentSerializer,
     TrainingRunSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 _MAX_SAMPLE_TEXT_LENGTH = 10_000
 
@@ -330,6 +333,16 @@ class StopTrainingView(APIView):
         control = TrainingControl.get()
         control.cancel_requested = True
         control.save(update_fields=["cancel_requested"])
+
+        # Logged here as well as in the worker: the worker only speaks when
+        # the loop next checks the flag, so without this the console says
+        # nothing at the moment the stop is actually asked for.
+        logger.info(
+            "Training stop requested by %s (%s queued run(s) removed). "
+            "Any run in progress will abandon itself at its next checkpoint.",
+            getattr(request.user, "username", "unknown"),
+            dequeued,
+        )
 
         return Response(
             {
