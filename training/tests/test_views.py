@@ -13,7 +13,7 @@ from rest_framework.test import APIClient, APITestCase, override_settings
 
 from cases.models import Case, Document
 
-from ..models import Model, TrainingDocument, TrainingRun
+from ..models import Model, TrainingControl, TrainingDocument, TrainingRun
 from .base import NetworkBlockerMixin
 
 User = get_user_model()
@@ -374,6 +374,73 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
         response = self.client.get(reverse("training-status"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_running"])
+
+    def test_reports_a_pending_stop_request(self):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("training-status"))
+
+        self.assertTrue(response.data["stop_requested"])
+
+
+class StopTrainingViewTests(BaseTrainingAPITestCase):
+    def test_unauthenticated_access_fails(self):
+        self.assertEqual(
+            self.client.post(reverse("training-stop")).status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_regular_user_access_fails(self):
+        self.client.force_authenticate(user=self.regular_user)
+        self.assertEqual(
+            self.client.post(reverse("training-stop")).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_raises_the_stop_flag_for_a_run_already_in_progress(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(reverse("training-stop"))
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertTrue(TrainingControl.get().cancel_requested)
+
+    def test_removes_a_queued_run_so_no_worker_picks_it_up(self):
+        """
+        A run still on the broker has no process to signal, so the queue entry
+        itself has to go — otherwise stopping it just delays it.
+        """
+        from django_q.models import OrmQ
+        from django_q.signing import SignedPackage
+
+        OrmQ.objects.create(
+            key="t1",
+            payload=SignedPackage.dumps(
+                {"id": "1", "func": "training.tasks.train_model"}
+            ),
+        )
+        OrmQ.objects.create(
+            key="t2",
+            payload=SignedPackage.dumps(
+                {
+                    "id": "2",
+                    "func": "cases.tasks.process_document_and_create_redactions",
+                }
+            ),
+        )
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(reverse("training-stop"))
+
+        self.assertEqual(response.data["dequeued"], 1)
+        # The unrelated task is left alone.
+        remaining = [q.func() for q in OrmQ.objects.all()]
+        self.assertEqual(
+            remaining, ["cases.tasks.process_document_and_create_redactions"]
+        )
 
 
 class LLMPromptSettingsViewTests(BaseTrainingAPITestCase):

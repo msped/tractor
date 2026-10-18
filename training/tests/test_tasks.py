@@ -13,6 +13,7 @@ from cases.models import Document as CaseDocument
 
 from ..models import (
     Model,
+    TrainingControl,
     TrainingDocument,
     TrainingRun,
     TrainingRunCaseDoc,
@@ -548,11 +549,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         mock_nlp.pipe_names = []
         mock_build_pipeline.return_value = mock_nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = {
-            "spans_sc_p": 0.8,
-            "spans_sc_r": 0.75,
-            "spans_sc_f": 0.77,
-        }
+        mock_run_loop.return_value = (
+            {
+                "spans_sc_p": 0.8,
+                "spans_sc_r": 0.75,
+                "spans_sc_f": 0.77,
+            },
+            False,
+        )
 
         initial_model_count = Model.objects.count()
         train_model(source="redactions")
@@ -637,11 +641,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
         mock_nlp.pipe_names = []
         mock_build_pipeline.return_value = mock_nlp
         mock_prepare.return_value = [MagicMock()]
-        mock_run_loop.return_value = {
-            "spans_sc_p": 0.8,
-            "spans_sc_r": 0.75,
-            "spans_sc_f": 0.77,
-        }
+        mock_run_loop.return_value = (
+            {
+                "spans_sc_p": 0.8,
+                "spans_sc_r": 0.75,
+                "spans_sc_f": 0.77,
+            },
+            False,
+        )
 
         train_model(source="both")
 
@@ -753,11 +760,14 @@ class RunTrainingLoopTests(NetworkBlockerMixin, TestCase):
         }
 
         with tempfile.TemporaryDirectory() as output_dir:
-            result = _run_training_loop(mock_nlp, [], [], output_dir)
+            result, cancelled = _run_training_loop(
+                mock_nlp, [], [], output_dir
+            )
 
         # When best_f1==0.0, nlp.to_disk is still called after the loop
         mock_nlp.to_disk.assert_called_once()
         self.assertEqual(result.get("spans_sc_f"), 0.0)
+        self.assertFalse(cancelled)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_edge"))
@@ -826,3 +836,129 @@ class CollectTrainingDataDetailedEdgeCasesTests(NetworkBlockerMixin, TestCase):
         )
         self.assertEqual(len(train_data), 0)
         self.assertEqual(len(t_docs), 0)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_stop"))
+class TrainingStopTests(NetworkBlockerMixin, TestCase):
+    """Stopping a run must leave nothing behind and nothing registered."""
+
+    def _nlp(self):
+        nlp = MagicMock()
+        nlp.resume_training.return_value = MagicMock()
+        nlp.evaluate.return_value = {
+            "spans_sc_f": 0.5,
+            "spans_sc_p": 0.5,
+            "spans_sc_r": 0.5,
+        }
+        return nlp
+
+    def test_loop_stops_at_the_first_epoch_check(self):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+        nlp = self._nlp()
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            scores, cancelled = _run_training_loop(nlp, [], [], output_dir)
+
+        self.assertTrue(cancelled)
+        # Abandoned before any training happened at all.
+        nlp.update.assert_not_called()
+        nlp.evaluate.assert_not_called()
+        self.assertEqual(scores, {})
+
+    def test_loop_runs_normally_when_no_stop_is_requested(self):
+        nlp = self._nlp()
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            _, cancelled = _run_training_loop(nlp, [], [], output_dir)
+
+        self.assertFalse(cancelled)
+        self.assertTrue(nlp.evaluate.called)
+
+    @patch("training.tasks._run_training_loop")
+    @patch("training.tasks._prepare_examples")
+    @patch("training.tasks._build_spancat_pipeline")
+    @patch("training.tasks.collect_training_data_detailed")
+    @patch("training.tasks.Task")
+    def test_cancelled_run_registers_no_model_and_leaves_no_directory(
+        self,
+        mock_task,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
+    ):
+        mock_task.objects.filter.return_value.count.return_value = 0
+        mock_collect.return_value = (
+            [
+                (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+                for i in range(75)
+            ],
+            [],
+            [],
+        )
+        nlp = MagicMock()
+        nlp.pipe_names = []
+        mock_build_pipeline.return_value = nlp
+        mock_prepare.return_value = [MagicMock()]
+
+        created = []
+
+        def _cancel(nlp_, train, dev, output_dir):
+            # The real loop has already made the directory by this point.
+            created.append(Path(output_dir))
+            return {}, True
+
+        mock_run_loop.side_effect = _cancel
+
+        before = Model.objects.count()
+        train_model(source="redactions")
+
+        self.assertEqual(Model.objects.count(), before)
+        self.assertEqual(TrainingRun.objects.count(), 0)
+        self.assertFalse(
+            created[0].exists(), "partial model dir was left behind"
+        )
+        # Flag cleared so the next run is not killed by a stale stop.
+        self.assertFalse(TrainingControl.get().cancel_requested)
+
+    @patch("training.tasks._run_training_loop")
+    @patch("training.tasks._prepare_examples")
+    @patch("training.tasks._build_spancat_pipeline")
+    @patch("training.tasks.collect_training_data_detailed")
+    @patch("training.tasks.Task")
+    def test_a_stale_stop_flag_does_not_kill_the_next_run(
+        self,
+        mock_task,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
+    ):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+
+        mock_task.objects.filter.return_value.count.return_value = 0
+        mock_collect.return_value = (
+            [
+                (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+                for i in range(75)
+            ],
+            [],
+            [],
+        )
+        nlp = MagicMock()
+        nlp.pipe_names = []
+        mock_build_pipeline.return_value = nlp
+        mock_prepare.return_value = [MagicMock()]
+        mock_run_loop.return_value = (
+            {"spans_sc_p": 0.9, "spans_sc_r": 0.9, "spans_sc_f": 0.9},
+            False,
+        )
+
+        train_model(source="redactions")
+
+        self.assertFalse(TrainingControl.get().cancel_requested)
+        self.assertEqual(Model.objects.count(), 1)
