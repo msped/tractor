@@ -141,17 +141,21 @@ def _build_spancat_pipeline():
     # and summaries these reports are full of — which capped achievable
     # recall at 0.938 however good the model became.
     #
-    # 64 covers 99.68% of annotated spans. It is also the last size measured
-    # still in the linear cost regime (3.4x the suggester work of 20, against
-    # 3.1x predicted); 130 tokens would reach 100% but costs 8.8x, going
-    # superlinear for the final 0.3%. Raising this worsens the
-    # negative-to-positive candidate ratio ~3.4x, and this model has failed
-    # on class imbalance before, so compare P/R/F1 against the previous run
-    # rather than assuming an increase helps.
+    # 40 covers 98.81% of annotated spans, lifting the recall ceiling from
+    # 0.938 to 0.988 for roughly twice the suggester work.
+    #
+    # 64 was tried first and abandoned: it covers more (99.68%) and the time
+    # cost looked acceptable, but in practice the run reached ~18GB resident
+    # and the machine began swapping, which made it far slower than the 3.4x
+    # the timings predicted. Memory, not time, is the binding constraint here.
+    # Raising this also worsens the negative-to-positive candidate ratio — ~2x
+    # at 40 — and this model has failed on class imbalance before, so compare
+    # P/R/F1 against the previous run rather than assuming more coverage is
+    # better. Headroom above 40 exists (48 covers 99.01%) if memory allows.
     spancat_config = {
         "suggester": {
             "@misc": "spacy.ngram_suggester.v1",
-            "sizes": list(range(1, 65)),
+            "sizes": list(range(1, 41)),
         },
         "model": {
             "@architectures": "spacy.SpanCategorizer.v1",
