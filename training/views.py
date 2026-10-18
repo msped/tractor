@@ -18,6 +18,7 @@ from .models import (
     CustomRecognizer,
     LLMPromptSettings,
     Model,
+    TrainingControl,
     TrainingDocument,
     TrainingRun,
 )
@@ -287,4 +288,53 @@ class TrainingStatusView(APIView):
             q.func() == "training.tasks.train_model"
             for q in OrmQ.objects.all()
         )
-        return Response({"is_running": running})
+        return Response(
+            {
+                "is_running": running,
+                "stop_requested": TrainingControl.get().cancel_requested,
+            }
+        )
+
+
+class StopTrainingView(APIView):
+    """Ask an in-progress or queued training run to stop.
+
+    Two cases, both covered:
+
+    * **Queued but not started** — the broker entry is removed, so no worker
+      ever picks it up.
+    * **Already running** — the stop flag is raised and the training loop
+      unwinds at its next checkpoint, within seconds rather than at the end
+      of an epoch. It discards its half-trained model directory on the way
+      out; killing the worker instead would leave that behind, which is
+      where the orphaned model directories come from.
+
+    The currently active model is never touched, so stopping is always safe:
+    it leaves the system exactly as it was before the run began.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from django_q.models import OrmQ
+
+        queued = [
+            q
+            for q in OrmQ.objects.all()
+            if q.func() == "training.tasks.train_model"
+        ]
+        dequeued = len(queued)
+        if dequeued:
+            OrmQ.objects.filter(pk__in=[q.pk for q in queued]).delete()
+
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save(update_fields=["cancel_requested"])
+
+        return Response(
+            {
+                "status": "stop requested",
+                "dequeued": dequeued,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

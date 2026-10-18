@@ -130,11 +130,28 @@ def _build_spancat_pipeline():
     # Get tok2vec output width dynamically
     tok2vec_width = nlp.get_pipe("tok2vec").model.get_dim("nO")
 
-    # Configure spancat with ngram suggester and tok2vec listener
+    # Configure spancat with ngram suggester and tok2vec listener.
+    #
+    # The suggester's maximum size is a hard ceiling on what the model can
+    # ever predict: a gold span longer than this is never proposed as a
+    # candidate, so it cannot be scored, cannot be learned, and counts as a
+    # false negative at evaluation. At the previous ceiling of 20 tokens,
+    # 6.2% of the 18,561 annotation spans in the training corpus were
+    # unreachable — almost all OPERATIONAL, the long free-text log entries
+    # and summaries these reports are full of — which capped achievable
+    # recall at 0.938 however good the model became.
+    #
+    # 64 covers 99.68% of annotated spans. It is also the last size measured
+    # still in the linear cost regime (3.4x the suggester work of 20, against
+    # 3.1x predicted); 130 tokens would reach 100% but costs 8.8x, going
+    # superlinear for the final 0.3%. Raising this worsens the
+    # negative-to-positive candidate ratio ~3.4x, and this model has failed
+    # on class imbalance before, so compare P/R/F1 against the previous run
+    # rather than assuming an increase helps.
     spancat_config = {
         "suggester": {
             "@misc": "spacy.ngram_suggester.v1",
-            "sizes": list(range(1, 21)),
+            "sizes": list(range(1, 65)),
         },
         "model": {
             "@architectures": "spacy.SpanCategorizer.v1",
@@ -192,23 +209,49 @@ def _prepare_examples(nlp, train_data):
     return examples
 
 
+def _stop_requested():
+    """Whether someone has asked this run to stop (see TrainingControl)."""
+    from .models import TrainingControl
+
+    return TrainingControl.objects.filter(pk=1, cancel_requested=True).exists()
+
+
 def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
-    """Train the SpanCat model for a fixed number of iterations with early stopping."""
+    """Train the SpanCat model for a fixed number of iterations with early stopping.
+
+    Returns (best_scores, cancelled). On cancellation the caller discards the
+    output directory — a partially trained model is not worth keeping, and
+    leaving it would register a model nobody chose to make.
+    """
     max_epochs = 15
     patience = 3
     best_f1 = 0.0
     epochs_without_improvement = 0
     best_scores = {}
+    # A run can last hours, so waiting for an epoch boundary to notice a stop
+    # request is too coarse. Polled mid-epoch as well; one small query every
+    # few seconds is nothing against the cost of a batch.
+    check_every = 25
 
     optimizer = nlp.resume_training()
     optimizer.learn_rate = 0.001
 
     for epoch in range(max_epochs):
+        if _stop_requested():
+            print(f"Stop requested — abandoning run at epoch {epoch + 1}.")
+            return best_scores, True
+
         random.shuffle(train_examples)
         losses = {}
 
         batches = minibatch(train_examples, size=compounding(4.0, 32.0, 1.001))
-        for batch in batches:
+        for i, batch in enumerate(batches):
+            if i and i % check_every == 0 and _stop_requested():
+                print(
+                    f"Stop requested — abandoning run during epoch "
+                    f"{epoch + 1}."
+                )
+                return best_scores, True
             nlp.update(batch, sgd=optimizer, drop=0.2, losses=losses)
 
         # Evaluate on dev set
@@ -242,7 +285,7 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
         nlp.to_disk(output_dir)
         best_scores = scores
 
-    return best_scores
+    return best_scores, False
 
 
 def train_model(source="redactions", user=None):
@@ -266,6 +309,15 @@ def train_model(source="redactions", user=None):
             f"Not enough training data ({len(train_data)} examples). Aborting."
         )
         return
+
+    # Clear any stop left over from a previous run, so a stale flag cannot
+    # kill this one before it starts.
+    from .models import TrainingControl
+
+    control = TrainingControl.get()
+    if control.cancel_requested:
+        control.cancel_requested = False
+        control.save(update_fields=["cancel_requested"])
 
     # Prepare output dir
     model_name = f"model_{source}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
@@ -292,7 +344,7 @@ def train_model(source="redactions", user=None):
         dev_examples = all_examples[split_point:]
 
         # Train and save best model
-        best_scores = _run_training_loop(
+        best_scores, cancelled = _run_training_loop(
             nlp, train_examples, dev_examples, output_dir
         )
 
@@ -300,6 +352,16 @@ def train_model(source="redactions", user=None):
         if output_dir.exists():
             shutil.rmtree(output_dir)
         raise
+
+    if cancelled:
+        # Discard the partial model rather than registering something nobody
+        # asked for. The previously active model is untouched throughout.
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        control.cancel_requested = False
+        control.save(update_fields=["cancel_requested"])
+        print("Training stopped on request. No model was registered.")
+        return
 
     # Register in DB
     new_model = Model.objects.create(
