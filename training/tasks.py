@@ -179,13 +179,46 @@ def _build_spancat_pipeline():
     return nlp
 
 
+class TrainingStopped(Exception):
+    """Raised from anywhere in a run once a stop has been requested.
+
+    An exception rather than a return value because a run has several long
+    phases — reading documents, aligning annotations, then the epoch loop —
+    and every one of them needs to be interruptible. Threading a flag back
+    through each would mean every caller remembering to check it; raising
+    puts the cleanup in one place.
+    """
+
+
+def _stop_requested():
+    """Whether someone has asked this run to stop (see TrainingControl)."""
+    from .models import TrainingControl
+
+    return TrainingControl.objects.filter(pk=1, cancel_requested=True).exists()
+
+
+def _abort_if_stopped(stage):
+    """Give up the run if a stop has been asked for by the time *stage* begins."""
+    if _stop_requested():
+        raise TrainingStopped(stage)
+
+
 def _prepare_examples(nlp, train_data):
-    """Convert (text, annotations) tuples into spaCy Example objects for training."""
+    """Convert (text, annotations) tuples into spaCy Example objects for training.
+
+    Raises TrainingStopped if a stop is requested partway. This phase builds a
+    Doc per document and is slow and memory-hungry on a large corpus, so it
+    has to be interruptible — a stop that only took effect once epoch 1 began
+    would appear to do nothing for the longest part of a run.
+    """
     examples = []
     total_entities = 0
     dropped_entities = 0
 
-    for text, annotations in train_data:
+    for index, (text, annotations) in enumerate(train_data):
+        if index and index % 10 == 0:
+            _abort_if_stopped(f"while preparing example {index}")
+
         doc = nlp.make_doc(text)
         ref = doc.copy()
         spans = []
@@ -209,49 +242,35 @@ def _prepare_examples(nlp, train_data):
     return examples
 
 
-def _stop_requested():
-    """Whether someone has asked this run to stop (see TrainingControl)."""
-    from .models import TrainingControl
-
-    return TrainingControl.objects.filter(pk=1, cancel_requested=True).exists()
-
-
 def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
     """Train the SpanCat model for a fixed number of iterations with early stopping.
 
-    Returns (best_scores, cancelled). On cancellation the caller discards the
-    output directory — a partially trained model is not worth keeping, and
-    leaving it would register a model nobody chose to make.
+    Raises TrainingStopped if a stop is requested; the caller discards the
+    output directory, since a half-trained model is not worth keeping and
+    registering one nobody chose to make would be worse.
     """
     max_epochs = 15
     patience = 3
     best_f1 = 0.0
     epochs_without_improvement = 0
     best_scores = {}
-    # A run can last hours, so waiting for an epoch boundary to notice a stop
-    # request is too coarse. Polled mid-epoch as well; one small query every
-    # few seconds is nothing against the cost of a batch.
-    check_every = 25
 
     optimizer = nlp.resume_training()
     optimizer.learn_rate = 0.001
 
     for epoch in range(max_epochs):
-        if _stop_requested():
-            print(f"Stop requested — abandoning run at epoch {epoch + 1}.")
-            return best_scores, True
+        _abort_if_stopped(f"at the start of epoch {epoch + 1}")
 
         random.shuffle(train_examples)
         losses = {}
 
         batches = minibatch(train_examples, size=compounding(4.0, 32.0, 1.001))
-        for i, batch in enumerate(batches):
-            if i and i % check_every == 0 and _stop_requested():
-                print(
-                    f"Stop requested — abandoning run during epoch "
-                    f"{epoch + 1}."
-                )
-                return best_scores, True
+        for batch in batches:
+            # Checked before every batch, not every nth. A batch can take a
+            # long time at a high suggester ceiling, so an interval measured
+            # in batches is an unpredictable interval in seconds; one tiny
+            # query per batch is nothing beside the batch itself.
+            _abort_if_stopped(f"during epoch {epoch + 1}")
             nlp.update(batch, sgd=optimizer, drop=0.2, losses=losses)
 
         # Evaluate on dev set
@@ -285,7 +304,7 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
         nlp.to_disk(output_dir)
         best_scores = scores
 
-    return best_scores, False
+    return best_scores
 
 
 def train_model(source="redactions", user=None):
@@ -300,6 +319,16 @@ def train_model(source="redactions", user=None):
         print("Another training task is already in progress. Aborting.")
         return
 
+    # Clear any stop left over from a previous run, so a stale flag cannot
+    # kill this one before it starts. Done before reading documents, since
+    # that is itself slow enough to be worth interrupting.
+    from .models import TrainingControl
+
+    control = TrainingControl.get()
+    if control.cancel_requested:
+        control.cancel_requested = False
+        control.save(update_fields=["cancel_requested"])
+
     train_data, used_training_docs, used_case_docs = (
         collect_training_data_detailed(source)
     )
@@ -310,14 +339,12 @@ def train_model(source="redactions", user=None):
         )
         return
 
-    # Clear any stop left over from a previous run, so a stale flag cannot
-    # kill this one before it starts.
-    from .models import TrainingControl
-
-    control = TrainingControl.get()
-    if control.cancel_requested:
+    if _stop_requested():
+        # Nothing has been created yet, so there is nothing to clean up.
         control.cancel_requested = False
         control.save(update_fields=["cancel_requested"])
+        print("Training stopped on request before it began.")
+        return
 
     # Prepare output dir
     model_name = f"model_{source}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
@@ -332,9 +359,11 @@ def train_model(source="redactions", user=None):
         def get_examples():
             return _prepare_examples(nlp, train_data[:10])
 
+        _abort_if_stopped("before initialising the pipeline")
         nlp.initialize(get_examples)
 
         # Prepare all examples
+        _abort_if_stopped("before preparing examples")
         all_examples = _prepare_examples(nlp, train_data)
 
         # Split 80/20 train/dev
@@ -344,24 +373,26 @@ def train_model(source="redactions", user=None):
         dev_examples = all_examples[split_point:]
 
         # Train and save best model
-        best_scores, cancelled = _run_training_loop(
+        best_scores = _run_training_loop(
             nlp, train_examples, dev_examples, output_dir
         )
 
-    except Exception:
-        if output_dir.exists():
-            shutil.rmtree(output_dir)
-        raise
-
-    if cancelled:
+    except TrainingStopped as stop:
         # Discard the partial model rather than registering something nobody
         # asked for. The previously active model is untouched throughout.
         if output_dir.exists():
             shutil.rmtree(output_dir)
         control.cancel_requested = False
         control.save(update_fields=["cancel_requested"])
-        print("Training stopped on request. No model was registered.")
+        print(
+            f"Training stopped on request ({stop}). No model was registered."
+        )
         return
+
+    except Exception:
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        raise
 
     # Register in DB
     new_model = Model.objects.create(
