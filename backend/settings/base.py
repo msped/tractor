@@ -236,8 +236,24 @@ if AUTO_CASE_DELETION_ENABLED:
 Q_CLUSTER = {
     "name": "DjangORM",
     "workers": 4,
+    # `timeout` is the default a worker may spend on a task and CAN be raised
+    # per task (model training enqueues itself with timeout=7200). `retry` is
+    # cluster-wide and cannot, so it has to exceed the longest per-task
+    # timeout in the codebase — otherwise the broker re-delivers a task that
+    # is still legitimately running, a second worker starts it from scratch,
+    # and it repeats every `retry` seconds forever. Training is the only task
+    # long enough to hit this: at 2100 it could never exceed 35 minutes, and
+    # ran in an endless restart loop when it tried.
+    #
+    # train_model's own "is one already running?" guard does not catch this —
+    # django-q writes Task rows on completion, so mid-run there is no row for
+    # it to see.
     "timeout": 1800,
-    "retry": 2100,
+    "retry": 7500,
+    # A task that failed is acknowledged rather than put back on the queue.
+    # Without this a genuinely broken long task retries indefinitely.
+    "ack_failure": True,
+    "max_attempts": 2,
     "queue_limit": 50,
     "bulk": 10,
     "orm": "default",
