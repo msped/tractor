@@ -20,6 +20,38 @@ class SingletonModel(models.Model):
         return obj
 
 
+class TrainingControl(SingletonModel):
+    """
+    Out-of-band stop signal for a training run.
+
+    Training happens in a forked django-q worker, inside a loop that can run
+    for hours. There is no way to reach into that process and ask it to
+    stop, and killing it is destructive: ``train_model`` removes its
+    half-written model directory in an ``except`` block, which a killed
+    process never reaches, so every force-kill leaves hundreds of megabytes
+    of orphaned output behind.
+
+    So the run asks instead. This flag is set by the stop endpoint and polled
+    by the training loop, which then unwinds normally — cleaning up after
+    itself and leaving the previously active model untouched.
+    """
+
+    cancel_requested = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set to ask an in-progress training run to stop at its next "
+            "checkpoint. Cleared when a run starts."
+        ),
+    )
+
+    def __str__(self):
+        return (
+            "Training stop requested"
+            if self.cancel_requested
+            else "Training not interrupted"
+        )
+
+
 class Model(models.Model):
     """
     Represents a trained SpanCat model version.
