@@ -408,6 +408,21 @@ class StopTrainingViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertTrue(TrainingControl.get().cancel_requested)
 
+    def test_the_request_is_logged_when_it_is_made(self):
+        """
+        The worker only speaks when its loop next checks the flag, so the
+        console would otherwise be silent at the moment of the request.
+        """
+        self.client.force_authenticate(user=self.admin_user)
+
+        with self.assertLogs("training.views", level="INFO") as logs:
+            self.client.post(reverse("training-stop"))
+
+        self.assertTrue(
+            any("Training stop requested by admin" in m for m in logs.output),
+            logs.output,
+        )
+
     def test_removes_a_queued_run_so_no_worker_picks_it_up(self):
         """
         A run still on the broker has no process to signal, so the queue entry
