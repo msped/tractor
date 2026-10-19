@@ -985,3 +985,21 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
 
         self.assertFalse(TrainingControl.get().cancel_requested)
         self.assertEqual(Model.objects.count(), 1)
+
+
+class SuggesterCeilingTests(NetworkBlockerMixin, TestCase):
+    """The ceiling is configurable because it has to be sized to the host."""
+
+    def _sizes(self, nlp):
+        return nlp.get_pipe("spancat").suggester.keywords["sizes"]
+
+    def test_defaults_to_the_configured_ceiling(self):
+        with override_settings(SPANCAT_MAX_SPAN_TOKENS=40):
+            nlp = _build_spancat_pipeline()
+        self.assertEqual(max(self._sizes(nlp)), 40)
+        self.assertEqual(min(self._sizes(nlp)), 1)
+
+    def test_honours_an_overridden_ceiling(self):
+        with override_settings(SPANCAT_MAX_SPAN_TOKENS=12):
+            nlp = _build_spancat_pipeline()
+        self.assertEqual(max(self._sizes(nlp)), 12)
