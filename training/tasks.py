@@ -207,8 +207,64 @@ def _abort_if_stopped(stage):
         raise TrainingStopped(stage)
 
 
-def _prepare_examples(nlp, train_data):
+# Tokens ending in one of these close a clause or sentence, and so make a
+# natural place to divide an over-long annotation. Semicolons matter as much
+# as full stops here: this material is written as semicolon-delimited lists
+# ("description provided; CCTV suggestions logged") at least as often as prose.
+_BOUNDARY_SUFFIXES = (".", ";", "!", "?")
+
+
+def _split_long_span(span, label, max_tokens):
+    """
+    Divide *span* into consecutive pieces of at most *max_tokens* tokens.
+
+    An annotation longer than the suggester's ceiling can never be proposed as
+    a candidate, so it teaches the model nothing and counts against recall at
+    evaluation. Splitting it makes the material learnable: the pieces are
+    predicted separately and the existing adjacent-span merging rejoins them
+    for the reviewer.
+
+    Pieces end at a clause or sentence boundary wherever one falls inside the
+    window, and are cut at the ceiling where none does. An imperfect boundary
+    is cheap here — the pieces still cover exactly the same text between them,
+    and the only cost is that the model learns a slightly odd division.
+    """
+    pieces = []
+    start = 0
+    while start < len(span):
+        window_end = min(start + max_tokens, len(span))
+
+        split_at = window_end
+        if window_end < len(span):
+            # Prefer the last boundary inside the window; never split so early
+            # that a piece is mostly empty.
+            for i in range(window_end - 1, start, -1):
+                if span[i].text.endswith(_BOUNDARY_SUFFIXES):
+                    split_at = i + 1
+                    break
+
+        piece = span[start:split_at]
+        if len(piece) == 0:  # pragma: no cover - guards against a stuck loop
+            break
+        pieces.append(
+            piece.doc.char_span(
+                piece.start_char,
+                piece.end_char,
+                label=label,
+                alignment_mode="contract",
+            )
+        )
+        start = split_at
+
+    return [p for p in pieces if p is not None]
+
+
+def _prepare_examples(nlp, train_data, max_tokens=None):
     """Convert (text, annotations) tuples into spaCy Example objects for training.
+
+    Annotations longer than *max_tokens* are divided at clause boundaries
+    rather than left whole, since the suggester would never propose them.
+    Pass None to leave them intact.
 
     Raises TrainingStopped if a stop is requested partway. This phase builds a
     Doc per document and is slow and memory-hungry on a large corpus, so it
@@ -218,6 +274,8 @@ def _prepare_examples(nlp, train_data):
     examples = []
     total_entities = 0
     dropped_entities = 0
+    split_entities = 0
+    pieces_made = 0
 
     for index, (text, annotations) in enumerate(train_data):
         if index and index % 10 == 0:
@@ -231,16 +289,31 @@ def _prepare_examples(nlp, train_data):
             span = ref.char_span(
                 start, end, label=label, alignment_mode="contract"
             )
-            if span:
-                spans.append(span)
-            else:
+            if not span:
                 dropped_entities += 1
+                continue
+
+            if max_tokens and len(span) > max_tokens:
+                pieces = _split_long_span(span, label, max_tokens)
+                if pieces:
+                    split_entities += 1
+                    pieces_made += len(pieces)
+                    spans.extend(pieces)
+                    continue
+
+            spans.append(span)
         ref.spans["sc"] = spans
         examples.append(Example(doc, ref))
 
     if total_entities > 0:
         print(
             f"Entity alignment: {total_entities - dropped_entities}/{total_entities} kept, {dropped_entities} dropped"
+        )
+    if split_entities:
+        print(
+            f"Long annotations divided at clause boundaries: "
+            f"{split_entities} spans over {max_tokens} tokens became "
+            f"{pieces_made} learnable pieces"
         )
 
     return examples
@@ -355,20 +428,24 @@ def train_model(source="redactions", user=None):
     output_dir = Path(settings.BASE_DIR, "nlp_models", model_name)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Annotations are divided to fit the same ceiling the suggester uses, so
+    # nothing in the training data is unreachable by construction.
+    max_tokens = getattr(settings, "SPANCAT_MAX_SPAN_TOKENS", 40)
+
     try:
         # Build SpanCat pipeline (always from en_core_web_lg for transfer learning)
         nlp = _build_spancat_pipeline()
 
         # Initialize the pipeline with example data
         def get_examples():
-            return _prepare_examples(nlp, train_data[:10])
+            return _prepare_examples(nlp, train_data[:10], max_tokens)
 
         _abort_if_stopped("before initialising the pipeline")
         nlp.initialize(get_examples)
 
         # Prepare all examples
         _abort_if_stopped("before preparing examples")
-        all_examples = _prepare_examples(nlp, train_data)
+        all_examples = _prepare_examples(nlp, train_data, max_tokens)
 
         # Split 80/20 train/dev
         random.shuffle(all_examples)
