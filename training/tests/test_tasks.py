@@ -1003,3 +1003,86 @@ class SuggesterCeilingTests(NetworkBlockerMixin, TestCase):
         with override_settings(SPANCAT_MAX_SPAN_TOKENS=12):
             nlp = _build_spancat_pipeline()
         self.assertEqual(max(self._sizes(nlp)), 12)
+
+
+class SplitLongAnnotationTests(NetworkBlockerMixin, TestCase):
+    """
+    Annotations longer than the suggester ceiling are unreachable: never
+    proposed, never learned, and counted against recall. Dividing them at
+    clause boundaries makes the material learnable.
+    """
+
+    def setUp(self):
+        import spacy
+
+        self.nlp = spacy.blank("en")
+
+    def _spans(self, text, entities, max_tokens):
+        examples = _prepare_examples(
+            self.nlp, [(text, {"entities": entities})], max_tokens
+        )
+        return list(examples[0].reference.spans["sc"])
+
+    def test_a_short_annotation_is_left_alone(self):
+        text = "Attended LYMM; scene secured."
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 40)
+
+        self.assertEqual(len(spans), 1)
+        self.assertEqual(spans[0].text, text)
+
+    def test_a_long_annotation_is_divided(self):
+        text = (
+            "Custody interview conducted with the suspect. "
+            "Suspect asked to account for movements and intent. "
+            "Evidential points put: CCTV time-stamps and witness accounts. "
+            "Suspect provided a prepared statement and said no comment."
+        )
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 10)
+
+        self.assertGreater(len(spans), 1)
+        self.assertTrue(
+            all(len(s) <= 10 for s in spans), [len(s) for s in spans]
+        )
+        self.assertTrue(all(s.label_ == "OPERATIONAL" for s in spans))
+
+    def test_the_pieces_still_cover_the_whole_annotation(self):
+        """Dividing must not lose material — that would under-redact."""
+        text = (
+            "Circumstances recorded; description provided; CCTV logged. "
+            "Further enquiries completed; statements indexed; exhibits stored."
+        )
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 8)
+
+        self.assertEqual(spans[0].start_char, 0)
+        self.assertEqual(spans[-1].end_char, len(text.rstrip()))
+        # Consecutive, with no gap bigger than the separator between them.
+        for earlier, later in zip(spans, spans[1:], strict=False):
+            self.assertLessEqual(later.start_char - earlier.end_char, 2)
+
+    def test_pieces_prefer_clause_boundaries(self):
+        text = (
+            "Attended the scene; accounts obtained; BWV bookmarked. "
+            "CCTV enquiries made; continuity recorded; stills circulated."
+        )
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 12)
+
+        # Every piece but the last should finish on a boundary character.
+        for span in spans[:-1]:
+            self.assertTrue(
+                span.text.rstrip().endswith((".", ";", "!", "?")),
+                f"piece did not end at a boundary: {span.text!r}",
+            )
+
+    def test_text_with_no_boundaries_is_still_divided(self):
+        """A wall of words with no punctuation must not defeat the split."""
+        text = " ".join(f"word{i}" for i in range(60))
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 10)
+
+        self.assertEqual(len(spans), 6)
+        self.assertTrue(all(len(s) <= 10 for s in spans))
+
+    def test_splitting_is_off_when_no_ceiling_is_given(self):
+        text = " ".join(f"word{i}" for i in range(60))
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], None)
+
+        self.assertEqual(len(spans), 1)
