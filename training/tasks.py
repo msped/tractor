@@ -141,21 +141,21 @@ def _build_spancat_pipeline():
     # and summaries these reports are full of — which capped achievable
     # recall at 0.938 however good the model became.
     #
-    # 40 covers 98.81% of annotated spans, lifting the recall ceiling from
-    # 0.938 to 0.988 for roughly twice the suggester work.
+    # Span length beyond SPANCAT_MAX_SPAN_TOKENS is unreachable: the suggester
+    # never proposes a longer candidate, so the model cannot score it, cannot
+    # learn it, and it counts as a false negative at evaluation.
     #
-    # 64 was tried first and abandoned: it covers more (99.68%) and the time
-    # cost looked acceptable, but in practice the run reached ~18GB resident
-    # and the machine began swapping, which made it far slower than the 3.4x
-    # the timings predicted. Memory, not time, is the binding constraint here.
-    # Raising this also worsens the negative-to-positive candidate ratio — ~2x
-    # at 40 — and this model has failed on class imbalance before, so compare
-    # P/R/F1 against the previous run rather than assuming more coverage is
-    # better. Headroom above 40 exists (48 covers 99.01%) if memory allows.
+    # At the default of 40 that leaves ~1.2% of this corpus's annotations
+    # unreachable, almost all of them long free-text log entries. Raising it
+    # costs roughly linear extra time but grows peak memory considerably
+    # faster, and worsens the negative-to-positive candidate ratio — this
+    # model has failed on class imbalance before, so compare P/R/F1 against
+    # the previous run rather than assuming more coverage is better.
+    max_span_tokens = getattr(settings, "SPANCAT_MAX_SPAN_TOKENS", 40)
     spancat_config = {
         "suggester": {
             "@misc": "spacy.ngram_suggester.v1",
-            "sizes": list(range(1, 41)),
+            "sizes": list(range(1, max_span_tokens + 1)),
         },
         "model": {
             "@architectures": "spacy.SpanCategorizer.v1",

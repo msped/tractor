@@ -216,6 +216,14 @@ AUTO_CASE_DELETION_ENABLED = os.environ.get(
 ).lower() in ("true", "1", "yes")
 RETENTION_WARNING_DAYS = int(os.environ.get("RETENTION_WARNING_DAYS", 30))
 
+# Longest span, in tokens, that the SpanCat ngram suggester will propose — and
+# therefore the longest span the model can learn or predict. Raising it costs
+# roughly linear extra time per document and grows peak memory considerably
+# faster, so size it to the training host; lowering it silently makes longer
+# annotations unlearnable. Takes effect on the next training run, not on an
+# existing model, whose ceiling is fixed in its own config.
+SPANCAT_MAX_SPAN_TOKENS = int(os.environ.get("SPANCAT_MAX_SPAN_TOKENS", 40))
+
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED", "False").lower() in (
