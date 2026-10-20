@@ -1,10 +1,13 @@
+import os
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from docx import Document as DocxDocument
 from docx.enum.text import WD_COLOR_INDEX
 
@@ -506,18 +509,41 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     def tearDownClass(cls):
         super().tearDownClass()
 
-    @patch("training.tasks.Task")
-    def test_train_model_aborts_if_another_running(self, mock_task):
-        """train_model() aborts if another task is already in progress."""
-        mock_task.objects.filter.return_value.count.return_value = 1
+    def test_train_model_aborts_if_another_running(self):
+        """
+        A second run would double the machine's load for no benefit. The
+        guard is the live run's own heartbeat — the old one consulted
+        django-q Task rows, which only exist once a task has finished, so it
+        never saw a run in progress and never stopped anything.
+        """
+        control = TrainingControl.get()
+        control.started_at = timezone.now()
+        control.heartbeat_at = timezone.now()
+        control.pid = 4242
+        control.save()
 
-        result = train_model(source="both")
-        self.assertIsNone(result)
+        with patch("training.tasks.collect_training_data_detailed") as collect:
+            train_model(source="both")
 
-    @patch("training.tasks.Task")
-    def test_train_model_aborts_with_insufficient_data(self, mock_task):
+        collect.assert_not_called()
+
+    def test_train_model_replaces_an_abandoned_run(self):
+        """A run killed outright leaves its marker behind; a stale heartbeat
+        must not block the next attempt forever."""
+        control = TrainingControl.get()
+        control.started_at = timezone.now() - timedelta(hours=4)
+        control.heartbeat_at = timezone.now() - timedelta(hours=4)
+        control.pid = 4242
+        control.save()
+
+        with patch("training.tasks.collect_training_data_detailed") as collect:
+            collect.return_value = ([], [], [])
+            train_model(source="both")
+
+        collect.assert_called_once()
+
+    def test_train_model_aborts_with_insufficient_data(self):
         """train_model() aborts if fewer than 75 training examples exist."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         initial_model_count = Model.objects.count()
         train_model(source="both")
@@ -527,17 +553,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_train_model_creates_spancat_model(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
         """train_model() creates a Model with model_type=SPANCAT and a TrainingRun."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         # Provide enough fake training data (>=75 entries)
         fake_data = [
@@ -574,17 +597,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_train_model_cleans_up_on_exception(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
         """train_model() removes the output directory if training raises an exception."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         fake_data = [
             (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
@@ -605,17 +625,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_train_model_records_training_and_case_docs(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
         """train_model() creates TrainingRunTrainingDoc and TrainingRunCaseDoc for used docs."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         case = Case.objects.create(case_reference="TRACK1")
         case_doc = CaseDocument.objects.create(
@@ -902,16 +919,13 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_cancelled_run_registers_no_model_and_leaves_no_directory(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
-        mock_task.objects.filter.return_value.count.return_value = 0
         mock_collect.return_value = (
             [
                 (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
@@ -949,10 +963,8 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_a_stale_stop_flag_does_not_kill_the_next_run(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
@@ -962,7 +974,6 @@ class TrainingStopTests(NetworkBlockerMixin, TestCase):
         control.cancel_requested = True
         control.save()
 
-        mock_task.objects.filter.return_value.count.return_value = 0
         mock_collect.return_value = (
             [
                 (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
@@ -1086,3 +1097,74 @@ class SplitLongAnnotationTests(NetworkBlockerMixin, TestCase):
         spans = self._spans(text, [(0, len(text), "OPERATIONAL")], None)
 
         self.assertEqual(len(spans), 1)
+
+
+class TrainingHeartbeatTests(NetworkBlockerMixin, TestCase):
+    """
+    A run has to say it is alive. Inferring it from the task queue was wrong
+    in the way that mattered: when django-q reaped a task at its timeout the
+    queue entry vanished while the process kept training, so the UI showed
+    nothing running and the Stop button was never offered.
+    """
+
+    def test_a_fresh_heartbeat_means_running(self):
+        control = TrainingControl.get()
+        control.heartbeat_at = timezone.now()
+        control.save()
+
+        self.assertTrue(TrainingControl.get().is_running)
+        self.assertFalse(TrainingControl.get().is_stale)
+
+    def test_an_old_heartbeat_means_abandoned_not_running(self):
+        control = TrainingControl.get()
+        control.started_at = timezone.now() - timedelta(hours=3)
+        control.heartbeat_at = timezone.now() - timedelta(hours=3)
+        control.pid = 999
+        control.save()
+
+        fresh = TrainingControl.get()
+        self.assertFalse(fresh.is_running)
+        self.assertTrue(fresh.is_stale)
+
+    def test_no_heartbeat_at_all_means_idle(self):
+        fresh = TrainingControl.get()
+        self.assertFalse(fresh.is_running)
+        self.assertFalse(fresh.is_stale)
+
+    @patch("training.tasks._train_model_inner")
+    def test_a_run_claims_and_releases_the_slot(self, inner):
+        seen = {}
+
+        def _record(source):
+            control = TrainingControl.get()
+            seen["running"] = control.is_running
+            seen["pid"] = control.pid
+
+        inner.side_effect = _record
+        train_model(source="training_docs")
+
+        self.assertTrue(seen["running"], "run was not visible while running")
+        self.assertEqual(seen["pid"], os.getpid())
+        # Released afterwards, so the next run is not blocked.
+        self.assertFalse(TrainingControl.get().is_running)
+        self.assertIsNone(TrainingControl.get().pid)
+
+    @patch("training.tasks._train_model_inner")
+    def test_the_slot_is_released_even_when_training_raises(self, inner):
+        inner.side_effect = RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            train_model(source="training_docs")
+
+        self.assertFalse(TrainingControl.get().is_running)
+        self.assertIsNone(TrainingControl.get().started_at)
+
+    @patch("training.tasks._train_model_inner")
+    def test_claiming_clears_a_stale_stop_request(self, inner):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+
+        train_model(source="training_docs")
+
+        self.assertFalse(TrainingControl.get().cancel_requested)

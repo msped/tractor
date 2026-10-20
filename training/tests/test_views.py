@@ -2,11 +2,13 @@ import io
 import shutil
 import tempfile
 import zipfile
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from django_q.models import Schedule
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase, override_settings
@@ -374,6 +376,37 @@ class TrainingStatusViewTests(BaseTrainingAPITestCase):
         response = self.client.get(reverse("training-status"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_running"])
+
+    def test_a_run_is_reported_from_its_heartbeat_not_the_queue(self):
+        """
+        The queue empties when django-q reaps a task at its timeout, while
+        the process carries on training — which is exactly when the reviewer
+        most needs the banner and the Stop button.
+        """
+        control = TrainingControl.get()
+        control.started_at = timezone.now()
+        control.heartbeat_at = timezone.now()
+        control.pid = 321
+        control.save()
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("training-status"))
+
+        self.assertTrue(response.data["is_running"])
+        self.assertFalse(response.data["is_stale"])
+
+    def test_an_abandoned_run_is_reported_as_stale_not_running(self):
+        control = TrainingControl.get()
+        control.started_at = timezone.now() - timedelta(hours=3)
+        control.heartbeat_at = timezone.now() - timedelta(hours=3)
+        control.pid = 321
+        control.save()
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("training-status"))
+
+        self.assertFalse(response.data["is_running"])
+        self.assertTrue(response.data["is_stale"])
 
     def test_reports_a_pending_stop_request(self):
         control = TrainingControl.get()
