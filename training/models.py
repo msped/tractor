@@ -1,7 +1,9 @@
 import uuid
+from datetime import timedelta
 
 from auditlog.registry import auditlog
 from django.db import models
+from django.utils import timezone
 
 
 class SingletonModel(models.Model):
@@ -22,19 +24,36 @@ class SingletonModel(models.Model):
 
 class TrainingControl(SingletonModel):
     """
-    Out-of-band stop signal for a training run.
+    What the system knows about a training run: whether one is going, and
+    whether it has been asked to stop.
 
-    Training happens in a forked django-q worker, inside a loop that can run
-    for hours. There is no way to reach into that process and ask it to
-    stop, and killing it is destructive: ``train_model`` removes its
-    half-written model directory in an ``except`` block, which a killed
+    Training can run for hours in a process nothing else owns. Both facts
+    below are kept here, in the database, because that is the only thing
+    every participant can see — the web process, the worker, a run started
+    from a management command on another machine.
+
+    **The stop signal.** There is no way to reach into a running process and
+    ask it to stop, and killing it is destructive: ``train_model`` removes
+    its half-written model directory in an ``except`` block, which a killed
     process never reaches, so every force-kill leaves hundreds of megabytes
-    of orphaned output behind.
+    behind. So the run asks instead, polling ``cancel_requested`` and
+    unwinding cleanly.
 
-    So the run asks instead. This flag is set by the stop endpoint and polled
-    by the training loop, which then unwinds normally — cleaning up after
-    itself and leaving the previously active model untouched.
+    **The heartbeat.** Whether a run is in progress used to be inferred from
+    the task queue, which was wrong in a way that mattered: when django-q
+    reaped a task at its timeout, the queue entry vanished while the process
+    carried on training. The UI then showed nothing running and offered no
+    way to stop it, and the "is one already going?" guard let a second run
+    start alongside the first. A run now says so itself and keeps saying so,
+    which makes a live run visible, stoppable, and impossible to double up
+    on — and makes an abandoned one obvious, because its heartbeat goes
+    stale rather than disappearing.
     """
+
+    # A run that has not checked in for this long is treated as dead. Well
+    # clear of the gap between checkpoints, so a slow batch is not mistaken
+    # for a crash.
+    STALE_AFTER = timedelta(minutes=15)
 
     cancel_requested = models.BooleanField(
         default=False,
@@ -43,13 +62,43 @@ class TrainingControl(SingletonModel):
             "checkpoint. Cleared when a run starts."
         ),
     )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the current run began. NULL when nothing is running.",
+    )
+    heartbeat_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Last time the running process checked in. A stale value means "
+            "the run died without clearing up after itself."
+        ),
+    )
+    pid = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="OS process id of the run, to identify an abandoned one.",
+    )
+
+    @property
+    def is_running(self):
+        """Whether a run is in progress and still checking in."""
+        if self.heartbeat_at is None:
+            return False
+        return timezone.now() - self.heartbeat_at < self.STALE_AFTER
+
+    @property
+    def is_stale(self):
+        """A run that claimed to start but has stopped checking in."""
+        return self.heartbeat_at is not None and not self.is_running
 
     def __str__(self):
-        return (
-            "Training stop requested"
-            if self.cancel_requested
-            else "Training not interrupted"
-        )
+        if self.is_running:
+            return f"Training running since {self.started_at} (pid {self.pid})"
+        if self.is_stale:
+            return f"Training abandoned, last seen {self.heartbeat_at}"
+        return "No training running"
 
 
 class Model(models.Model):
