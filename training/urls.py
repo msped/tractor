@@ -8,6 +8,7 @@ from .views import (
     ModelListCreateView,
     ModelSetActiveView,
     RunManualTrainingView,
+    StopTrainingView,
     TrainingDocumentViewSet,
     TrainingRunViewSet,
     TrainingScheduleViewSet,
@@ -91,5 +92,10 @@ urlpatterns = [
         "model-management/status",
         TrainingStatusView.as_view(),
         name="training-status",
+    ),
+    path(
+        "model-management/training/stop",
+        StopTrainingView.as_view(),
+        name="training-stop",
     ),
 ]

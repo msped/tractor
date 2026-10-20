@@ -1,4 +1,5 @@
 import io
+import logging
 import multiprocessing
 import re
 import zipfile
@@ -18,6 +19,7 @@ from .models import (
     CustomRecognizer,
     LLMPromptSettings,
     Model,
+    TrainingControl,
     TrainingDocument,
     TrainingRun,
 )
@@ -29,6 +31,8 @@ from .serializers import (
     TrainingDocumentSerializer,
     TrainingRunSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 _MAX_SAMPLE_TEXT_LENGTH = 10_000
 
@@ -276,15 +280,87 @@ class TrainingRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TrainingStatusView(APIView):
-    """Returns whether a training task is currently running."""
+    """Whether a training run is in progress, queued, or abandoned.
+
+    "Running" comes from the run's own heartbeat rather than from the task
+    queue. The queue was the wrong source: when django-q reaped a task at its
+    timeout the queue entry disappeared while the process carried on
+    training, so the UI showed nothing running and offered no way to stop it.
+    A run that is still working says so; one that died stops saying so.
+
+    Queued-but-not-started is reported too, so the banner appears between
+    pressing the button and the worker picking the job up.
+    """
 
     permission_classes = [IsAdminUser]
 
     def get(self, request):
         from django_q.models import OrmQ
 
-        running = any(
+        queued = any(
             q.func() == "training.tasks.train_model"
             for q in OrmQ.objects.all()
         )
-        return Response({"is_running": running})
+        control = TrainingControl.get()
+        return Response(
+            {
+                "is_running": control.is_running or queued,
+                "stop_requested": control.cancel_requested,
+                "started_at": control.started_at,
+                "is_stale": control.is_stale,
+            }
+        )
+
+
+class StopTrainingView(APIView):
+    """Ask an in-progress or queued training run to stop.
+
+    Two cases, both covered:
+
+    * **Queued but not started** — the broker entry is removed, so no worker
+      ever picks it up.
+    * **Already running** — the stop flag is raised and the training loop
+      unwinds at its next checkpoint, within seconds rather than at the end
+      of an epoch. It discards its half-trained model directory on the way
+      out; killing the worker instead would leave that behind, which is
+      where the orphaned model directories come from.
+
+    The currently active model is never touched, so stopping is always safe:
+    it leaves the system exactly as it was before the run began.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from django_q.models import OrmQ
+
+        queued = [
+            q
+            for q in OrmQ.objects.all()
+            if q.func() == "training.tasks.train_model"
+        ]
+        dequeued = len(queued)
+        if dequeued:
+            OrmQ.objects.filter(pk__in=[q.pk for q in queued]).delete()
+
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save(update_fields=["cancel_requested"])
+
+        # Logged here as well as in the worker: the worker only speaks when
+        # the loop next checks the flag, so without this the console says
+        # nothing at the moment the stop is actually asked for.
+        logger.info(
+            "Training stop requested by %s (%s queued run(s) removed). "
+            "Any run in progress will abandon itself at its next checkpoint.",
+            getattr(request.user, "username", "unknown"),
+            dequeued,
+        )
+
+        return Response(
+            {
+                "status": "stop requested",
+                "dequeued": dequeued,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

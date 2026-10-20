@@ -24,7 +24,6 @@ from .ds_info_propagation import (
     propagate_term_across_case,
     propagate_terms_to_document,
 )
-from .identity import IdentityMatch, match_person, matches_dob_text
 from .models import (
     Case,
     Document,
@@ -34,70 +33,33 @@ from .models import (
     Redaction,
     ReviewWorkflowSettings,
 )
+from .resolution import resolve_spans
 from .snapshots import snapshot_redactions
 from .span_merging import absorb_prefix_symbols, merge_spans_for_removal
 
 logger = logging.getLogger(__name__)
 
-# Mapping from spaCy entity labels to Redaction types
-ENTITY_LABEL_TO_REDACTION_TYPE = {
-    "DS_INFORMATION": Redaction.RedactionType.DS_INFORMATION,
-    "THIRD_PARTY": Redaction.RedactionType.THIRD_PARTY_PII,
-    "OPERATIONAL": Redaction.RedactionType.OPERATIONAL_DATA,
-}
 
-
-def _matches_data_subject(text, case):
+def _texts_ruled_third_party(case):
     """
-    True if a detected span is unambiguously the data subject's own name or
-    date of birth.
+    Text a human has decided is a third party's, anywhere in *case*.
 
-    Only an unambiguous identity match qualifies.  A span that merely overlaps
-    the data subject's name — a shared surname, or a span that swallows a
-    second person — comes back uncertain and is left as third-party, because
-    resolving uncertainty toward the data subject is what discloses someone
-    else's details.
+    No separate record is kept for this: the reclassified redaction *is* the
+    record.  A reviewer correcting a wrong attribution marks the text as
+    third-party and accepts it, which leaves a row saying exactly that, with
+    provenance — so the correction is read back off the decisions themselves
+    rather than mirrored into a second table that could drift from them.
     """
-    ds_dob = getattr(case, "data_subject_dob", None)
-    if matches_dob_text(text, ds_dob):
-        return True
-
-    return (
-        match_person(
-            text,
-            ds_name=getattr(case, "data_subject_name", None),
-            ds_dob=ds_dob,
+    return set(
+        Redaction.objects.filter(
+            document__case=case,
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
         )
-        is IdentityMatch.MATCH
+        .values_list("text", flat=True)
+        .distinct()
     )
-
-
-def _redaction_type_for(suggestion, case):
-    """
-    Decide a detected span's redaction type.
-
-    A span the system believes is the data subject's own information is
-    labelled as such, rather than being dropped.  The suggestion was
-    previously discarded outright on a data-subject match, which meant the
-    system's belief about whose data it was never reached the person reviewing
-    it: a wrong call could not be seen, corrected, or audited, and a span
-    covering a third party as well as the data subject disappeared with them.
-    Labelling it keeps the judgement on screen and reversible.
-
-    Operational markings are never reattributed.  They stay operational even
-    when they sit inside the data subject's own details, because what makes
-    them redactable is the marking, not whose record they appear in.
-    """
-    mapped = ENTITY_LABEL_TO_REDACTION_TYPE.get(
-        suggestion["label"],
-        Redaction.RedactionType.THIRD_PARTY_PII,  # fallback default
-    )
-
-    if mapped == Redaction.RedactionType.OPERATIONAL_DATA:
-        return mapped
-    if _matches_data_subject(suggestion["text"], case):
-        return Redaction.RedactionType.DS_INFORMATION
-    return mapped
 
 
 def process_document_and_create_redactions(document_id):
@@ -157,35 +119,40 @@ def process_document_and_create_redactions(document_id):
         ]
     )
 
+    # Resolve every span against the case record and the document's layout
+    # before anything is written: a name or date of birth held on the case is
+    # recognised and born accepted, a detail attributed to the data subject is
+    # proposed as pending for confirmation, and everything uncertain stays
+    # third-party.  bulk_create fires no post_save, so a proposed DS_INFO row
+    # never triggers case-wide propagation on creation — that waits for a
+    # human to confirm it (see cases.signals.redaction_post_save).
+    resolutions = resolve_spans(
+        ai_suggestions,
+        case,
+        extracted_text=extracted_text,
+        structure=structure,
+        tables=tables,
+        ruled_third_party=_texts_ruled_third_party(case),
+    )
+
     with transaction.atomic():
-        redactions_to_create = []
-        for suggestion in ai_suggestions:
-            redaction_type = _redaction_type_for(suggestion, case)
-            # The data subject's name and date of birth come from the case
-            # record, so a match against them is not an inference needing
-            # confirmation — it is the case owner's own entry recognised in the
-            # document.  Born accepted, under provenance of its own so the
-            # audit trail distinguishes it from a reviewer's judgement.
-            is_data_subject = (
-                redaction_type == Redaction.RedactionType.DS_INFORMATION
+        redactions_to_create = [
+            Redaction(
+                document=document,
+                start_char=suggestion["start_char"],
+                end_char=suggestion["end_char"],
+                text=suggestion["text"],
+                redaction_type=resolution.redaction_type,
+                is_suggestion=True,
+                is_accepted=resolution.is_accepted,
+                decided_by=resolution.decided_by,
+                rationale=resolution.rationale,
+                source=suggestion.get("source", Redaction.Source.NER),
             )
-            redactions_to_create.append(
-                Redaction(
-                    document=document,
-                    start_char=suggestion["start_char"],
-                    end_char=suggestion["end_char"],
-                    text=suggestion["text"],
-                    redaction_type=redaction_type,
-                    is_suggestion=True,
-                    is_accepted=is_data_subject,
-                    decided_by=(
-                        Redaction.DecidedBy.DS_RECORD_MATCH
-                        if is_data_subject
-                        else None
-                    ),
-                    source=suggestion.get("source", Redaction.Source.NER),
-                )
+            for suggestion, resolution in zip(
+                ai_suggestions, resolutions, strict=True
             )
+        ]
         Redaction.objects.bulk_create(redactions_to_create)
 
     if ReviewWorkflowSettings.get().auto_accept_enabled:

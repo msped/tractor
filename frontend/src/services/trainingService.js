@@ -110,6 +110,15 @@ export const getTrainingStatus = async () => {
     }
 };
 
+export const stopTraining = async () => {
+    try {
+        const response = await apiClient.post(`/model-management/training/stop`);
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to stop training. Please try again.');
+    }
+};
+
 export const getLLMPromptSettings = async () => {
     try {
         const response = await apiClient.get(`/llm-prompt-settings`);

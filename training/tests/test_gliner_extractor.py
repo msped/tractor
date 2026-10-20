@@ -148,6 +148,56 @@ class ExtractWithGLiNERTests(NetworkBlockerMixin, TestCase):
                 f"Label '{label}' should map to THIRD_PARTY",
             )
 
+    def test_entity_type_preserves_gliner_raw_label(self):
+        """
+        Every GLiNER label collapses to THIRD_PARTY, so ``label`` alone cannot
+        tell a person from a detail about that person. ``entity_type`` keeps the
+        fine-grained label that block attribution needs.
+        """
+        for label in GLINER_LABELS:
+            model = self._make_model(
+                [
+                    {
+                        "text": "test",
+                        "label": label,
+                        "start": 0,
+                        "end": 4,
+                        "score": 0.8,
+                    }
+                ]
+            )
+            results = extract_with_gliner(model, "test")
+            self.assertEqual(results[0]["entity_type"], label)
+            self.assertEqual(results[0]["label"], "THIRD_PARTY")
+
+    def test_entity_type_distinguishes_name_from_detail(self):
+        model = self._make_model(
+            [
+                {
+                    "text": "John Smith",
+                    "label": "person name",
+                    "start": 0,
+                    "end": 10,
+                    "score": 0.9,
+                },
+                {
+                    "text": "12 Elm Road",
+                    "label": "address",
+                    "start": 20,
+                    "end": 31,
+                    "score": 0.8,
+                },
+            ]
+        )
+        results = extract_with_gliner(
+            model, "John Smith who lives 12 Elm Road"
+        )
+
+        self.assertEqual(
+            [r["entity_type"] for r in results], ["person name", "address"]
+        )
+        self.assertEqual({r["label"] for r in results}, {"THIRD_PARTY"})
+
     def test_no_operational_labels_in_gliner(self):
         """Confirm OPERATIONAL labels are not present in GLINER_LABELS."""
         operational_labels = [

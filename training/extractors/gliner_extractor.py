@@ -55,8 +55,10 @@ def extract_with_gliner(model, text):
     Run GLiNER prediction on *text* using the provided *model*.
 
     Long texts are split into chunks to avoid the model's token limit.
-    Returns a list of dicts with keys: text, label, start_char, end_char.
-    ``label`` is the application-level redaction type (THIRD_PARTY or OPERATIONAL).
+    Returns a list of dicts with keys: text, label, start_char, end_char, entity_type.
+    ``label`` is the application-level redaction type (THIRD_PARTY or OPERATIONAL);
+    ``entity_type`` is GLiNER's own fine-grained label (e.g. "person name"), which
+    downstream attribution needs to tell a person from a detail about that person.
     """
     results = []
     for chunk, offset in _chunk_text(text):
@@ -73,6 +75,7 @@ def extract_with_gliner(model, text):
                     "label": redaction_label,
                     "start_char": ent["start"] + offset,
                     "end_char": ent["end"] + offset,
+                    "entity_type": ent["label"],
                 }
             )
     return results

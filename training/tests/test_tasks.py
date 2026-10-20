@@ -1,10 +1,13 @@
+import os
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from docx import Document as DocxDocument
 from docx.enum.text import WD_COLOR_INDEX
 
@@ -13,12 +16,14 @@ from cases.models import Document as CaseDocument
 
 from ..models import (
     Model,
+    TrainingControl,
     TrainingDocument,
     TrainingRun,
     TrainingRunCaseDoc,
     TrainingRunTrainingDoc,
 )
 from ..tasks import (
+    TrainingStopped,
     _build_spancat_pipeline,
     _prepare_examples,
     _run_training_loop,
@@ -504,18 +509,41 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     def tearDownClass(cls):
         super().tearDownClass()
 
-    @patch("training.tasks.Task")
-    def test_train_model_aborts_if_another_running(self, mock_task):
-        """train_model() aborts if another task is already in progress."""
-        mock_task.objects.filter.return_value.count.return_value = 1
+    def test_train_model_aborts_if_another_running(self):
+        """
+        A second run would double the machine's load for no benefit. The
+        guard is the live run's own heartbeat — the old one consulted
+        django-q Task rows, which only exist once a task has finished, so it
+        never saw a run in progress and never stopped anything.
+        """
+        control = TrainingControl.get()
+        control.started_at = timezone.now()
+        control.heartbeat_at = timezone.now()
+        control.pid = 4242
+        control.save()
 
-        result = train_model(source="both")
-        self.assertIsNone(result)
+        with patch("training.tasks.collect_training_data_detailed") as collect:
+            train_model(source="both")
 
-    @patch("training.tasks.Task")
-    def test_train_model_aborts_with_insufficient_data(self, mock_task):
+        collect.assert_not_called()
+
+    def test_train_model_replaces_an_abandoned_run(self):
+        """A run killed outright leaves its marker behind; a stale heartbeat
+        must not block the next attempt forever."""
+        control = TrainingControl.get()
+        control.started_at = timezone.now() - timedelta(hours=4)
+        control.heartbeat_at = timezone.now() - timedelta(hours=4)
+        control.pid = 4242
+        control.save()
+
+        with patch("training.tasks.collect_training_data_detailed") as collect:
+            collect.return_value = ([], [], [])
+            train_model(source="both")
+
+        collect.assert_called_once()
+
+    def test_train_model_aborts_with_insufficient_data(self):
         """train_model() aborts if fewer than 75 training examples exist."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         initial_model_count = Model.objects.count()
         train_model(source="both")
@@ -525,17 +553,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_train_model_creates_spancat_model(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
         """train_model() creates a Model with model_type=SPANCAT and a TrainingRun."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         # Provide enough fake training data (>=75 entries)
         fake_data = [
@@ -572,17 +597,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_train_model_cleans_up_on_exception(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
         """train_model() removes the output directory if training raises an exception."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         fake_data = [
             (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
@@ -603,17 +625,14 @@ class TrainModelTests(NetworkBlockerMixin, TestCase):
     @patch("training.tasks._prepare_examples")
     @patch("training.tasks._build_spancat_pipeline")
     @patch("training.tasks.collect_training_data_detailed")
-    @patch("training.tasks.Task")
     def test_train_model_records_training_and_case_docs(
         self,
-        mock_task,
         mock_collect,
         mock_build_pipeline,
         mock_prepare,
         mock_run_loop,
     ):
         """train_model() creates TrainingRunTrainingDoc and TrainingRunCaseDoc for used docs."""
-        mock_task.objects.filter.return_value.count.return_value = 0
 
         case = Case.objects.create(case_reference="TRACK1")
         case_doc = CaseDocument.objects.create(
@@ -826,3 +845,326 @@ class CollectTrainingDataDetailedEdgeCasesTests(NetworkBlockerMixin, TestCase):
         )
         self.assertEqual(len(train_data), 0)
         self.assertEqual(len(t_docs), 0)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="test_media_stop"))
+class TrainingStopTests(NetworkBlockerMixin, TestCase):
+    """Stopping a run must leave nothing behind and nothing registered."""
+
+    def _nlp(self):
+        nlp = MagicMock()
+        nlp.resume_training.return_value = MagicMock()
+        nlp.evaluate.return_value = {
+            "spans_sc_f": 0.5,
+            "spans_sc_p": 0.5,
+            "spans_sc_r": 0.5,
+        }
+        return nlp
+
+    def _request_stop(self):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+
+    def test_loop_stops_at_the_first_epoch_check(self):
+        self._request_stop()
+        nlp = self._nlp()
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            with self.assertRaises(TrainingStopped):
+                _run_training_loop(nlp, [], [], output_dir)
+
+        # Abandoned before any training happened at all.
+        nlp.update.assert_not_called()
+        nlp.evaluate.assert_not_called()
+
+    def test_loop_runs_normally_when_no_stop_is_requested(self):
+        nlp = self._nlp()
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            _run_training_loop(nlp, [], [], output_dir)
+
+        self.assertTrue(nlp.evaluate.called)
+
+    def test_preparing_examples_is_interruptible(self):
+        """
+        The slowest phase of a long run, and the one that had no check: a stop
+        during it used to appear to do nothing until epoch 1 began.
+        """
+        import spacy
+
+        self._request_stop()
+        nlp = spacy.blank("en")
+        train_data = [(f"text {i}", {"entities": []}) for i in range(40)]
+
+        with patch.object(nlp, "make_doc", wraps=nlp.make_doc) as spy:
+            with self.assertRaises(TrainingStopped):
+                _prepare_examples(nlp, train_data)
+
+        # Gave up partway rather than building all forty.
+        self.assertGreater(spy.call_count, 0)
+        self.assertLess(spy.call_count, len(train_data))
+
+    def test_preparing_examples_completes_when_not_stopped(self):
+        import spacy
+
+        nlp = spacy.blank("en")
+        train_data = [(f"text {i}", {"entities": []}) for i in range(40)]
+
+        examples = _prepare_examples(nlp, train_data)
+
+        self.assertEqual(len(examples), 40)
+
+    @patch("training.tasks._run_training_loop")
+    @patch("training.tasks._prepare_examples")
+    @patch("training.tasks._build_spancat_pipeline")
+    @patch("training.tasks.collect_training_data_detailed")
+    def test_cancelled_run_registers_no_model_and_leaves_no_directory(
+        self,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
+    ):
+        mock_collect.return_value = (
+            [
+                (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+                for i in range(75)
+            ],
+            [],
+            [],
+        )
+        nlp = MagicMock()
+        nlp.pipe_names = []
+        mock_build_pipeline.return_value = nlp
+        mock_prepare.return_value = [MagicMock()]
+
+        created = []
+
+        def _cancel(nlp_, train, dev, output_dir):
+            # The real loop has already made the directory by this point.
+            created.append(Path(output_dir))
+            raise TrainingStopped("during epoch 1")
+
+        mock_run_loop.side_effect = _cancel
+
+        before = Model.objects.count()
+        train_model(source="redactions")
+
+        self.assertEqual(Model.objects.count(), before)
+        self.assertEqual(TrainingRun.objects.count(), 0)
+        self.assertFalse(
+            created[0].exists(), "partial model dir was left behind"
+        )
+        # Flag cleared so the next run is not killed by a stale stop.
+        self.assertFalse(TrainingControl.get().cancel_requested)
+
+    @patch("training.tasks._run_training_loop")
+    @patch("training.tasks._prepare_examples")
+    @patch("training.tasks._build_spancat_pipeline")
+    @patch("training.tasks.collect_training_data_detailed")
+    def test_a_stale_stop_flag_does_not_kill_the_next_run(
+        self,
+        mock_collect,
+        mock_build_pipeline,
+        mock_prepare,
+        mock_run_loop,
+    ):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+
+        mock_collect.return_value = (
+            [
+                (f"text {i}", {"entities": [(0, 4, "THIRD_PARTY")]})
+                for i in range(75)
+            ],
+            [],
+            [],
+        )
+        nlp = MagicMock()
+        nlp.pipe_names = []
+        mock_build_pipeline.return_value = nlp
+        mock_prepare.return_value = [MagicMock()]
+        mock_run_loop.return_value = {
+            "spans_sc_p": 0.9,
+            "spans_sc_r": 0.9,
+            "spans_sc_f": 0.9,
+        }
+
+        train_model(source="redactions")
+
+        self.assertFalse(TrainingControl.get().cancel_requested)
+        self.assertEqual(Model.objects.count(), 1)
+
+
+class SuggesterCeilingTests(NetworkBlockerMixin, TestCase):
+    """The ceiling is configurable because it has to be sized to the host."""
+
+    def _sizes(self, nlp):
+        return nlp.get_pipe("spancat").suggester.keywords["sizes"]
+
+    def test_defaults_to_the_configured_ceiling(self):
+        with override_settings(SPANCAT_MAX_SPAN_TOKENS=40):
+            nlp = _build_spancat_pipeline()
+        self.assertEqual(max(self._sizes(nlp)), 40)
+        self.assertEqual(min(self._sizes(nlp)), 1)
+
+    def test_honours_an_overridden_ceiling(self):
+        with override_settings(SPANCAT_MAX_SPAN_TOKENS=12):
+            nlp = _build_spancat_pipeline()
+        self.assertEqual(max(self._sizes(nlp)), 12)
+
+
+class SplitLongAnnotationTests(NetworkBlockerMixin, TestCase):
+    """
+    Annotations longer than the suggester ceiling are unreachable: never
+    proposed, never learned, and counted against recall. Dividing them at
+    clause boundaries makes the material learnable.
+    """
+
+    def setUp(self):
+        import spacy
+
+        self.nlp = spacy.blank("en")
+
+    def _spans(self, text, entities, max_tokens):
+        examples = _prepare_examples(
+            self.nlp, [(text, {"entities": entities})], max_tokens
+        )
+        return list(examples[0].reference.spans["sc"])
+
+    def test_a_short_annotation_is_left_alone(self):
+        text = "Attended LYMM; scene secured."
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 40)
+
+        self.assertEqual(len(spans), 1)
+        self.assertEqual(spans[0].text, text)
+
+    def test_a_long_annotation_is_divided(self):
+        text = (
+            "Custody interview conducted with the suspect. "
+            "Suspect asked to account for movements and intent. "
+            "Evidential points put: CCTV time-stamps and witness accounts. "
+            "Suspect provided a prepared statement and said no comment."
+        )
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 10)
+
+        self.assertGreater(len(spans), 1)
+        self.assertTrue(
+            all(len(s) <= 10 for s in spans), [len(s) for s in spans]
+        )
+        self.assertTrue(all(s.label_ == "OPERATIONAL" for s in spans))
+
+    def test_the_pieces_still_cover_the_whole_annotation(self):
+        """Dividing must not lose material — that would under-redact."""
+        text = (
+            "Circumstances recorded; description provided; CCTV logged. "
+            "Further enquiries completed; statements indexed; exhibits stored."
+        )
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 8)
+
+        self.assertEqual(spans[0].start_char, 0)
+        self.assertEqual(spans[-1].end_char, len(text.rstrip()))
+        # Consecutive, with no gap bigger than the separator between them.
+        for earlier, later in zip(spans, spans[1:], strict=False):
+            self.assertLessEqual(later.start_char - earlier.end_char, 2)
+
+    def test_pieces_prefer_clause_boundaries(self):
+        text = (
+            "Attended the scene; accounts obtained; BWV bookmarked. "
+            "CCTV enquiries made; continuity recorded; stills circulated."
+        )
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 12)
+
+        # Every piece but the last should finish on a boundary character.
+        for span in spans[:-1]:
+            self.assertTrue(
+                span.text.rstrip().endswith((".", ";", "!", "?")),
+                f"piece did not end at a boundary: {span.text!r}",
+            )
+
+    def test_text_with_no_boundaries_is_still_divided(self):
+        """A wall of words with no punctuation must not defeat the split."""
+        text = " ".join(f"word{i}" for i in range(60))
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], 10)
+
+        self.assertEqual(len(spans), 6)
+        self.assertTrue(all(len(s) <= 10 for s in spans))
+
+    def test_splitting_is_off_when_no_ceiling_is_given(self):
+        text = " ".join(f"word{i}" for i in range(60))
+        spans = self._spans(text, [(0, len(text), "OPERATIONAL")], None)
+
+        self.assertEqual(len(spans), 1)
+
+
+class TrainingHeartbeatTests(NetworkBlockerMixin, TestCase):
+    """
+    A run has to say it is alive. Inferring it from the task queue was wrong
+    in the way that mattered: when django-q reaped a task at its timeout the
+    queue entry vanished while the process kept training, so the UI showed
+    nothing running and the Stop button was never offered.
+    """
+
+    def test_a_fresh_heartbeat_means_running(self):
+        control = TrainingControl.get()
+        control.heartbeat_at = timezone.now()
+        control.save()
+
+        self.assertTrue(TrainingControl.get().is_running)
+        self.assertFalse(TrainingControl.get().is_stale)
+
+    def test_an_old_heartbeat_means_abandoned_not_running(self):
+        control = TrainingControl.get()
+        control.started_at = timezone.now() - timedelta(hours=3)
+        control.heartbeat_at = timezone.now() - timedelta(hours=3)
+        control.pid = 999
+        control.save()
+
+        fresh = TrainingControl.get()
+        self.assertFalse(fresh.is_running)
+        self.assertTrue(fresh.is_stale)
+
+    def test_no_heartbeat_at_all_means_idle(self):
+        fresh = TrainingControl.get()
+        self.assertFalse(fresh.is_running)
+        self.assertFalse(fresh.is_stale)
+
+    @patch("training.tasks._train_model_inner")
+    def test_a_run_claims_and_releases_the_slot(self, inner):
+        seen = {}
+
+        def _record(source):
+            control = TrainingControl.get()
+            seen["running"] = control.is_running
+            seen["pid"] = control.pid
+
+        inner.side_effect = _record
+        train_model(source="training_docs")
+
+        self.assertTrue(seen["running"], "run was not visible while running")
+        self.assertEqual(seen["pid"], os.getpid())
+        # Released afterwards, so the next run is not blocked.
+        self.assertFalse(TrainingControl.get().is_running)
+        self.assertIsNone(TrainingControl.get().pid)
+
+    @patch("training.tasks._train_model_inner")
+    def test_the_slot_is_released_even_when_training_raises(self, inner):
+        inner.side_effect = RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            train_model(source="training_docs")
+
+        self.assertFalse(TrainingControl.get().is_running)
+        self.assertIsNone(TrainingControl.get().started_at)
+
+    @patch("training.tasks._train_model_inner")
+    def test_claiming_clears_a_stale_stop_request(self, inner):
+        control = TrainingControl.get()
+        control.cancel_requested = True
+        control.save()
+
+        train_model(source="training_docs")
+
+        self.assertFalse(TrainingControl.get().cancel_requested)

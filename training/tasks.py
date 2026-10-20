@@ -1,11 +1,12 @@
 import logging
+import os
 import random
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
-from django_q.models import Task
 from spacy.training import Example
 from spacy.util import compounding, minibatch
 
@@ -130,11 +131,32 @@ def _build_spancat_pipeline():
     # Get tok2vec output width dynamically
     tok2vec_width = nlp.get_pipe("tok2vec").model.get_dim("nO")
 
-    # Configure spancat with ngram suggester and tok2vec listener
+    # Configure spancat with ngram suggester and tok2vec listener.
+    #
+    # The suggester's maximum size is a hard ceiling on what the model can
+    # ever predict: a gold span longer than this is never proposed as a
+    # candidate, so it cannot be scored, cannot be learned, and counts as a
+    # false negative at evaluation. At the previous ceiling of 20 tokens,
+    # 6.2% of the 18,561 annotation spans in the training corpus were
+    # unreachable — almost all OPERATIONAL, the long free-text log entries
+    # and summaries these reports are full of — which capped achievable
+    # recall at 0.938 however good the model became.
+    #
+    # Span length beyond SPANCAT_MAX_SPAN_TOKENS is unreachable: the suggester
+    # never proposes a longer candidate, so the model cannot score it, cannot
+    # learn it, and it counts as a false negative at evaluation.
+    #
+    # At the default of 40 that leaves ~1.2% of this corpus's annotations
+    # unreachable, almost all of them long free-text log entries. Raising it
+    # costs roughly linear extra time but grows peak memory considerably
+    # faster, and worsens the negative-to-positive candidate ratio — this
+    # model has failed on class imbalance before, so compare P/R/F1 against
+    # the previous run rather than assuming more coverage is better.
+    max_span_tokens = getattr(settings, "SPANCAT_MAX_SPAN_TOKENS", 40)
     spancat_config = {
         "suggester": {
             "@misc": "spacy.ngram_suggester.v1",
-            "sizes": list(range(1, 21)),
+            "sizes": list(range(1, max_span_tokens + 1)),
         },
         "model": {
             "@architectures": "spacy.SpanCategorizer.v1",
@@ -162,13 +184,186 @@ def _build_spancat_pipeline():
     return nlp
 
 
-def _prepare_examples(nlp, train_data):
-    """Convert (text, annotations) tuples into spaCy Example objects for training."""
+class TrainingStopped(Exception):
+    """Raised from anywhere in a run once a stop has been requested.
+
+    An exception rather than a return value because a run has several long
+    phases — reading documents, aligning annotations, then the epoch loop —
+    and every one of them needs to be interruptible. Threading a flag back
+    through each would mean every caller remembering to check it; raising
+    puts the cleanup in one place.
+    """
+
+
+def _stop_requested():
+    """Whether someone has asked this run to stop (see TrainingControl)."""
+    from .models import TrainingControl
+
+    return TrainingControl.objects.filter(pk=1, cancel_requested=True).exists()
+
+
+# How often a run reports that it is still alive. Frequent enough that an
+# abandoned run is noticed quickly, rare enough that the write is irrelevant
+# beside the training itself.
+_HEARTBEAT_EVERY = timedelta(seconds=30)
+_last_heartbeat = None
+
+
+def _beat():
+    """Record that this run is still going, at most once per interval."""
+    global _last_heartbeat
+    from .models import TrainingControl
+
+    now = timezone.now()
+    if _last_heartbeat and now - _last_heartbeat < _HEARTBEAT_EVERY:
+        return
+    _last_heartbeat = now
+    TrainingControl.objects.filter(pk=1).update(heartbeat_at=now)
+
+
+def _claim_run():
+    """
+    Mark a run as started, refusing if one is already going.
+
+    Returns the TrainingControl row, or None when another run holds it. Two
+    concurrent trainings would simply double the machine's load for no
+    benefit, and this used to be possible because the old guard looked at
+    django-q Task rows, which only exist once a task has finished.
+    """
+    global _last_heartbeat
+    from .models import TrainingControl
+
+    control = TrainingControl.get()
+    if control.is_running:
+        print(
+            f"A training run is already in progress (pid {control.pid}, "
+            f"started {control.started_at}). Aborting."
+        )
+        return None
+
+    if control.is_stale:
+        print(
+            f"Replacing an abandoned run (pid {control.pid}, last seen "
+            f"{control.heartbeat_at})."
+        )
+
+    now = timezone.now()
+    _last_heartbeat = now
+    control.cancel_requested = False
+    control.started_at = now
+    control.heartbeat_at = now
+    control.pid = os.getpid()
+    control.save(
+        update_fields=[
+            "cancel_requested",
+            "started_at",
+            "heartbeat_at",
+            "pid",
+        ]
+    )
+    return control
+
+
+def _release_run():
+    """Clear the running marker. Safe to call however the run ended."""
+    global _last_heartbeat
+    from .models import TrainingControl
+
+    _last_heartbeat = None
+    TrainingControl.objects.filter(pk=1).update(
+        cancel_requested=False,
+        started_at=None,
+        heartbeat_at=None,
+        pid=None,
+    )
+
+
+def _abort_if_stopped(stage):
+    """Give up the run if a stop has been asked for by the time *stage* begins.
+
+    Doubles as the heartbeat: these are the points a run passes through
+    regularly, so reporting life here costs nothing extra and means a run
+    that stops checking in really has stopped working.
+    """
+    _beat()
+    if _stop_requested():
+        raise TrainingStopped(stage)
+
+
+# Tokens ending in one of these close a clause or sentence, and so make a
+# natural place to divide an over-long annotation. Semicolons matter as much
+# as full stops here: this material is written as semicolon-delimited lists
+# ("description provided; CCTV suggestions logged") at least as often as prose.
+_BOUNDARY_SUFFIXES = (".", ";", "!", "?")
+
+
+def _split_long_span(span, label, max_tokens):
+    """
+    Divide *span* into consecutive pieces of at most *max_tokens* tokens.
+
+    An annotation longer than the suggester's ceiling can never be proposed as
+    a candidate, so it teaches the model nothing and counts against recall at
+    evaluation. Splitting it makes the material learnable: the pieces are
+    predicted separately and the existing adjacent-span merging rejoins them
+    for the reviewer.
+
+    Pieces end at a clause or sentence boundary wherever one falls inside the
+    window, and are cut at the ceiling where none does. An imperfect boundary
+    is cheap here — the pieces still cover exactly the same text between them,
+    and the only cost is that the model learns a slightly odd division.
+    """
+    pieces = []
+    start = 0
+    while start < len(span):
+        window_end = min(start + max_tokens, len(span))
+
+        split_at = window_end
+        if window_end < len(span):
+            # Prefer the last boundary inside the window; never split so early
+            # that a piece is mostly empty.
+            for i in range(window_end - 1, start, -1):
+                if span[i].text.endswith(_BOUNDARY_SUFFIXES):
+                    split_at = i + 1
+                    break
+
+        piece = span[start:split_at]
+        if len(piece) == 0:  # pragma: no cover - guards against a stuck loop
+            break
+        pieces.append(
+            piece.doc.char_span(
+                piece.start_char,
+                piece.end_char,
+                label=label,
+                alignment_mode="contract",
+            )
+        )
+        start = split_at
+
+    return [p for p in pieces if p is not None]
+
+
+def _prepare_examples(nlp, train_data, max_tokens=None):
+    """Convert (text, annotations) tuples into spaCy Example objects for training.
+
+    Annotations longer than *max_tokens* are divided at clause boundaries
+    rather than left whole, since the suggester would never propose them.
+    Pass None to leave them intact.
+
+    Raises TrainingStopped if a stop is requested partway. This phase builds a
+    Doc per document and is slow and memory-hungry on a large corpus, so it
+    has to be interruptible — a stop that only took effect once epoch 1 began
+    would appear to do nothing for the longest part of a run.
+    """
     examples = []
     total_entities = 0
     dropped_entities = 0
+    split_entities = 0
+    pieces_made = 0
 
-    for text, annotations in train_data:
+    for index, (text, annotations) in enumerate(train_data):
+        if index and index % 10 == 0:
+            _abort_if_stopped(f"while preparing example {index}")
+
         doc = nlp.make_doc(text)
         ref = doc.copy()
         spans = []
@@ -177,10 +372,19 @@ def _prepare_examples(nlp, train_data):
             span = ref.char_span(
                 start, end, label=label, alignment_mode="contract"
             )
-            if span:
-                spans.append(span)
-            else:
+            if not span:
                 dropped_entities += 1
+                continue
+
+            if max_tokens and len(span) > max_tokens:
+                pieces = _split_long_span(span, label, max_tokens)
+                if pieces:
+                    split_entities += 1
+                    pieces_made += len(pieces)
+                    spans.extend(pieces)
+                    continue
+
+            spans.append(span)
         ref.spans["sc"] = spans
         examples.append(Example(doc, ref))
 
@@ -188,12 +392,23 @@ def _prepare_examples(nlp, train_data):
         print(
             f"Entity alignment: {total_entities - dropped_entities}/{total_entities} kept, {dropped_entities} dropped"
         )
+    if split_entities:
+        print(
+            f"Long annotations divided at clause boundaries: "
+            f"{split_entities} spans over {max_tokens} tokens became "
+            f"{pieces_made} learnable pieces"
+        )
 
     return examples
 
 
 def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
-    """Train the SpanCat model for a fixed number of iterations with early stopping."""
+    """Train the SpanCat model for a fixed number of iterations with early stopping.
+
+    Raises TrainingStopped if a stop is requested; the caller discards the
+    output directory, since a half-trained model is not worth keeping and
+    registering one nobody chose to make would be worse.
+    """
     max_epochs = 15
     patience = 3
     best_f1 = 0.0
@@ -204,11 +419,18 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
     optimizer.learn_rate = 0.001
 
     for epoch in range(max_epochs):
+        _abort_if_stopped(f"at the start of epoch {epoch + 1}")
+
         random.shuffle(train_examples)
         losses = {}
 
         batches = minibatch(train_examples, size=compounding(4.0, 32.0, 1.001))
         for batch in batches:
+            # Checked before every batch, not every nth. A batch can take a
+            # long time at a high suggester ceiling, so an interval measured
+            # in batches is an unpredictable interval in seconds; one tiny
+            # query per batch is nothing beside the batch itself.
+            _abort_if_stopped(f"during epoch {epoch + 1}")
             nlp.update(batch, sgd=optimizer, drop=0.2, losses=losses)
 
         # Evaluate on dev set
@@ -246,17 +468,25 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
 
 
 def train_model(source="redactions", user=None):
-    """Train a new SpanCat model from collected redaction data and save it to nlp_models/."""
-    # Check if another training task is already running
-    running_tasks = Task.objects.filter(
-        func="training.tasks.train_model",
-        success__isnull=True,
-    ).count()
+    """Train a new SpanCat model from collected redaction data and save it to nlp_models/.
 
-    if running_tasks > 0:
-        print("Another training task is already in progress. Aborting.")
+    Claims the single training slot for the duration, so a second run cannot
+    start alongside this one and double the machine's load, and so the run
+    stays visible and stoppable from the UI for as long as it lasts.
+    """
+    if _claim_run() is None:
         return
 
+    try:
+        _train_model_inner(source)
+    finally:
+        # Whatever happened — finished, stopped, or raised — the slot is
+        # given back. Only an outright kill can leave it held, and that is
+        # precisely the case the stale heartbeat is there to reveal.
+        _release_run()
+
+
+def _train_model_inner(source):
     train_data, used_training_docs, used_case_docs = (
         collect_training_data_detailed(source)
     )
@@ -267,10 +497,19 @@ def train_model(source="redactions", user=None):
         )
         return
 
+    if _stop_requested():
+        # Nothing has been created yet, so there is nothing to clean up.
+        print("Training stopped on request before it began.")
+        return
+
     # Prepare output dir
     model_name = f"model_{source}_{timezone.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir = Path(settings.BASE_DIR, "nlp_models", model_name)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Annotations are divided to fit the same ceiling the suggester uses, so
+    # nothing in the training data is unreachable by construction.
+    max_tokens = getattr(settings, "SPANCAT_MAX_SPAN_TOKENS", 40)
 
     try:
         # Build SpanCat pipeline (always from en_core_web_lg for transfer learning)
@@ -278,12 +517,14 @@ def train_model(source="redactions", user=None):
 
         # Initialize the pipeline with example data
         def get_examples():
-            return _prepare_examples(nlp, train_data[:10])
+            return _prepare_examples(nlp, train_data[:10], max_tokens)
 
+        _abort_if_stopped("before initialising the pipeline")
         nlp.initialize(get_examples)
 
         # Prepare all examples
-        all_examples = _prepare_examples(nlp, train_data)
+        _abort_if_stopped("before preparing examples")
+        all_examples = _prepare_examples(nlp, train_data, max_tokens)
 
         # Split 80/20 train/dev
         random.shuffle(all_examples)
@@ -295,6 +536,16 @@ def train_model(source="redactions", user=None):
         best_scores = _run_training_loop(
             nlp, train_examples, dev_examples, output_dir
         )
+
+    except TrainingStopped as stop:
+        # Discard the partial model rather than registering something nobody
+        # asked for. The previously active model is untouched throughout.
+        if output_dir.exists():
+            shutil.rmtree(output_dir)
+        print(
+            f"Training stopped on request ({stop}). No model was registered."
+        )
+        return
 
     except Exception:
         if output_dir.exists():

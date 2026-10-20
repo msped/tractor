@@ -216,6 +216,14 @@ AUTO_CASE_DELETION_ENABLED = os.environ.get(
 ).lower() in ("true", "1", "yes")
 RETENTION_WARNING_DAYS = int(os.environ.get("RETENTION_WARNING_DAYS", 30))
 
+# Longest span, in tokens, that the SpanCat ngram suggester will propose — and
+# therefore the longest span the model can learn or predict. Raising it costs
+# roughly linear extra time per document and grows peak memory considerably
+# faster, so size it to the training host; lowering it silently makes longer
+# annotations unlearnable. Takes effect on the next training run, not on an
+# existing model, whose ceiling is fixed in its own config.
+SPANCAT_MAX_SPAN_TOKENS = int(os.environ.get("SPANCAT_MAX_SPAN_TOKENS", 40))
+
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e4b")
 OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED", "False").lower() in (
@@ -236,8 +244,24 @@ if AUTO_CASE_DELETION_ENABLED:
 Q_CLUSTER = {
     "name": "DjangORM",
     "workers": 4,
+    # `timeout` is the default a worker may spend on a task and CAN be raised
+    # per task (model training enqueues itself with timeout=7200). `retry` is
+    # cluster-wide and cannot, so it has to exceed the longest per-task
+    # timeout in the codebase — otherwise the broker re-delivers a task that
+    # is still legitimately running, a second worker starts it from scratch,
+    # and it repeats every `retry` seconds forever. Training is the only task
+    # long enough to hit this: at 2100 it could never exceed 35 minutes, and
+    # ran in an endless restart loop when it tried.
+    #
+    # train_model's own "is one already running?" guard does not catch this —
+    # django-q writes Task rows on completion, so mid-run there is no row for
+    # it to see.
     "timeout": 1800,
-    "retry": 2100,
+    "retry": 7500,
+    # A task that failed is acknowledged rather than put back on the queue.
+    # Without this a genuinely broken long task retries indefinitely.
+    "ack_failure": True,
+    "max_attempts": 2,
     "queue_limit": 50,
     "bulk": 10,
     "orm": "default",

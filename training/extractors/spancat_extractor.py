@@ -12,8 +12,10 @@ def extract_with_spancat(nlp, text):
     """
     Run SpanCat prediction on *text* using the provided spaCy *nlp* pipeline.
 
-    Returns a list of dicts with keys: text, label, start_char, end_char.
-    Only spans with labels THIRD_PARTY or OPERATIONAL are returned.
+    Returns a list of dicts with keys: text, label, start_char, end_char, entity_type.
+    Only spans with labels THIRD_PARTY or OPERATIONAL are returned. ``entity_type``
+    is always None — SpanCat is trained on the coarse labels alone and has no
+    fine-grained type to report.
     """
     doc = nlp(text)
     spans = doc.spans.get("sc", [])
@@ -27,6 +29,7 @@ def extract_with_spancat(nlp, text):
                 "label": span.label_,
                 "start_char": span.start_char,
                 "end_char": span.end_char,
+                "entity_type": None,
             }
         )
     return results

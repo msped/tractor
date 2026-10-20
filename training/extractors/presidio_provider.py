@@ -283,6 +283,7 @@ class PresidioSnapshot:
                 "label": label,
                 "start_char": r.start,
                 "end_char": r.end,
+                "entity_type": r.entity_type,
             }
             for r in results
         ]
@@ -293,8 +294,9 @@ class PresidioSnapshot:
     def extract_third_party(self, text):
         """Built-in UK PII patterns + custom THIRD_PARTY recognizers.
 
-        Returns a list of dicts with keys: text, label, start_char, end_char.
-        All entities are mapped to THIRD_PARTY.
+        Returns a list of dicts with keys: text, label, start_char, end_char,
+        entity_type. All entities are mapped to THIRD_PARTY; ``entity_type``
+        keeps Presidio's own label (PERSON, PHONE_NUMBER, ...) for attribution.
         """
         return self._analyze(
             "third_party", _PRESIDIO_ENTITIES, text, "THIRD_PARTY"
@@ -304,8 +306,9 @@ class PresidioSnapshot:
         """Built-in structured OPERATIONAL refs (crime refs, collar numbers)
         + custom OPERATIONAL recognizers.
 
-        Returns a list of dicts with keys: text, label, start_char, end_char.
-        All entities are mapped to OPERATIONAL.
+        Returns a list of dicts with keys: text, label, start_char, end_char,
+        entity_type. All entities are mapped to OPERATIONAL; ``entity_type``
+        keeps Presidio's own recognizer label.
         """
         return self._analyze(
             "operational", _OPERATIONAL_ENTITIES, text, "OPERATIONAL"

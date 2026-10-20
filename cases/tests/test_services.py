@@ -26,6 +26,7 @@ from ..models import (
     RedactionSnapshot,
     ReviewWorkflowSettings,
 )
+from ..resolution import _matches_data_subject
 from ..services import (
     _apply_case_ds_info_to_document,
     _apply_existing_case_decisions,
@@ -35,7 +36,6 @@ from ..services import (
     _css_string_escape,
     _export_url_fetcher,
     _generate_pdf_from_document,
-    _matches_data_subject,
     _render_table_with_redactions,
     delete_cases_past_retention_date,
     delete_original_files_past_threshold,
@@ -2178,3 +2178,286 @@ class CssStringEscapeTests(TestCase):
         escaped = _css_string_escape(malicious)
         # Rendered inside content: "<escaped>" the closing quote stays live.
         self.assertTrue(escaped.endswith("\\\\"))
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
+    """
+    Span resolution through the real processing entry point.
+
+    Documents here are pasted-text shaped (`structure=None`), the path most
+    documents take when records are pasted in rather than uploaded as files.
+    """
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="RES001",
+            data_subject_name="Joe Bloggs",
+            data_subject_dob=date(1990, 1, 1),
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("record.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.spacy_model = SpacyModel.objects.create(
+            name="en_res_model", is_active=True
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _process(self, text, suggestions):
+        with (
+            patch("cases.services.extract_entities_from_text") as mock_extract,
+            patch("cases.services.SpanCatModelManager") as mock_spancat,
+            patch("cases.services.GLiNERModelManager") as mock_gliner,
+            patch("django_q.tasks.async_task") as mock_async_task,
+        ):
+            mock_gliner.get_instance.return_value = MagicMock()
+            spancat_instance = MagicMock()
+            spancat_instance.get_model_entry.return_value = self.spacy_model
+            mock_spancat.get_instance.return_value = spancat_instance
+            mock_extract.return_value = (text, suggestions, [], None)
+
+            process_document_and_create_redactions(self.document.id)
+        return mock_async_task
+
+    def _span(self, text, start, entity_type, label="THIRD_PARTY"):
+        return {
+            "text": text,
+            "label": label,
+            "start_char": start,
+            "end_char": start + len(text),
+            "entity_type": entity_type,
+        }
+
+    def test_the_data_subjects_own_detail_is_proposed_for_confirmation(self):
+        text = "Joe Bloggs\t07700 900000"
+        self._process(
+            text,
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span("07700 900000", 11, "PHONE_NUMBER"),
+            ],
+        )
+
+        phone = self.document.redactions.get(text="07700 900000")
+        self.assertEqual(
+            phone.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertFalse(phone.is_accepted)
+        self.assertIsNone(phone.decided_by)
+        self.assertIn("Joe Bloggs", phone.rationale)
+        # The reviewer's own reason field is untouched — the UI reads a value
+        # there as "rejected".
+        self.assertIsNone(phone.justification)
+
+    def test_proposing_ds_info_does_not_propagate_across_the_case(self):
+        """
+        bulk_create fires no post_save, and the signal now requires a human
+        acceptance anyway. An unconfirmed inference must not spread case-wide.
+        """
+        mock_async_task = self._process(
+            "Joe Bloggs\t07700 900000",
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span("07700 900000", 11, "PHONE_NUMBER"),
+            ],
+        )
+
+        mock_async_task.assert_not_called()
+
+    def test_the_data_subjects_name_is_accepted_under_record_match(self):
+        self._process(
+            "Joe Bloggs attended",
+            [self._span("Joe Bloggs", 0, "PERSON_NAME")],
+        )
+
+        name = self.document.redactions.get(text="Joe Bloggs")
+        self.assertEqual(
+            name.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertTrue(name.is_accepted)
+        self.assertEqual(name.decided_by, Redaction.DecidedBy.DS_RECORD_MATCH)
+
+    def test_a_third_partys_detail_stays_third_party_with_no_rationale(self):
+        text = "SMITH, Jane\t07700 900111"
+        self._process(
+            text,
+            [
+                self._span("SMITH, Jane", 0, "PERSON_NAME"),
+                self._span("07700 900111", 12, "PHONE_NUMBER"),
+            ],
+        )
+
+        phone = self.document.redactions.get(text="07700 900111")
+        self.assertEqual(
+            phone.redaction_type, Redaction.RedactionType.THIRD_PARTY_PII
+        )
+        self.assertIsNone(phone.rationale)
+
+    def test_each_record_line_keeps_its_own_details(self):
+        text = "Joe Bloggs\t07700 900000\nSMITH, Jane\t07700 900111"
+        self._process(
+            text,
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span("07700 900000", 11, "PHONE_NUMBER"),
+                self._span("SMITH, Jane", 24, "PERSON_NAME"),
+                self._span("07700 900111", 36, "PHONE_NUMBER"),
+            ],
+        )
+
+        self.assertEqual(
+            self.document.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
+        self.assertEqual(
+            self.document.redactions.get(text="07700 900111").redaction_type,
+            Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+    def test_an_operational_marking_in_the_ds_block_stays_operational(self):
+        text = "Joe Bloggs\t#0723222"
+        self._process(
+            text,
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span(
+                    "#0723222", 11, "UK_COLLAR_NUMBER", label="OPERATIONAL"
+                ),
+            ],
+        )
+
+        collar = self.document.redactions.get(text="#0723222")
+        self.assertEqual(
+            collar.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+
+    def test_auto_accept_accepts_an_inferred_attribution_too(self):
+        """
+        Auto-accept covers inferred DS_INFO like everything else: the mode
+        pre-makes every decision and the reviewer checks the document, which
+        they cannot complete without scrolling all of it. Rows carry AUTO
+        provenance so a machine decision stays distinguishable from a human's.
+        """
+        settings_obj = ReviewWorkflowSettings.get()
+        settings_obj.auto_accept_enabled = True
+        settings_obj.save()
+
+        text = "Joe Bloggs\t07700 900000\nSMITH, Jane\t07700 900111"
+        self._process(
+            text,
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span("07700 900000", 11, "PHONE_NUMBER"),
+                self._span("SMITH, Jane", 24, "PERSON_NAME"),
+                self._span("07700 900111", 36, "PHONE_NUMBER"),
+            ],
+        )
+
+        inferred = self.document.redactions.get(text="07700 900000")
+        self.assertEqual(
+            inferred.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertEqual(inferred.decided_by, Redaction.DecidedBy.AUTO_ACCEPT)
+        self.assertTrue(inferred.is_accepted)
+        # The reason it was attributed survives the acceptance, so a reviewer
+        # scanning an auto-accepted document can still see why.
+        self.assertIn("Joe Bloggs", inferred.rationale)
+
+        third_party = self.document.redactions.get(text="07700 900111")
+        self.assertEqual(
+            third_party.decided_by, Redaction.DecidedBy.AUTO_ACCEPT
+        )
+        self.assertTrue(third_party.is_accepted)
+
+    def test_a_correction_in_one_document_sticks_for_the_next(self):
+        """
+        Story 13 through the real workflow: the reviewer corrects a wrong
+        attribution by marking the text third-party (what they would actually
+        do, since that is the action that redacts it), and the next document
+        does not propose it as the data subject's again.
+        """
+        text = "Joe Bloggs\t07700 900000"
+        suggestions = [
+            self._span("Joe Bloggs", 0, "PERSON_NAME"),
+            self._span("07700 900000", 11, "PHONE_NUMBER"),
+        ]
+        self._process(text, suggestions)
+
+        # The reviewer disagrees: that number is the witness's, not Joe's.
+        phone = self.document.redactions.get(text="07700 900000")
+        phone.redaction_type = Redaction.RedactionType.THIRD_PARTY_PII
+        phone.is_accepted = True
+        phone.decided_by = Redaction.DecidedBy.HUMAN
+        phone.save()
+
+        second = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("record2.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.document = second
+        self._process(text, suggestions)
+
+        self.assertEqual(
+            second.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+
+    def test_without_a_correction_the_next_document_still_infers(self):
+        """The control for the test above — the suppression is the correction."""
+        text = "Joe Bloggs\t07700 900000"
+        suggestions = [
+            self._span("Joe Bloggs", 0, "PERSON_NAME"),
+            self._span("07700 900000", 11, "PHONE_NUMBER"),
+        ]
+        self._process(text, suggestions)
+
+        second = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("record3.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.document = second
+        self._process(text, suggestions)
+
+        self.assertEqual(
+            second.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )
+
+    def test_a_correction_in_another_case_does_not_leak_across(self):
+        """Whose a phone number is depends entirely on the case."""
+        other_case = Case.objects.create(
+            case_reference="RES002", data_subject_name="Someone Else"
+        )
+        other_document = Document.objects.create(
+            case=other_case,
+            original_file=SimpleUploadedFile("other.txt", b"content"),
+            status=Document.Status.READY_FOR_REVIEW,
+        )
+        Redaction.objects.create(
+            document=other_document,
+            start_char=0,
+            end_char=12,
+            text="07700 900000",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        self._process(
+            "Joe Bloggs\t07700 900000",
+            [
+                self._span("Joe Bloggs", 0, "PERSON_NAME"),
+                self._span("07700 900000", 11, "PHONE_NUMBER"),
+            ],
+        )
+
+        self.assertEqual(
+            self.document.redactions.get(text="07700 900000").redaction_type,
+            Redaction.RedactionType.DS_INFORMATION,
+        )

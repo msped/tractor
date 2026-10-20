@@ -101,6 +101,12 @@ describe('<RedactionSidebar />', () => {
             });
         });
 
+        it('does not render a rationale line when there is none', () => {
+            cy.contains('li', 'pending text').within(() => {
+                cy.contains('which matches the name recorded').should('not.exist');
+            });
+        });
+
         it('renders "Source: AI" badge for NER suggestions', () => {
             cy.contains('li', 'pending text').within(() => {
                 cy.contains('Source: AI').should('be.visible');
@@ -533,6 +539,95 @@ describe('<RedactionSidebar />', () => {
         it('shows the Remove button as inactive when a different tool is active', () => {
             cy.fullMount(<RedactionSidebar {...baseProps} redactions={mockRedactions} activeHighlightType="PII" onToggleHighlightTool={cy.stub()} documentCompleted={false} />);
             cy.contains('button', 'Remove').should('have.css', 'opacity', '0.45');
+        });
+    });
+
+    context('Data subject rationale', () => {
+        // Why the system believes a detail is the data subject's. Without it a
+        // reviewer confirming an attribution is doing so on trust.
+        const INFERRED = 'In the same table row as "BLOGGS, Joe", which matches the name recorded on this case.';
+        const RECORD_MATCH = 'Matches the name recorded on this case.';
+
+        const withRationale = {
+            pending: {
+                total: 1,
+                items: [
+                    { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: '07700 900000', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER', rationale: INFERRED },
+                ],
+            },
+            accepted: {
+                total: 1,
+                items: [
+                    { id: 'd2', ids: ['d2'], isMerged: false, isGroup: false, text: 'BLOGGS, Joe', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER', rationale: RECORD_MATCH },
+                ],
+            },
+            rejected: { total: 0, items: [] },
+            manual: { total: 0, items: [] },
+        };
+
+        it('shows why a pending attribution was made, naming the person and the block', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withRationale} />);
+            cy.contains('li', '07700 900000').within(() => {
+                cy.contains(INFERRED).should('be.visible');
+            });
+        });
+
+        it('shows the rationale on an accepted row too', () => {
+            // Auto-accept mode pre-accepts attributions, so the explanation is
+            // the only way to spot a wrong one while scanning the document.
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withRationale} />);
+            cy.contains('accepted (1)').click();
+            // Scoped to the section: the pending card's rationale quotes the
+            // same name, so an unscoped lookup finds that card instead.
+            cy.contains('accepted (1)').parents('.MuiAccordion-root').within(() => {
+                cy.contains(RECORD_MATCH).should('be.visible');
+            });
+        });
+
+        it('shows the rationale alongside a human rejection reason, not instead of it', () => {
+            const rejectedWithBoth = {
+                ...withRationale,
+                pending: { total: 0, items: [] },
+                rejected: {
+                    total: 1,
+                    items: [
+                        { id: 'd3', ids: ['d3'], isMerged: false, isGroup: false, text: '07700 900000', redaction_type: 'DS_INFO', is_suggestion: true, rationale: INFERRED, justification: 'Belongs to the witness' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={rejectedWithBoth} />);
+            cy.contains('rejected (1)').click();
+            cy.contains('li', '07700 900000').within(() => {
+                cy.contains(INFERRED).should('be.visible');
+                cy.contains('Reason for rejection: Belongs to the witness').should('be.visible');
+            });
+        });
+
+        it('shows the rationale on each occurrence inside an expanded group', () => {
+            const grouped = {
+                pending: {
+                    total: 2,
+                    items: [
+                        {
+                            key: '07700 900000::DS_INFO',
+                            isGroup: true,
+                            text: '07700 900000',
+                            redaction_type: 'DS_INFO',
+                            items: [
+                                { id: 'g1', ids: ['g1'], isMerged: false, isGroup: false, text: '07700 900000', redaction_type: 'DS_INFO', is_suggestion: true, rationale: INFERRED },
+                                { id: 'g2', ids: ['g2'], isMerged: false, isGroup: false, text: '07700 900000', redaction_type: 'DS_INFO', is_suggestion: true, rationale: INFERRED },
+                            ],
+                        },
+                    ],
+                },
+                accepted: { total: 0, items: [] },
+                rejected: { total: 0, items: [] },
+                manual: { total: 0, items: [] },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={grouped} />);
+            cy.contains('2 occurrences').should('be.visible');
+            cy.get('[aria-label="expand group"]').click();
+            cy.contains(INFERRED).should('be.visible');
         });
     });
 });

@@ -23,6 +23,52 @@ describe('<TrainingStatusBanner />', () => {
             cy.contains('Training is in progress').should('be.visible');
             cy.get('[role="progressbar"]').should('be.visible');
         });
+
+        it('offers a stop control', () => {
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: true } });
+            cy.fullMount(<TrainingStatusBanner initialIsRunning={true} />, mountOpts);
+            cy.contains('button', 'Stop training').should('be.enabled');
+        });
+
+        it('requests a stop and reports that no model will be saved', () => {
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: true } });
+            cy.intercept('POST', '/api/model-management/training/stop', {
+                body: { status: 'stop requested', dequeued: 0 },
+            }).as('stop');
+            cy.fullMount(<TrainingStatusBanner initialIsRunning={true} />, mountOpts);
+
+            cy.contains('button', 'Stop training').click();
+
+            cy.wait('@stop');
+            // The banner stays up — the run is still unwinding — but says so,
+            // and the control is disabled so it cannot be asked twice.
+            cy.contains('Stopping training').should('be.visible');
+            cy.contains('button', 'Stopping').should('be.disabled');
+        });
+
+        it('reflects a stop already requested elsewhere', () => {
+            cy.intercept('GET', '/api/model-management/status', {
+                body: { is_running: true, stop_requested: true },
+            }).as('status');
+            cy.fullMount(<TrainingStatusBanner initialIsRunning={true} pollInterval={100} />, mountOpts);
+
+            cy.wait('@status');
+            cy.contains('button', 'Stopping').should('be.disabled');
+        });
+
+        it('keeps the banner usable when the stop request fails', () => {
+            cy.intercept('GET', '/api/model-management/status', { body: { is_running: true } });
+            cy.intercept('POST', '/api/model-management/training/stop', {
+                statusCode: 500,
+                body: { detail: 'boom' },
+            }).as('stopFails');
+            cy.fullMount(<TrainingStatusBanner initialIsRunning={true} />, mountOpts);
+
+            cy.contains('button', 'Stop training').click();
+
+            cy.wait('@stopFails');
+            cy.contains('button', 'Stop training').should('be.enabled');
+        });
     });
 
     context('when training transitions from running to complete', () => {

@@ -1461,6 +1461,33 @@ class ExtractionPipelineTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["text"], "John Doe Smith")
 
+    def test_entity_type_survives_dedup_and_prefix_expansion(self):
+        """
+        ``entity_type`` is transient — carried through the pipeline rather than
+        persisted — so it has to survive every stage that rewrites spans:
+        deduplication (which passes whole dicts through) and prefix expansion
+        (which only touches start_char/text).
+        """
+        name = self._make_entity("BLOGGS, Joe", 0, 11)
+        name["entity_type"] = "PERSON_NAME"
+        collar = self._make_entity("0723222", 19, 26, label="OPERATIONAL")
+        collar["entity_type"] = "UK_COLLAR_NUMBER"
+        dropped = self._make_entity("Joe", 8, 11)
+        dropped["entity_type"] = "person name"
+
+        pipeline = ExtractionPipeline(
+            stages=[self._stage([name, collar]), self._stage([dropped])]
+        )
+        text = "BLOGGS, Joe is PC #0723222"
+        result = _expand_prefix_symbols(pipeline.run(text), text)
+
+        by_type = {r["entity_type"]: r for r in result}
+        self.assertEqual(
+            set(by_type), {"PERSON_NAME", "UK_COLLAR_NUMBER"}
+        )  # the overlapping "person name" span was dropped
+        # The collar span grew left onto the '#' and kept its entity_type.
+        self.assertEqual(by_type["UK_COLLAR_NUMBER"]["text"], "#0723222")
+
     def test_fatal_stage_exception_propagates(self):
         pipeline = ExtractionPipeline(
             stages=[self._stage([]), self._broken_stage(RuntimeError("fatal"))]
