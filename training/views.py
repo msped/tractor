@@ -280,21 +280,34 @@ class TrainingRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TrainingStatusView(APIView):
-    """Returns whether a training task is currently running."""
+    """Whether a training run is in progress, queued, or abandoned.
+
+    "Running" comes from the run's own heartbeat rather than from the task
+    queue. The queue was the wrong source: when django-q reaped a task at its
+    timeout the queue entry disappeared while the process carried on
+    training, so the UI showed nothing running and offered no way to stop it.
+    A run that is still working says so; one that died stops saying so.
+
+    Queued-but-not-started is reported too, so the banner appears between
+    pressing the button and the worker picking the job up.
+    """
 
     permission_classes = [IsAdminUser]
 
     def get(self, request):
         from django_q.models import OrmQ
 
-        running = any(
+        queued = any(
             q.func() == "training.tasks.train_model"
             for q in OrmQ.objects.all()
         )
+        control = TrainingControl.get()
         return Response(
             {
-                "is_running": running,
-                "stop_requested": TrainingControl.get().cancel_requested,
+                "is_running": control.is_running or queued,
+                "stop_requested": control.cancel_requested,
+                "started_at": control.started_at,
+                "is_stale": control.is_stale,
             }
         )
 

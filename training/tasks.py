@@ -1,11 +1,12 @@
 import logging
+import os
 import random
 import shutil
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
 from django.utils import timezone
-from django_q.models import Task
 from spacy.training import Example
 from spacy.util import compounding, minibatch
 
@@ -201,8 +202,90 @@ def _stop_requested():
     return TrainingControl.objects.filter(pk=1, cancel_requested=True).exists()
 
 
+# How often a run reports that it is still alive. Frequent enough that an
+# abandoned run is noticed quickly, rare enough that the write is irrelevant
+# beside the training itself.
+_HEARTBEAT_EVERY = timedelta(seconds=30)
+_last_heartbeat = None
+
+
+def _beat():
+    """Record that this run is still going, at most once per interval."""
+    global _last_heartbeat
+    from .models import TrainingControl
+
+    now = timezone.now()
+    if _last_heartbeat and now - _last_heartbeat < _HEARTBEAT_EVERY:
+        return
+    _last_heartbeat = now
+    TrainingControl.objects.filter(pk=1).update(heartbeat_at=now)
+
+
+def _claim_run():
+    """
+    Mark a run as started, refusing if one is already going.
+
+    Returns the TrainingControl row, or None when another run holds it. Two
+    concurrent trainings would simply double the machine's load for no
+    benefit, and this used to be possible because the old guard looked at
+    django-q Task rows, which only exist once a task has finished.
+    """
+    global _last_heartbeat
+    from .models import TrainingControl
+
+    control = TrainingControl.get()
+    if control.is_running:
+        print(
+            f"A training run is already in progress (pid {control.pid}, "
+            f"started {control.started_at}). Aborting."
+        )
+        return None
+
+    if control.is_stale:
+        print(
+            f"Replacing an abandoned run (pid {control.pid}, last seen "
+            f"{control.heartbeat_at})."
+        )
+
+    now = timezone.now()
+    _last_heartbeat = now
+    control.cancel_requested = False
+    control.started_at = now
+    control.heartbeat_at = now
+    control.pid = os.getpid()
+    control.save(
+        update_fields=[
+            "cancel_requested",
+            "started_at",
+            "heartbeat_at",
+            "pid",
+        ]
+    )
+    return control
+
+
+def _release_run():
+    """Clear the running marker. Safe to call however the run ended."""
+    global _last_heartbeat
+    from .models import TrainingControl
+
+    _last_heartbeat = None
+    TrainingControl.objects.filter(pk=1).update(
+        cancel_requested=False,
+        started_at=None,
+        heartbeat_at=None,
+        pid=None,
+    )
+
+
 def _abort_if_stopped(stage):
-    """Give up the run if a stop has been asked for by the time *stage* begins."""
+    """Give up the run if a stop has been asked for by the time *stage* begins.
+
+    Doubles as the heartbeat: these are the points a run passes through
+    regularly, so reporting life here costs nothing extra and means a run
+    that stops checking in really has stopped working.
+    """
+    _beat()
     if _stop_requested():
         raise TrainingStopped(stage)
 
@@ -385,27 +468,25 @@ def _run_training_loop(nlp, train_examples, dev_examples, output_dir):
 
 
 def train_model(source="redactions", user=None):
-    """Train a new SpanCat model from collected redaction data and save it to nlp_models/."""
-    # Check if another training task is already running
-    running_tasks = Task.objects.filter(
-        func="training.tasks.train_model",
-        success__isnull=True,
-    ).count()
+    """Train a new SpanCat model from collected redaction data and save it to nlp_models/.
 
-    if running_tasks > 0:
-        print("Another training task is already in progress. Aborting.")
+    Claims the single training slot for the duration, so a second run cannot
+    start alongside this one and double the machine's load, and so the run
+    stays visible and stoppable from the UI for as long as it lasts.
+    """
+    if _claim_run() is None:
         return
 
-    # Clear any stop left over from a previous run, so a stale flag cannot
-    # kill this one before it starts. Done before reading documents, since
-    # that is itself slow enough to be worth interrupting.
-    from .models import TrainingControl
+    try:
+        _train_model_inner(source)
+    finally:
+        # Whatever happened — finished, stopped, or raised — the slot is
+        # given back. Only an outright kill can leave it held, and that is
+        # precisely the case the stale heartbeat is there to reveal.
+        _release_run()
 
-    control = TrainingControl.get()
-    if control.cancel_requested:
-        control.cancel_requested = False
-        control.save(update_fields=["cancel_requested"])
 
+def _train_model_inner(source):
     train_data, used_training_docs, used_case_docs = (
         collect_training_data_detailed(source)
     )
@@ -418,8 +499,6 @@ def train_model(source="redactions", user=None):
 
     if _stop_requested():
         # Nothing has been created yet, so there is nothing to clean up.
-        control.cancel_requested = False
-        control.save(update_fields=["cancel_requested"])
         print("Training stopped on request before it began.")
         return
 
@@ -463,8 +542,6 @@ def train_model(source="redactions", user=None):
         # asked for. The previously active model is untouched throughout.
         if output_dir.exists():
             shutil.rmtree(output_dir)
-        control.cancel_requested = False
-        control.save(update_fields=["cancel_requested"])
         print(
             f"Training stopped on request ({stop}). No model was registered."
         )
