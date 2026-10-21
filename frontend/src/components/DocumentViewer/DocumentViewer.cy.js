@@ -148,6 +148,75 @@ describe('<DocumentViewer />', () => {
         });
     });
 
+    context('Overlapping marks', () => {
+        // Overlapping spans are a normal state: a DS_INFO span sits inside a
+        // wider operational one. The renderer walks the text with a single
+        // cursor, so an overlap must not make it emit the same characters
+        // twice — which silently corrupted the document body.
+        it('does not duplicate text when one accepted span contains another', () => {
+            const overlapping = [
+                { id: 'op', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'ds', start_char: 41, end_char: 45, text: 'data', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(<DocumentViewer text={text} redactions={overlapping} />);
+
+            cy.get('[data-testid="document-viewer"]').should('have.text', text);
+        });
+
+        it('does not duplicate text when two accepted spans partially overlap', () => {
+            const overlapping = [
+                { id: 'a', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'b', start_char: 41, end_char: 51, text: 'data, and', redaction_type: 'PII', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(<DocumentViewer text={text} redactions={overlapping} />);
+
+            cy.get('[data-testid="document-viewer"]').should('have.text', text);
+        });
+
+        it('gives the contested characters to the more specific span', () => {
+            const overlapping = [
+                { id: 'a', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'b', start_char: 41, end_char: 51, text: 'data, and', redaction_type: 'PII', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(<DocumentViewer text={text} redactions={overlapping} />);
+
+            cy.get('[data-redaction-id="a"]').should('have.text', 'operational ');
+            cy.get('[data-redaction-id="b"]').should('have.text', 'data, and ');
+        });
+
+        it('renders a contained span inside the wider one, splitting it', () => {
+            // The real shape from 26000030069.docx: the data subject's name
+            // carved out of the operational sentence that buried it. The
+            // reviewer has to see the carve-out, or the screen is
+            // indistinguishable from it never having happened.
+            const buried = [
+                { id: 'op', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'ds', start_char: 41, end_char: 45, text: 'data', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(<DocumentViewer text={text} redactions={buried} />);
+
+            // The inner claim is visible and purple...
+            cy.get('[data-redaction-id="ds"]')
+                .should('have.text', 'data')
+                .and('have.css', 'background-color', 'rgba(177, 156, 217, 0.8)');
+            // ...and the operational span renders only what it still owns.
+            cy.get('[data-redaction-id="op"]')
+                .should('have.text', 'operational ')
+                .and('have.css', 'background-color', 'rgba(0, 221, 255, 0.7)');
+        });
+
+        it('splits the wider span either side of an interior claim', () => {
+            const buried = [
+                { id: 'op', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'ds', start_char: 41, end_char: 44, text: 'dat', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(<DocumentViewer text={text} redactions={buried} />);
+
+            cy.get('[data-redaction-id="op"]').should('have.length', 2);
+            cy.get('[data-testid="document-viewer"]').should('have.text', text);
+        });
+    });
+
     context('Final Mode', () => {
         it('renders accepted redactions as black boxes and hides suggestions', () => {
             cy.mount(
@@ -192,6 +261,48 @@ describe('<DocumentViewer />', () => {
             // Other accepted redactions are still blacked out
             cy.contains('span', 'PII')
                 .should('have.css', 'background-color', 'rgb(0, 0, 0)');
+        });
+
+        it('keeps DS_INFO readable when a wider accepted span overlaps it', () => {
+            // The shape a detector produces: one wide operational span with the
+            // data subject's own name inside it. Dropping the DS_INFO row alone
+            // would leave those characters covered and blacked out.
+            const overlapping = [
+                { id: 'op', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'ds', start_char: 41, end_char: 45, text: 'data', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={overlapping}
+                    viewMode="final"
+                />
+            );
+
+            // The claimed characters survive as plain text...
+            cy.contains('span', 'operational data').should('not.exist');
+            // ...while the rest of the operational span is still blacked out.
+            cy.contains('span', 'operational ')
+                .should('be.visible')
+                .and('have.css', 'background-color', 'rgb(0, 0, 0)');
+            cy.get('[data-redaction-id="op"]').should('have.length', 1);
+        });
+
+        it('blacks out both sides of an interior DS_INFO claim', () => {
+            const overlapping = [
+                { id: 'op', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
+                { id: 'ds', start_char: 41, end_char: 44, text: 'dat', redaction_type: 'DS_INFO', is_accepted: true, is_suggestion: true },
+            ];
+            cy.mount(
+                <DocumentViewer
+                    text={text}
+                    redactions={overlapping}
+                    viewMode="final"
+                />
+            );
+
+            // Split in two: 'operational ' before the claim, 'a' after it.
+            cy.get('[data-redaction-id="op"]').should('have.length', 2);
         });
 
         it('still highlights accepted DS_INFO in color-coded mode', () => {

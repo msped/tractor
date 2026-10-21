@@ -128,3 +128,117 @@ def matches_dob_text(text, ds_dob):
         if candidate == formatted.casefold():
             return True
     return False
+
+
+# A word as it sits in a document.  Apostrophes are kept inside the token so
+# "O'Brien" is one word, matching how name_tokens reduces it.
+_WORD_RE = re.compile(r"[A-Za-z0-9'’]+")
+
+# A character that continues a word.  A run butting against one is part of a
+# longer name — "Hughes" inside "Hughes-Smith" is not the data subject.
+_CONTINUATION_RE = re.compile(r"[-'’\w]")
+
+
+def _normalise(raw):
+    """Reduce one document word the same way :func:`name_tokens` would."""
+    return re.sub(r"['’]", "", raw.casefold())
+
+
+def _is_free_standing(text, start, end):
+    """Whether [start, end) is bounded by something other than more word."""
+    before = text[start - 1] if start > 0 else ""
+    after = text[end] if end < len(text) else ""
+    return not (
+        _CONTINUATION_RE.match(before) or _CONTINUATION_RE.match(after)
+    )
+
+
+def _name_occurrences(text, ds_name):
+    """
+    Every run of whole words in *text* whose tokens are exactly the data
+    subject's.
+
+    Set equality, not containment, and for the same reason ``_match_name``
+    draws the line there: a run that merely shares tokens is the
+    ``AMBIGUOUS`` case, and these occurrences are disclosed rather than
+    withheld, so resolving an uncertain one toward the data subject would put
+    a third party's name into the clear.  Order-free, so "HUGHES, GRACE" is
+    found from a record reading "Grace Hughes".
+    """
+    subject = name_tokens(ds_name)
+    if not subject:
+        return []
+
+    words = [
+        (m.start(), m.end(), _normalise(m.group(0)))
+        for m in _WORD_RE.finditer(text)
+    ]
+    words = [w for w in words if len(w[2]) > 1]
+
+    occurrences = []
+    i = 0
+    while i < len(words):
+        seen = set()
+        end_index = None
+        for j in range(i, len(words)):
+            token = words[j][2]
+            if token not in subject:
+                break
+            seen.add(token)
+            if seen == subject:
+                end_index = j
+                break
+
+        if end_index is not None:
+            start, end = words[i][0], words[end_index][1]
+            if _is_free_standing(text, start, end):
+                occurrences.append((start, end))
+                i = end_index + 1
+                continue
+        i += 1
+
+    return occurrences
+
+
+def _dob_occurrences(text, ds_dob):
+    """Every printing of the data subject's date of birth in *text*."""
+    if not ds_dob:
+        return []
+
+    occurrences = []
+    for fmt in _DOB_FORMATS:
+        try:
+            rendered = ds_dob.strftime(fmt)
+        except ValueError:
+            continue
+        if not rendered:
+            continue
+        for match in re.finditer(re.escape(rendered), text, re.IGNORECASE):
+            if _is_free_standing(text, match.start(), match.end()):
+                occurrences.append((match.start(), match.end()))
+    return occurrences
+
+
+def find_identity_occurrences(text, *, ds_name=None, ds_dob=None):
+    """
+    Locate the data subject's own name and date of birth within *text*.
+
+    Where :func:`match_person` judges a span someone else chose, this finds
+    the data subject inside text nobody has split up yet — the case of a
+    detector claiming a whole sentence, with the data subject's name sitting
+    somewhere in the middle of it.
+
+    Returns merged, sorted ``(start, end)`` ranges.
+    """
+    if not text:
+        return []
+
+    found = _name_occurrences(text, ds_name) + _dob_occurrences(text, ds_dob)
+
+    merged = []
+    for start, end in sorted(found):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [(start, end) for start, end in merged]
