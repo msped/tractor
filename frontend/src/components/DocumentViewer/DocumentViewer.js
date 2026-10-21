@@ -1,6 +1,7 @@
 import React, { useRef, useMemo } from 'react';
 import { Paper, Box, Typography } from '@mui/material';
 import DOMPurify from 'dompurify';
+import { withheldSpans } from '@/utils/withheldSpans';
 
 const HIGHLIGHT_COLORS = {
     // For pending suggestions, which are always yellow
@@ -202,29 +203,81 @@ const renderSegmentWithTables = (segText, segStart, tableRegions, parts, keyPref
 };
 
 /**
+ * Resolve marks into disjoint rendered segments, most specific mark winning.
+ *
+ * Overlapping marks are a normal state, not a glitch: the data subject's own
+ * name sits inside a wider operational span the detector claimed, and that
+ * inner claim is exactly what a reviewer needs to see. Rendering marks
+ * directly made the walk emit the overlapped characters twice; letting the
+ * first span win instead made the inner one invisible, which looks identical
+ * to the span never having been carved out at all.
+ *
+ * So the text is cut at every mark boundary and each resulting slice is given
+ * to the narrowest mark covering it. A contained mark renders *within* the
+ * wider one, splitting it — the same shape the export produces. Slices are
+ * disjoint by construction, so no character can be emitted twice.
+ */
+const resolveMarkSegments = (marks) => {
+    if (marks.length === 0) return [];
+
+    const bounds = new Set();
+    marks.forEach(m => {
+        bounds.add(m.start_char);
+        bounds.add(m.end_char);
+    });
+    const points = [...bounds].sort((a, b) => a - b);
+
+    const segments = [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+        const start = points[i];
+        const end = points[i + 1];
+
+        let winner = null;
+        marks.forEach(m => {
+            if (m.start_char > start || m.end_char < end) return;
+            if (winner === null
+                || (m.end_char - m.start_char) < (winner.end_char - winner.start_char)) {
+                winner = m;
+            }
+        });
+        if (winner === null) continue;
+
+        // Keep one box per mark where nothing interrupts it, so an
+        // uncontested span still renders as a single element.
+        const previous = segments[segments.length - 1];
+        if (previous && previous.mark === winner && previous.end === start) {
+            previous.end = end;
+        } else {
+            segments.push({ mark: winner, start, end });
+        }
+    }
+    return segments;
+};
+
+/**
  * Render text content with redaction highlights applied.
  * Returns an array of React elements with highlights for marks that fall within the text range.
  */
-const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick) => {
+const renderTextWithHighlights = (elementText, elementStart, markSegments, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick) => {
     const elementEnd = elementStart + elementText.length;
     const parts = [];
     let cursor = 0;
 
-    // Find marks that overlap with this element
-    const relevantMarks = sortedMarks.filter(mark =>
-        mark.start_char < elementEnd && mark.end_char > elementStart
+    // Find segments that overlap with this element
+    const relevantSegments = markSegments.filter(segment =>
+        segment.start < elementEnd && segment.end > elementStart
     );
 
-    relevantMarks.forEach((mark, index) => {
+    relevantSegments.forEach(({ mark, start, end }, index) => {
         // Calculate local positions within this element
-        const localStart = Math.max(0, mark.start_char - elementStart);
-        const localEnd = Math.min(elementText.length, mark.end_char - elementStart);
+        const markStart = Math.max(0, start - elementStart);
+        const localEnd = Math.min(elementText.length, end - elementStart);
 
         // Add text before this mark
-        if (localStart > cursor) {
+        if (markStart > cursor) {
             parts.push(
                 <React.Fragment key={`text-${index}`}>
-                    {elementText.substring(cursor, localStart)}
+                    {elementText.substring(cursor, markStart)}
                 </React.Fragment>
             );
         }
@@ -257,7 +310,7 @@ const renderTextWithHighlights = (elementText, elementStart, sortedMarks, hovere
                     }
                     : undefined}
             >
-                {elementText.substring(localStart, localEnd)}
+                {elementText.substring(markStart, localEnd)}
             </Box>
         );
         cursor = localEnd;
@@ -381,15 +434,21 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
             }
         } else {
             // In final mode, DS_INFO is the data subject's own information — the
-            // disclosure export keeps it visible, so the preview must not black it out.
+            // disclosure export keeps it visible, so the preview must not black it
+            // out. Subtracting rather than filtering matters when a wider span
+            // overlaps the DS_INFO one: filtering alone would leave those
+            // characters covered, disagreeing with the export (see withheldSpans).
             const visibleRedactions = viewMode === 'final'
-                ? redactions.filter(r => r.redaction_type !== 'DS_INFO')
+                ? withheldSpans(redactions)
                 : redactions;
             marksToRender = visibleRedactions.map(r => ({ ...r, mark_type: 'accepted' }));
         }
 
         return marksToRender.sort((a, b) => a.start_char - b.start_char);
     }, [redactions, pendingRedaction, viewMode, reviewComplete, hoveredSuggestionId]);
+
+    // Resolved once per mark set rather than per rendered element.
+    const markSegments = useMemo(() => resolveMarkSegments(sortedMarks), [sortedMarks]);
 
     // Render structured document with headings, paragraphs, and tables
     const renderStructuredDocument = () => {
@@ -411,7 +470,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                             fontFamily: fontFamily,
                         }}
                     >
-                        {renderTextWithHighlights(element.text, element.start, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick)}
+                        {renderTextWithHighlights(element.text, element.start, markSegments, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick)}
                     </Typography>
                 );
             }
@@ -428,7 +487,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                             fontSize: scaledFontSize,
                         }}
                     >
-                        {renderTextWithHighlights(element.text, element.start, sortedMarks, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick)}
+                        {renderTextWithHighlights(element.text, element.start, markSegments, hoveredSuggestionId, viewMode, onHighlightClick, activeHighlightType, onUnhighlightClick)}
                     </Typography>
                 );
             }
@@ -477,7 +536,7 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                                                     {renderTextWithHighlights(
                                                         cell.text,
                                                         cell.start,
-                                                        sortedMarks,
+                                                        markSegments,
                                                         hoveredSuggestionId,
                                                         viewMode,
                                                         onHighlightClick,
@@ -520,9 +579,9 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
         const parts = [];
         const renderedTables = new Set();
 
-        sortedMarks.forEach((mark, index) => {
-            const markStart = mark.start_char;
-            const markEndExclusive = mark.end_char;
+        markSegments.forEach(({ mark, start, end }, index) => {
+            const markStart = start;
+            const markEndExclusive = end;
 
             if (markStart > lastIndex) {
                 const segment = text.substring(lastIndex, markStart);
