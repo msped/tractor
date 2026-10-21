@@ -42,6 +42,7 @@ from ..services import (
     export_case_documents,
     find_and_flag_matching_text_in_case,
     process_document_and_create_redactions,
+    reclaim_data_subject_spans,
 )
 
 User = get_user_model()
@@ -454,6 +455,82 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertIn("John Doe", html)
         self.assertNotIn("Jane Smith", html)
         self.assertIn("[...]", html)
+
+    def _overlapping_ds_info_document(self):
+        """A wide OPERATIONAL span with the data subject's name inside it.
+
+        The shape a detector actually produces: one operational string
+        covering an officer-style name-and-collar block, with the data
+        subject's own forename sitting within it.
+        """
+        self.document.extracted_text = (
+            "Reported JONES, Michael #0712345 attended."
+        )
+        self.document.save()
+        Redaction.objects.create(
+            document=self.document,
+            start_char=9,
+            end_char=32,
+            text="JONES, Michael #0712345",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        Redaction.objects.create(
+            document=self.document,
+            start_char=16,
+            end_char=23,
+            text="Michael",
+            redaction_type=Redaction.RedactionType.DS_INFORMATION,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+    def test_disclosure_keeps_ds_info_inside_a_wider_withheld_span(self):
+        """A DS_INFO claim is honoured even when a wider span covers it."""
+        self._overlapping_ds_info_document()
+
+        html, _ = _build_document_html(self.document, mode="disclosure")
+
+        self.assertIn("Michael", html)
+        self.assertNotIn("JONES", html)
+        self.assertNotIn("0712345", html)
+
+    def test_removal_keeps_ds_info_inside_a_wider_withheld_span(self):
+        """The two remaining pieces must not merge back across the name."""
+        self._overlapping_ds_info_document()
+
+        html, _ = _build_document_html(self.document, mode="removal")
+
+        self.assertIn("Michael", html)
+        self.assertNotIn("JONES", html)
+        self.assertNotIn("0712345", html)
+        self.assertEqual(html.count("[...]"), 2)
+
+    def test_disclosure_splits_the_withheld_span_into_two_blanks(self):
+        """One span either side of the disclosed name, not one span over it."""
+        self._overlapping_ds_info_document()
+
+        html, _ = _build_document_html(self.document, mode="disclosure")
+
+        self.assertEqual(html.count('class="redaction'), 2)
+
+    def test_redacted_mode_still_marks_up_the_whole_withheld_span(self):
+        """Internal review mode shows spans as stored — nothing is cut back.
+
+        The inner DS_INFO span gets no separate markup here: the renderer
+        skips a span starting behind the previous one's end, so the wider
+        operational span absorbs it. That is confined to the internal copy,
+        which is meant to show what was withheld and why.
+        """
+        self._overlapping_ds_info_document()
+
+        html, _ = _build_document_html(self.document, mode="redacted")
+
+        self.assertIn(
+            '<span class="redaction type-OP_DATA">JONES, Michael #0712345</span>',
+            html,
+        )
 
     def test_build_document_html_redacted_includes_ds_information(self):
         """DS_INFORMATION spans should still be marked up in redacted (review) mode."""
@@ -2461,3 +2538,195 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
             self.document.redactions.get(text="07700 900000").redaction_type,
             Redaction.RedactionType.DS_INFORMATION,
         )
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class ReclaimDataSubjectSpansTests(NetworkBlockerMixin, TestCase):
+    """Carving the data subject back out of a span that buried them."""
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="260001",
+            data_subject_name="Grace Hughes",
+            data_subject_dob=date(1990, 1, 1),
+        )
+        # The shape from 26000030069.docx: one operational span over the whole
+        # sentence, with the data subject's name surname-first inside it.
+        self.text = (
+            "Witness statement obtained from HUGHES, GRACE (Witness). "
+            "Statement recorded and indexed."
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "26000030069.docx", b"x", "application/pdf"
+            ),
+            status=Document.Status.READY_FOR_REVIEW,
+            extracted_text=self.text,
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _span(self, start, end, redaction_type, accepted=True):
+        return Redaction.objects.create(
+            document=self.document,
+            start_char=start,
+            end_char=end,
+            text=self.text[start:end],
+            redaction_type=redaction_type,
+            is_accepted=accepted,
+            decided_by=(Redaction.DecidedBy.HUMAN if accepted else None),
+        )
+
+    def _whole_sentence_operational(self):
+        return self._span(0, 55, Redaction.RedactionType.OPERATIONAL_DATA)
+
+    def _ds_rows(self):
+        return self.document.redactions.filter(
+            redaction_type=Redaction.RedactionType.DS_INFORMATION
+        )
+
+    def test_carves_the_name_out_of_a_burying_operational_span(self):
+        self._whole_sentence_operational()
+
+        reclaim_data_subject_spans(self.document)
+
+        [row] = self._ds_rows()
+        self.assertEqual(row.text, "HUGHES, GRACE")
+        self.assertEqual(
+            (row.start_char, row.end_char),
+            (self.text.index("HUGHES"), self.text.index(" (Witness)")),
+        )
+
+    def test_the_carved_row_is_born_accepted_as_a_record_match(self):
+        self._whole_sentence_operational()
+
+        reclaim_data_subject_spans(self.document)
+
+        [row] = self._ds_rows()
+        self.assertTrue(row.is_accepted)
+        self.assertEqual(row.decided_by, Redaction.DecidedBy.DS_RECORD_MATCH)
+        self.assertTrue(row.is_suggestion)
+        self.assertIn("recorded on this case", row.rationale)
+
+    def test_the_burying_span_is_left_untouched(self):
+        """The rest of the sentence is still operational and still withheld."""
+        op = self._whole_sentence_operational()
+
+        reclaim_data_subject_spans(self.document)
+
+        op.refresh_from_db()
+        self.assertEqual(
+            op.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        self.assertEqual((op.start_char, op.end_char), (0, 55))
+
+    def test_the_disclosure_export_now_shows_the_name(self):
+        """End to end: the carve-out plus the subtraction rule."""
+        self._whole_sentence_operational()
+
+        reclaim_data_subject_spans(self.document)
+        html, _ = _build_document_html(self.document, mode="disclosure")
+
+        self.assertIn("HUGHES, GRACE", html)
+        self.assertNotIn("Witness statement obtained", html)
+
+    def test_an_exact_operational_span_is_not_reopened(self):
+        """Resolution judged this one deliberately: the marking makes it redactable."""
+        start = self.text.index("HUGHES")
+        self._span(
+            start,
+            self.text.index(" (Witness)"),
+            Redaction.RedactionType.OPERATIONAL_DATA,
+        )
+
+        reclaim_data_subject_spans(self.document)
+
+        self.assertEqual(self._ds_rows().count(), 0)
+
+    def test_a_name_no_span_covers_is_left_alone(self):
+        """Nothing withholds it, so there is nothing to reclaim."""
+        self._span(0, 17, Redaction.RedactionType.OPERATIONAL_DATA)
+
+        reclaim_data_subject_spans(self.document)
+
+        self.assertEqual(self._ds_rows().count(), 0)
+
+    def test_an_existing_ds_row_is_not_duplicated(self):
+        self._whole_sentence_operational()
+        self._span(
+            self.text.index("HUGHES"),
+            self.text.index(" (Witness)"),
+            Redaction.RedactionType.DS_INFORMATION,
+        )
+
+        reclaim_data_subject_spans(self.document)
+
+        self.assertEqual(self._ds_rows().count(), 1)
+
+    def test_a_third_party_span_burying_the_name_is_also_carved(self):
+        """A span covering two people discloses the data subject's half."""
+        text = "Attended by HUGHES, GRACE and SMITH, John."
+        self.document.extracted_text = text
+        self.document.save(update_fields=["extracted_text"])
+        Redaction.objects.create(
+            document=self.document,
+            start_char=12,
+            end_char=41,
+            text=text[12:41],
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        reclaim_data_subject_spans(self.document)
+
+        [row] = self._ds_rows()
+        self.assertEqual(row.text, "HUGHES, GRACE")
+
+    def test_a_buried_dob_is_carved_out(self):
+        text = "Subject details: DOB 01/01/1990 confirmed by officer."
+        self.document.extracted_text = text
+        self.document.save(update_fields=["extracted_text"])
+        Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=len(text),
+            text=text,
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        reclaim_data_subject_spans(self.document)
+
+        [row] = self._ds_rows()
+        self.assertEqual(row.text, "01/01/1990")
+
+    def test_a_document_without_text_is_a_no_op(self):
+        self.document.extracted_text = None
+        self.document.save(update_fields=["extracted_text"])
+
+        reclaim_data_subject_spans(self.document)
+
+        self.assertEqual(self._ds_rows().count(), 0)
+
+    def test_a_case_without_a_recorded_identity_is_a_no_op(self):
+        self.case.data_subject_name = ""
+        self.case.data_subject_dob = None
+        self.case.save()
+        self._whole_sentence_operational()
+
+        reclaim_data_subject_spans(self.document)
+
+        self.assertEqual(self._ds_rows().count(), 0)
+
+    def test_an_unrelated_name_is_not_reclaimed(self):
+        self.case.data_subject_name = "Peter Walker"
+        self.case.save()
+        self._whole_sentence_operational()
+
+        reclaim_data_subject_spans(self.document)
+
+        self.assertEqual(self._ds_rows().count(), 0)
