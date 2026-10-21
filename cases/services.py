@@ -20,10 +20,12 @@ from training.loader import (
 )
 from training.services import extract_entities_from_text
 
+from .disclosure import withheld_spans
 from .ds_info_propagation import (
     propagate_term_across_case,
     propagate_terms_to_document,
 )
+from .identity import find_identity_occurrences
 from .models import (
     Case,
     Document,
@@ -163,6 +165,7 @@ def process_document_and_create_redactions(document_id):
     # Run case-decision propagation in its own transaction so a failure here
     # does not roll back the committed redactions above.
     _apply_existing_case_decisions(document)
+    reclaim_data_subject_spans(document)
     _apply_case_ds_info_to_document(document)
 
     document.status = Document.Status.READY_FOR_REVIEW
@@ -229,6 +232,99 @@ def _apply_existing_case_decisions(document):
                 top["justification"] if top else "",
                 by=Redaction.DecidedBy.CASE_PROPAGATION,
             )
+
+
+def reclaim_data_subject_spans(document):
+    """
+    Carve the data subject's own name and date of birth out of wider spans
+    that swallowed them.
+
+    A detector often claims a whole sentence — "Witness statement obtained
+    from HUGHES, GRACE (Witness). Statement recorded..." comes back as one
+    operational string.  Deduplication then drops the name span inside it, so
+    span resolution never sees the data subject's name as a span of its own
+    and the case record is never consulted for it.  The name is withheld from
+    the person it belongs to, in their own disclosure.
+
+    This runs after the detections are written, when the case record and the
+    document's spans are both in hand, and adds a DS_INFO row for each
+    occurrence a wider withholding span covers.  The row is born accepted
+    under ``DS_RECORD_MATCH``: the case owner's own entry has been recognised
+    in the document, which is a reading of the record rather than an
+    inference, and the same standard already decides a standalone span in
+    ``resolution.resolve_spans``.
+
+    Deliberately limited to spans *strictly* wider than the occurrence.  A
+    withholding span whose bounds are exactly the name is one resolution
+    already judged, and for operational markings it judged deliberately:
+    what makes them redactable is the marking, not whose record they appear
+    in (see ``cases.resolution``).  Only a span that buried the name is
+    reopened here.
+    """
+    case = document.case
+    text = document.extracted_text
+    if not text:
+        return
+
+    occurrences = find_identity_occurrences(
+        text,
+        ds_name=case.data_subject_name,
+        ds_dob=case.data_subject_dob,
+    )
+    if not occurrences:
+        return
+
+    redactions = list(document.redactions.all())
+    burying = [
+        r
+        for r in redactions
+        if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
+    ]
+    already_claimed = {
+        (r.start_char, r.end_char)
+        for r in redactions
+        if r.redaction_type == Redaction.RedactionType.DS_INFORMATION
+    }
+
+    to_create = []
+    for start, end in occurrences:
+        if (start, end) in already_claimed:
+            continue
+        buried = any(
+            r.start_char <= start
+            and r.end_char >= end
+            and (r.start_char < start or r.end_char > end)
+            for r in burying
+        )
+        if not buried:
+            continue
+
+        to_create.append(
+            Redaction(
+                document=document,
+                start_char=start,
+                end_char=end,
+                text=text[start:end],
+                redaction_type=Redaction.RedactionType.DS_INFORMATION,
+                is_suggestion=True,
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.DS_RECORD_MATCH,
+                rationale=(
+                    "Matches the identity recorded on this case, found "
+                    "inside a wider detected span."
+                ),
+            )
+        )
+
+    if not to_create:
+        return
+
+    Redaction.objects.bulk_create(to_create)
+    logger.info(
+        "Reclaimed %d data subject span(s) buried in wider detections in %s.",
+        len(to_create),
+        document.filename,
+    )
 
 
 def _apply_case_ds_info_to_document(document):
@@ -637,21 +733,18 @@ def _build_document_html(
     prefetched = getattr(document, "accepted_redactions_prefetched", None)
     if prefetched is not None:
         redactions = prefetched
-        if mode in ("disclosure", "removal"):
-            redactions = [
-                r
-                for r in redactions
-                if r.redaction_type != Redaction.RedactionType.DS_INFORMATION
-            ]
     else:
         redactions = document.redactions.filter(
             is_accepted=True
         ).select_related("context")
-        if mode in ("disclosure", "removal"):
-            redactions = redactions.exclude(
-                redaction_type=Redaction.RedactionType.DS_INFORMATION
-            )
-    sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
+
+    if mode in ("disclosure", "removal"):
+        # The data subject sees their own information: DS_INFO is dropped, and
+        # any withholding span overlapping it is cut back to the characters
+        # DS_INFO does not claim (see cases.disclosure).
+        sorted_redactions = withheld_spans(redactions)
+    else:
+        sorted_redactions = sorted(redactions, key=lambda r: r.start_char)
 
     tables = document.extracted_tables or []
     sorted_tables = sorted(tables, key=lambda t: t["ner_start"])
