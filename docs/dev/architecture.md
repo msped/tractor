@@ -176,6 +176,38 @@ A custom SpanCat (Span Categorisation) model. It can identify both:
 
 SpanCat is loaded as a singleton (`SpanCatModelManager`) and takes the **second-highest priority** in deduplication, after custom Presidio recognizers. If no SpanCat model has been trained yet, this step is skipped and the system falls back to GLiNER + Presidio. Trained models are stored in `nlp_models/`.
 
+#### Training Code Layout
+
+SpanCat training is split in two so that it can run with or without the application:
+
+- **`training/spancat.py`** — the training itself, independent of Django. Building the pipeline, aligning annotations to tokens, dividing over-long annotations, and the epoch loop with early stopping. Nothing here reads the database, the settings module or the clock. Two callbacks let a caller reach in: `should_stop(stage)`, which raises to abandon a run, and `on_epoch(record)`, for progress.
+- **`training/tasks.py`** — everything that belongs to the application. Collecting the corpus from `TrainingDocument` and case `Redaction` rows, claiming the single training slot, honouring a Stop from the UI via `TrainingControl`, and registering the finished model.
+
+#### Span-Length Ceiling
+
+`SPANCAT_MAX_SPAN_TOKENS` (default 40) sets the ngram suggester's maximum size, which is a hard ceiling on what the model can predict: a gold annotation longer than it is never proposed as a candidate, so it cannot be learned and counts as a false negative at evaluation. Raising it costs roughly linear extra time but grows peak memory considerably faster, and worsens the negative-to-positive candidate ratio — so a higher ceiling is not automatically better, and the trade-off is worth measuring rather than guessing.
+
+`scripts/sweep_spancat.py` measures it. It trains at several ceilings and reports precision, recall, F1, wall clock and peak RSS for each, needing only a folder of highlighted DOCX files — no database, settings, queue or containers — so the sweep can run on a machine rented for the purpose:
+
+```bash
+# What share of annotations each ceiling could never predict (seconds, no training)
+./scripts/sweep_spancat.py --docs ~/training_docs --corpus-only
+
+# Train at three ceilings and compare them
+./scripts/sweep_spancat.py --docs ~/training_docs --ceilings 20,40,64 --out sweep/
+```
+
+Each ceiling trains in its own subprocess, so its peak memory is its own rather than the high-water mark of every run before it, and a ceiling killed for exhausting memory does not take the other results with it. Results land in `sweep/results.json` and `sweep/summary.md`, with each model at `sweep/ceiling_<n>/model`.
+
+Two things to know about comparing the output to a production run: the sweep trains from documents only, so it cannot reproduce a `--source both` run that also drew on case redactions; and `path` is read-only on the models API, so a model trained this way is registered by hand once copied into `nlp_models/`:
+
+```bash
+python manage.py shell -c "
+from training.models import Model
+Model.objects.create(name='ceiling_64', path='/app/nlp_models/ceiling_64',
+                     is_active=False, precision=0.97, recall=0.91, f1_score=0.94)"
+```
+
 ### GLiNER (Third-Party PII — Zero-Shot)
 
 [GLiNER](https://github.com/urchade/GLiNER) is a zero-shot generalist NER model downloaded from HuggingFace and registered in the database via the `download_model` management command. It identifies **THIRD_PARTY** entities:
