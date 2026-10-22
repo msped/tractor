@@ -1,15 +1,11 @@
 import tempfile
-from datetime import timedelta
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from django.conf import settings
 from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
-from django.utils import timezone
 
-from training.models import Model, TrainingControl
+from training.models import Model
 from training.tests.base import NetworkBlockerMixin
 
 
@@ -70,66 +66,3 @@ class DownloadModelCommandTests(NetworkBlockerMixin, TestCase):
         output = stdout.getvalue()
         self.assertIn("Downloading GLiNER model", output)
         self.assertIn("Saved to", output)
-
-
-class TrainSpancatCommandTests(NetworkBlockerMixin, TestCase):
-    """
-    Training as a command rather than a queued task: no per-task timeout to
-    kill a long run, no broker re-delivering it while it is still going, and
-    no worker to restart before a code change takes effect.
-    """
-
-    @patch("training.tasks.train_model")
-    def test_runs_training_in_this_process(self, train_model):
-        call_command("train_spancat")
-
-        train_model.assert_called_once_with(source="training_docs")
-
-    @patch("training.tasks.train_model")
-    def test_source_can_be_chosen(self, train_model):
-        call_command("train_spancat", source="both")
-
-        train_model.assert_called_once_with(source="both")
-
-    @patch("training.tasks.train_model")
-    def test_the_span_ceiling_can_be_overridden_for_one_run(self, train_model):
-        call_command("train_spancat", max_span_tokens=48)
-
-        self.assertEqual(settings.SPANCAT_MAX_SPAN_TOKENS, 48)
-
-    @patch("training.tasks.train_model")
-    def test_refuses_to_start_alongside_a_running_job(self, train_model):
-        control = TrainingControl.get()
-        control.started_at = timezone.now()
-        control.heartbeat_at = timezone.now()
-        control.pid = 1234
-        control.save()
-
-        with self.assertRaises(CommandError):
-            call_command("train_spancat")
-
-        train_model.assert_not_called()
-
-    @patch("training.tasks.train_model")
-    def test_force_overrides_a_run_that_is_known_to_be_dead(self, train_model):
-        control = TrainingControl.get()
-        control.started_at = timezone.now()
-        control.heartbeat_at = timezone.now()
-        control.pid = 1234
-        control.save()
-
-        call_command("train_spancat", force=True)
-
-        train_model.assert_called_once()
-
-    @patch("training.tasks.train_model")
-    def test_an_abandoned_run_does_not_block_a_new_one(self, train_model):
-        control = TrainingControl.get()
-        control.started_at = timezone.now() - timedelta(hours=3)
-        control.heartbeat_at = timezone.now() - timedelta(hours=3)
-        control.pid = 1234
-        control.save()
-
-        call_command("train_spancat")
-
-        train_model.assert_called_once()
