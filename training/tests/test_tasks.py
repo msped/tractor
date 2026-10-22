@@ -716,7 +716,7 @@ class PrepareExamplesTests(NetworkBlockerMixin, TestCase):
 
         train_data = [("Hello world", {"entities": [(0, 5, "THIRD_PARTY")]})]
 
-        with patch("training.tasks.Example") as mock_example:
+        with patch("training.spancat.Example") as mock_example:
             mock_example.return_value = MagicMock()
             examples = _prepare_examples(mock_nlp, train_data)
 
@@ -736,7 +736,7 @@ class PrepareExamplesTests(NetworkBlockerMixin, TestCase):
 
         train_data = [("Hello world", {"entities": [(0, 5, "THIRD_PARTY")]})]
 
-        with patch("training.tasks.Example") as mock_example:
+        with patch("training.spancat.Example") as mock_example:
             mock_example.return_value = MagicMock()
             examples = _prepare_examples(mock_nlp, train_data)
 
