@@ -58,6 +58,20 @@ class FindDocsTests(SimpleTestCase):
 
         self.assertEqual([p.name for p in found], ["report.docx"])
 
+    def test_ignores_macos_appledouble_companions(self):
+        """
+        BSD tar packs a ._ sidecar per file, so a corpus tarred on a Mac
+        arrives on a Linux box at twice the size with half of it unreadable.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "report.docx").touch()
+            (root / "._report.docx").touch()
+
+            found = sweep.find_docs([root])
+
+        self.assertEqual([p.name for p in found], ["report.docx"])
+
     def test_ignores_other_file_types(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

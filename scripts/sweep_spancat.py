@@ -64,11 +64,17 @@ def peak_rss_mb():
     return peak / 1024 if platform.system() == "Linux" else peak / 1024 / 1024
 
 
-def find_docs(directories):
-    """Every .docx under the given directories, in a stable order.
+# Files that carry the .docx suffix without being documents. Word writes a
+# ~$ lock file beside an open document; macOS writes a ._ AppleDouble companion
+# holding extended attributes, and BSD tar packs one per file, so a corpus
+# tarred on a Mac and unpacked on the droplet arrives at twice the size with
+# half of it unreadable. Both parse as "Package not found" and would otherwise
+# fill the log before a run that is about to take hours.
+_NOT_DOCUMENTS = ("~$", "._")
 
-    Word's lock files (~$name.docx) are not documents and cannot be parsed.
-    """
+
+def find_docs(directories):
+    """Every .docx under the given directories, in a stable order."""
     paths = []
     for directory in directories:
         root = Path(directory).expanduser()
@@ -77,7 +83,7 @@ def find_docs(directories):
         paths.extend(
             p
             for p in sorted(root.rglob("*.docx"))
-            if not p.name.startswith("~$")
+            if not p.name.startswith(_NOT_DOCUMENTS)
         )
     return paths
 
