@@ -176,6 +176,74 @@ A custom SpanCat (Span Categorisation) model. It can identify both:
 
 SpanCat is loaded as a singleton (`SpanCatModelManager`) and takes the **second-highest priority** in deduplication, after custom Presidio recognizers. If no SpanCat model has been trained yet, this step is skipped and the system falls back to GLiNER + Presidio. Trained models are stored in `nlp_models/`.
 
+#### Training Code Layout
+
+SpanCat training is split in two so that it can run with or without the application:
+
+- **`training/spancat.py`** — the training itself, independent of Django. Building the pipeline, aligning annotations to tokens, dividing over-long annotations, and the epoch loop with early stopping. Nothing here reads the database, the settings module or the clock. Two callbacks let a caller reach in: `should_stop(stage)`, which raises to abandon a run, and `on_epoch(record)`, for progress.
+- **`training/tasks.py`** — everything that belongs to the application. Collecting the corpus from `TrainingDocument` and case `Redaction` rows, claiming the single training slot, honouring a Stop from the UI via `TrainingControl`, and registering the finished model.
+
+#### Span-Length Ceiling
+
+`SPANCAT_MAX_SPAN_TOKENS` (default 40) sets the ngram suggester's maximum size, which is a hard ceiling on what the model can predict: a gold annotation longer than it is never proposed as a candidate, so it cannot be learned and counts as a false negative at evaluation. Raising it costs roughly linear extra time but grows peak memory considerably faster, and worsens the negative-to-positive candidate ratio — so a higher ceiling is not automatically better, and the trade-off is worth measuring rather than guessing.
+
+`scripts/sweep_spancat.py` measures it. It trains at several ceilings and reports precision, recall, F1, wall clock and peak RSS for each, needing only a folder of highlighted DOCX files — no database, settings, queue or containers — so the sweep can run on a machine rented for the purpose:
+
+```bash
+# What share of annotations each ceiling could never predict (seconds, no training)
+uv run scripts/sweep_spancat.py --docs ~/training_docs --corpus-only
+
+# Train at three ceilings and compare them
+uv run scripts/sweep_spancat.py --docs ~/training_docs --ceilings 20,40,64 --out sweep/
+```
+
+Run it through `uv run` (or an activated venv) rather than `./scripts/sweep_spancat.py` — the shebang is `/usr/bin/env python3`, which on a fresh server is the system interpreter and has none of the dependencies.
+
+Each ceiling trains in its own subprocess, so its peak memory is its own rather than the high-water mark of every run before it, and a ceiling killed for exhausting memory does not take the other results with it. Results land in `sweep/results.json` and `sweep/summary.md`, with each model at `sweep/ceiling_<n>/model`.
+
+Always run `--corpus-only` first. It takes seconds, proves the corpus arrived and parses, and reports the coverage half of the trade-off — which is often enough to settle the question without training anything.
+
+##### Measured results (2026-10-25)
+
+On a DigitalOcean 4-vCPU/32GB dedicated droplet, against a 127-document corpus of 18,492 annotations:
+
+| Ceiling | P | R | F1 | Peak RSS | Train | Spans split |
+| --- | --- | --- | --- | --- | --- | --- |
+| 40 | 0.9808 | 0.9601 | 0.9704 | 16.0 GB | 34.8 min | 221 |
+| 56 | 0.9824 | 0.9618 | 0.9720 | 26.5 GB | 46.7 min | 83 |
+| 64 | — | — | OOM-killed | >31.2 GB | — | 60 |
+
+Memory, not time, is the binding constraint: roughly 0.5GB per ceiling token at this corpus size, and it scales with the corpus too. 56 bought +0.0016 F1 — a handful of spans on a 25-document dev set — for 66% more memory, so **40 remains the default**. 64 needs a 48-64GB machine and recovers 23 more annotations than 56; it is not worth chasing.
+
+##### Running it on a rented machine
+
+```bash
+# macOS: COPYFILE_DISABLE stops BSD tar writing a ._ sidecar per file
+COPYFILE_DISABLE=1 tar czf ~/sweep-docs.tgz -C "$DOCS" .
+scp ~/sweep-docs.tgz root@<ip>:/root/
+
+# on the droplet — libpq-dev is required or psycopg2 fails to build
+apt-get update && apt-get install -y git curl build-essential tmux libpq-dev python3-dev libffi-dev
+curl -LsSf https://astral.sh/uv/install.sh | sh && . $HOME/.local/bin/env
+git clone <repo> /root/sweep && cd /root/sweep && uv sync --frozen --no-dev
+mkdir -p docs && tar xzf /root/sweep-docs.tgz -C docs
+
+uv run scripts/sweep_spancat.py --docs docs --corpus-only --out sweep   # smoke test
+tmux new -d -s sweep -c /root/sweep \
+  "$HOME/.local/bin/uv run scripts/sweep_spancat.py --docs docs --ceilings 40,56,64 --out sweep 2>&1 | tee sweep.log"
+```
+
+The absolute path to `uv` in the tmux command is deliberate: tmux does not start a login shell, so `uv` is not on its `PATH`. A GPU droplet is wasted here — nothing in the training path calls `prefer_gpu()` and cupy is not a dependency, so it would train on the vCPUs anyway; pick memory-optimized instead.
+
+Two things to know about comparing the output to a production run: the sweep trains from documents only, so it cannot reproduce a `--source both` run that also drew on case redactions; and `path` is read-only on the models API, so a model trained this way is registered by hand once copied into `nlp_models/`:
+
+```bash
+python manage.py shell -c "
+from training.models import Model
+Model.objects.create(name='ceiling_64', path='/app/nlp_models/ceiling_64',
+                     is_active=False, precision=0.97, recall=0.91, f1_score=0.94)"
+```
+
 ### GLiNER (Third-Party PII — Zero-Shot)
 
 [GLiNER](https://github.com/urchade/GLiNER) is a zero-shot generalist NER model downloaded from HuggingFace and registered in the database via the `download_model` management command. It identifies **THIRD_PARTY** entities:

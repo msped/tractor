@@ -141,13 +141,15 @@ OLLAMA_CHUNK_OVERLAP=200  # overlap between chunks (default: 200)
 
 ---
 
-## WeasyPrint (macOS)
+## Native libraries (macOS)
 
-If PDF export fails with library errors:
+If PDF export fails with library errors, or `psycopg2` cannot find libpq at import time, Homebrew's libraries are not on the dynamic linker path:
 
 ```bash
-export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:/opt/homebrew/opt/libpq/lib:$DYLD_FALLBACK_LIBRARY_PATH
 ```
+
+The first path covers WeasyPrint's cairo and pango; the second covers libpq, which Homebrew keeps keg-only. Worth putting in your shell profile — the test suite needs both.
 
 ## Database Configuration
 
@@ -179,6 +181,20 @@ POSTGRES_PASSWORD=secret
 POSTGRES_HOST=localhost   # default: localhost
 POSTGRES_PORT=5432        # default: 5432
 ```
+
+### PostgreSQL build dependencies
+
+`psycopg2` is built from source, so it needs `pg_config` and a compiler present before `uv sync` will succeed. The Docker image installs these already; a bare server does not, and the failure appears as a `psycopg2` build error partway through the sync:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install libpq-dev python3-dev libffi-dev build-essential
+
+# macOS (Homebrew)
+brew install libpq
+```
+
+On macOS, libpq also needs to be on the dynamic linker path at runtime — see [Native libraries (macOS)](#native-libraries-macos) above.
 
 ### MySQL driver
 
