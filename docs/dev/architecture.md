@@ -250,7 +250,7 @@ Model.objects.create(name='ceiling_64', path='/app/nlp_models/ceiling_64',
 
 - person names, organisations, locations, dates of birth, addresses
 
-GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in the database is the HuggingFace model identifier (e.g. `urchade/gliner_medium-v2.1`); HuggingFace handles local caching automatically. Long texts are chunked to stay within the model's ~1500 character token limit per chunk.
+GLiNER is loaded as a singleton (`GLiNERModelManager`). The model ID stored in the database is the HuggingFace model identifier (e.g. `urchade/gliner_medium-v2.1`). `training/loader.py` maps that ID to a local directory (`nlp_models/urchade_gliner_medium_v2_1/`) and loads it with `local_files_only=True` when present, downloading only when it is missing. That directory has no `Model` row of its own, so any cleanup keyed on `Model.path` must leave it alone. Long texts are chunked to stay within the model's ~1500 character token limit per chunk.
 
 ### Presidio (Pattern-Based)
 
