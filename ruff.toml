@@ -16,6 +16,7 @@ select = [
     "B",      # flake8-bugbear
     "C4",     # flake8-comprehensions
     "UP",     # pyupgrade
+    "TID253", # banned module-level imports (see below)
 ]
 
 ignore = [
@@ -36,6 +37,11 @@ exclude = [
     "htmlcov",
     "nlp_models",
 ]
+
+[lint.flake8-tidy-imports]
+# Import these inside the function that uses them: pandas' C extensions
+# crash under freezegun, and GLiNER/Presidio pull pandas in.
+banned-module-level-imports = ["gliner", "presidio_analyzer", "pandas"]
 
 [lint.isort]
 known-first-party = ["authentication", "cases", "training", "backend"]
