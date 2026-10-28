@@ -51,3 +51,4 @@ nav:
       - Development Setup: dev/setup.md
       - Production Deployment: dev/deployment.md
       - Architecture: dev/architecture.md
+      - Testing: dev/testing.md
