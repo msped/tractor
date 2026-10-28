@@ -1,137 +1,27 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Tractor is a document redaction app: users upload documents, an NER pipeline suggests redactions, users accept or reject them, then export. Accepted redactions train the SpanCat model.
 
-## Project Overview
-
-Tractor is a document redaction application with ML-powered Named Entity Recognition. Users upload documents, the system identifies sensitive information using spaCy NER, and users can accept/reject redactions before exporting redacted versions. Supports model training from user-accepted redactions.
+Django 5.2 + DRF backend (`cases/`, `training/`, `authentication/`, settings in `backend/`); Next.js 15 + MUI v7 frontend in `frontend/`.
 
 ## Commands
 
-### Backend (Django)
+Run backend and frontend commands through the Makefile (`make help` lists every target). The `be-*` targets wrap the venv and the macOS `DYLD_FALLBACK_LIBRARY_PATH` that WeasyPrint and psycopg2 need. For ad-hoc Python (`manage.py shell`, scripts), copy the `VENV` and `DYLD_LIBS` values from the top of `Makefile`.
 
-```bash
-source env/bin/activate             # Activate virtual environment (required first)
-python manage.py runserver          # Start dev server
-python manage.py qcluster           # Start django-q task queue (required for async tasks)
-python manage.py test               # Run all tests
-python manage.py test cases.tests.test_views  # Run specific test module
-coverage run manage.py test && coverage report --fail-under=90  # Tests with coverage (90% threshold)
-python manage.py makemigrations     # Create migrations
-python manage.py migrate            # Apply migrations
-ruff check .                        # Run linter
-ruff format --check .               # Check formatting
-ruff format .                       # Auto-format code
-```
+## Where things are documented
 
-### Frontend (Next.js)
+- **Architecture** (NER pipeline and its priority order, deduplication, span merging, API endpoints, auth flow): `docs/dev/architecture.md`
+- **Local setup and env vars**: `docs/dev/setup.md`, `.env.example`
+- **Production deployment**: `docs/dev/deployment.md`
+- **Writing or debugging tests**: `docs/dev/testing.md`
 
-```bash
-cd frontend
-npm run dev                         # Dev server with Turbopack
-npm run build                       # Production build
-npm run lint                        # ESLint
-npm run cy:open                     # Cypress interactive mode
-npm run cy:run                      # Cypress headless
-npm run cy:test                     # Cypress + coverage report (80% threshold)
-```
+## Frontend conventions
 
-### WeasyPrint (macOS)
-
-If PDF export fails with library errors:
-
-```bash
-export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib:$DYLD_FALLBACK_LIBRARY_PATH
-```
-
-## Architecture
-
-### Tech Stack
-
-- **Frontend**: Next.js 15 (React 19), Material-UI v7, better-auth for session management
-- **Backend**: Django 5.2, Django REST Framework, django-q2 for async tasks
-- **Database**: PostgreSQL 15
-- **NLP**: spaCy 3.8 with PyTorch backend, `en_core_web_lg` (built-in NER) + custom SpanCat model stored in `nlp_models/`
-
-### Project Structure
-
-```bash
-tractor/
-├── frontend/src/
-│   ├── app/                    # Next.js App Router pages
-│   │   └── (dashboard)/        # Grouped route with shared layout
-│   ├── components/             # React components (tests as *.cy.js alongside)
-│   ├── services/               # API client wrappers (caseService, documentService, etc.)
-│   └── api/apiClient.js        # Axios instance with auth interceptor
-├── backend/                    # Django project settings
-├── cases/                      # Django app: Case, Document, Redaction models
-├── authentication/             # Django app: JWT + Microsoft Entra ID auth
-└── training/                   # Django app: Model training, TrainingRun, spaCy integration
-```
-
-### API Communication
-
-- Frontend services in `frontend/src/services/` call backend via `apiClient.js`
-- API base: browser uses a relative `/api` (same origin, nginx path-routes to the backend); server-side (SSR) uses `${INTERNAL_API_HOST}/api`
-- Auth: Django JWT access token passed in `Authorization` header; managed by better-auth via `SessionContext`
-- Token is cached in `apiClient.js` via `setClientToken`; 401 responses trigger a token refresh then redirect to `/` on failure
-- Server-side requests read the session via `getSession()` from `@/auth` (wraps `authClient.getSession` with Next.js request headers)
-
-### Key Endpoints
-
-- `/api/auth/` - better-auth session routes on the Next.js frontend (sign-in, get-session, sign-out, oauth2 callbacks)
-- `/api/account/` - Django auth/token/API-key endpoints (login, logout, token refresh, Microsoft exchange, api-keys)
-- `/api/cases/` - Case CRUD, export triggering
-- `/api/cases/{id}/documents/` - Document upload and management
-- `/api/model-management/` - Model management, training runs
-
-### Data Flow
-
-1. Document uploaded → text extracted → hybrid NER: SpanCat (OPERATIONAL) + en_core_web_lg (THIRD_PARTY) → deduplicated → data subject name/DOB filtered out
-2. Redaction suggestions shown to user → user accepts/rejects
-3. Completed documents feed into SpanCat training pipeline
-4. Async tasks (export, training) handled by django-q2
-
-### Model Status
-
-- Documents have status: `PROCESSING`, `IN_REVIEW`, `COMPLETED`, `FAILED`
-- Cases have status: `OPEN`, `IN_PROGRESS`, `COMPLETED`, `CLOSED`, `WITHDRAWN`, `UNDER_REVIEW`, `ERROR`
-- Redactions have status: `ACCEPTED`, `REJECTED`, `PENDING`
-
-## Testing Conventions
-
-### Backend
-
-- Tests in `{app}/tests/` with `test_models.py`, `test_views.py`, `test_services.py`, `test_serializers.py`
-- Use freezegun for time mocking
-- Coverage threshold: 90%
-
-### Frontend
-
-- Components live in their own directory with an `index.js` re-export:
+- Each component lives in its own directory with an `index.js` re-export:
   ```
-  components/
-  └── ComponentName/
-      ├── ComponentName.js      # Component implementation
-      ├── ComponentName.cy.js   # Cypress component test
-      └── index.js              # Re-exports: export * from './ComponentName';
+  components/ComponentName/
+  ├── ComponentName.js
+  ├── ComponentName.cy.js   # Cypress component test (component testing, not E2E)
+  └── index.js              # export * from './ComponentName';
   ```
-- Import components via the directory: `import { ComponentName } from "@/components/ComponentName"`
-- Uses Cypress component testing (not E2E)
-- Coverage threshold: 80%
-
-## Path Aliases
-
-Frontend uses `@/*` mapping to `./src/*` (configured in jsconfig.json)
-
-## Environment Variables
-
-See `.env.example`. Key variables:
-
-- `SECRET_KEY`, `JWT_SIGNING_KEY` - Django secrets
-- `POSTGRES_*` - Database connection
-- `FRONTEND_ORIGIN` - Public origin the frontend is served from (Django: OAuth callback + sole CORS origin)
-- `INTERNAL_API_HOST` - Backend URL for server-side Next.js requests (Docker network)
-- `BETTER_AUTH_SECRET` - better-auth signing secret
-- `BETTER_AUTH_URL` - better-auth public base URL / identity (server-side; OAuth callbacks, cookie flags). The browser uses its own origin via relative URLs, so no `NEXT_PUBLIC_*` host is baked into the bundle.
-- `BETTER_AUTH_MICROSOFT_CLIENT_ID/SECRET/TENANT_ID` - Microsoft SSO config
+- Import through the directory with the `@/` alias (`@/*` → `src/*`): `import { ComponentName } from "@/components/ComponentName"`
