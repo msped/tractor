@@ -1,0 +1,3 @@
+# Teams are not modelled until the system is proven
+
+Tractor has no concept of a team or department: every rule, recognizer and setting applies to the whole instance. Different departments are expected to need different redaction rules, for example different role-dependent fields for the record types they handle. Modelling teams was deliberately deferred, because it would have taken development time before the system had shown it could do the core job. Until teams exist, format rules are instance-wide (see [ADR-0001](0001-role-dependent-fields-as-committed-rule-data.md)). Access stays flat by design: teams, when they arrive, are about scoping rules, not about restricting who can see which cases.
