@@ -320,6 +320,10 @@ After all four models run, overlapping spans are deduplicated with this priority
 
 The superset extension rule is intentionally limited to the SpanCat stage. Lower-priority extractors (GLiNER, Gemma) cannot widen higher-priority matches.
 
+### Role-dependent Fields (planned)
+
+Some fields of a record are disclosable only when the data subject holds a particular role on it (see `GLOSSARY.md`). A span-rule step will run on each extractor's output before deduplication: when the data subject is the reporting person it removes the span covering the field, and otherwise it replaces the field with a third-party span. The first rule covers occurrence reports and is committed as rule data. Configurable per-instance rules, and per-team rules once teams exist, are the intended future. See [ADR-0001](../adr/0001-role-dependent-fields-as-committed-rule-data.md) and [ADR-0002](../adr/0002-teams-not-modelled-yet.md).
+
 ### Merged Display Items
 
 Adjacent or near-adjacent spans of the **same type** (within a 2-character gap by default) are automatically merged into a single compound display item in the review sidebar. This reduces noise when, for example, a first name and surname are detected as separate spans.
