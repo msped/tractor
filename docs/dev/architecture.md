@@ -320,9 +320,21 @@ After all four models run, overlapping spans are deduplicated with this priority
 
 The superset extension rule is intentionally limited to the SpanCat stage. Lower-priority extractors (GLiNER, Gemma) cannot widen higher-priority matches.
 
-### Role-dependent Fields (planned)
+Span rules run before deduplication (see [Role-dependent Fields](#role-dependent-fields)). Spans a rule adds outrank all five stages, and any detector span overlapping one is dropped.
 
-Some fields of a record are disclosable only when the data subject holds a particular role on it (see `GLOSSARY.md`). A span-rule step will run on each extractor's output before deduplication: when the data subject is the reporting person it removes the span covering the field, and otherwise it replaces the field with a third-party span. The first rule covers occurrence reports and is committed as rule data. Configurable per-instance rules, and per-team rules once teams exist, are the intended future. See [ADR-0001](../adr/0001-role-dependent-fields-as-committed-rule-data.md) and [ADR-0002](../adr/0002-teams-not-modelled-yet.md).
+### Role-dependent Fields
+
+Some fields of a record are disclosable only when the data subject holds a particular role on it (see `GLOSSARY.md`). `ExtractionPipeline` takes an optional list of span rules, which run on every detector's output **before** priority deduplication. A rule can drop detector spans and add spans of its own, which outrank every detector. `build_default_pipeline` attaches one rule, the occurrence-report rule in `training/span_rules.py`, built for the case's data subject.
+
+The rule logic is generic. The occurrence-report wording is declarative rule data (`OCCURRENCE_REPORT`): the `Involved persons:` section heading, the role `Person reporting`, and the field labels `Reported time:`, `Summary:` and `Original Incident Report:`.
+
+- **Recognition.** A document with no `Involved persons:` section is not an occurrence report, so the rule does nothing. With one section the rule runs. With two or more, the document holds several records and the role is unknown.
+- **Reading the role.** Each line in the section is a person entry: a name, optional bracketed codes, then ` / `-separated roles and details. A part containing a colon (`DOB: ...`) is a detail, and one part can combine roles with semicolons (`Person reporting; Victim`). The name and date of birth go through the identity matcher (`cases/identity.py`), and only an unambiguous match counts as the data subject. The data subject holds the role if it is among the roles on every matching line. No matching line, an ambiguous match, a line with no role, or matching lines that disagree all give an unknown role.
+- **Field extent.** A field starts at its label at the beginning of a line. It runs to just before the next line that starts with a label (text followed by a colon) or a blank line, so a value that wraps onto following lines is included. A label that appears mid-line (`Closure Summary:`) is part of the value.
+- **The data subject is the reporting person.** From every detector's output, the rule drops each span that overlaps a field and either reaches into its label or covers its whole value. Spans strictly inside the value are kept. Because this happens before deduplication, a third party named in the summary by a lower-priority detector still wins once SpanCat's whole-line span is gone. No redaction row records the disclosure.
+- **Not the reporting person, or unknown.** The rule adds one `THIRD_PARTY` span per field, covering label and value, with entity type `ROLE_DEPENDENT_FIELD`. That type is outside the attribution whitelist, so DS resolution never reattributes it, and it becomes a pending Third-Party PII suggestion with no rationale.
+
+Configurable per-instance rules, and per-team rules once teams exist, are the intended future. See [ADR-0001](../adr/0001-role-dependent-fields-as-committed-rule-data.md) and [ADR-0002](../adr/0002-teams-not-modelled-yet.md).
 
 ### Merged Display Items
 
