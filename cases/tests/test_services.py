@@ -2541,6 +2541,121 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RoleDependentFieldProcessingTests(NetworkBlockerMixin, TestCase):
+    """
+    A withheld role-dependent field through the real processing entry point:
+    pipeline output from a stub detector and the occurrence-report rule, on
+    synthetic text.
+    """
+
+    # One paragraph, so the withheld fields share a block with the data
+    # subject's own name: the layout alone would attribute a detail in it to
+    # them.
+    TEXT = (
+        "Reported time: 01/02/2026 10:00\n"
+        "Summary: Neighbour dispute, advice given.\n"
+        "Involved persons:\n"
+        "SMITH, Jane / Suspect / DOB: 03/04/1985"
+    )
+    FIELDS = (
+        "Reported time: 01/02/2026 10:00",
+        "Summary: Neighbour dispute, advice given.",
+    )
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="ROLE01",
+            data_subject_name="Jane Smith",
+            data_subject_dob=date(1985, 4, 3),
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("record.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.spacy_model = SpacyModel.objects.create(
+            name="en_role_model", is_active=True
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _process(self):
+        from training.pipeline import ExtractionPipeline
+        from training.span_rules import build_occurrence_report_rule
+
+        name_start = self.TEXT.index("SMITH, Jane")
+        person = {
+            "text": "SMITH, Jane",
+            "label": "THIRD_PARTY",
+            "start_char": name_start,
+            "end_char": name_start + len("SMITH, Jane"),
+            "entity_type": "person name",
+        }
+        pipeline = ExtractionPipeline(
+            stages=[lambda _text: [dict(person)]],
+            span_rules=[
+                build_occurrence_report_rule(
+                    self.case.data_subject_name, self.case.data_subject_dob
+                )
+            ],
+        )
+        structure = [{"type": "paragraph", "start": 0, "end": len(self.TEXT)}]
+
+        with (
+            patch("cases.services.extract_entities_from_text") as mock_extract,
+            patch("cases.services.SpanCatModelManager") as mock_spancat,
+            patch("cases.services.GLiNERModelManager") as mock_gliner,
+            patch("django_q.tasks.async_task"),
+        ):
+            mock_gliner.get_instance.return_value = MagicMock()
+            mock_spancat.get_instance.return_value = MagicMock(
+                get_model_entry=MagicMock(return_value=self.spacy_model)
+            )
+            mock_extract.return_value = (
+                self.TEXT,
+                pipeline.run(self.TEXT),
+                [],
+                structure,
+            )
+            process_document_and_create_redactions(self.document.id)
+
+    def _field_rows(self):
+        return [self.document.redactions.get(text=f) for f in self.FIELDS]
+
+    def test_withheld_field_is_a_pending_third_party_suggestion(self):
+        self._process()
+
+        for row in self._field_rows():
+            with self.subTest(row.text):
+                self.assertEqual(
+                    row.redaction_type,
+                    Redaction.RedactionType.THIRD_PARTY_PII,
+                )
+                self.assertTrue(row.is_suggestion)
+                self.assertFalse(row.is_accepted)
+                self.assertIsNone(row.decided_by)
+                self.assertIsNone(row.rationale)
+
+    def test_auto_accept_accepts_a_withheld_field(self):
+        settings_obj = ReviewWorkflowSettings.get()
+        settings_obj.auto_accept_enabled = True
+        settings_obj.save()
+
+        self._process()
+
+        for row in self._field_rows():
+            with self.subTest(row.text):
+                self.assertEqual(
+                    row.redaction_type,
+                    Redaction.RedactionType.THIRD_PARTY_PII,
+                )
+                self.assertTrue(row.is_accepted)
+                self.assertEqual(
+                    row.decided_by, Redaction.DecidedBy.AUTO_ACCEPT
+                )
+
+
 class ReclaimDataSubjectSpansTests(NetworkBlockerMixin, TestCase):
     """Carving the data subject back out of a span that buried them."""
 

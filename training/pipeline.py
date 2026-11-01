@@ -96,6 +96,28 @@ def _non_fatal(stage):
     return wrapper
 
 
+@dataclass(frozen=True)
+class SpanRuleResult:
+    """
+    What a span rule hands back to the pipeline.
+
+    ``stage_results`` is the per-detector span lists, one per stage and in
+    stage order, with whatever the rule dropped removed.  ``added`` is the
+    rule's own spans, which outrank every detector.
+    """
+
+    stage_results: list
+    added: list = field(default_factory=list)
+
+
+def _overlaps_any(span, others):
+    return any(
+        span["start_char"] < other["end_char"]
+        and span["end_char"] > other["start_char"]
+        for other in others
+    )
+
+
 @dataclass
 class ExtractionPipeline:
     """
@@ -106,11 +128,18 @@ class ExtractionPipeline:
     the superset replacement rule (see _deduplicate_entities).
     Non-fatal stages should catch their own exceptions (or be wrapped with
     _non_fatal) rather than propagating them.
+
+    span_rules run in order on every detector's output *before*
+    deduplication, so a span a rule drops never competes there.  Each rule is
+    an object with ``apply(text, stage_results) -> SpanRuleResult``.  Spans a
+    rule adds outrank every detector: any detector span overlapping one is
+    dropped, the same way a lower-priority detector loses to a higher one.
     """
 
     stages: list  # callables: (text: str) -> list[dict]
     superset_stage_indices: frozenset = field(default_factory=frozenset)
     max_workers: int = 4
+    span_rules: list = field(default_factory=list)
 
     def run(self, text: str) -> list[dict]:
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -120,8 +149,18 @@ class ExtractionPipeline:
             ]
         stage_results = [fut.result() for fut in futures]
 
-        combined = []
+        rule_spans = []
+        for rule in self.span_rules:
+            outcome = rule.apply(text, stage_results)
+            stage_results = outcome.stage_results
+            rule_spans = _deduplicate_entities(rule_spans, outcome.added)
+
+        combined = list(rule_spans)
         for i, results in enumerate(stage_results):
+            if rule_spans:
+                results = [
+                    s for s in results if not _overlaps_any(s, rule_spans)
+                ]
             combined = _deduplicate_entities(
                 combined,
                 results,
@@ -138,6 +177,8 @@ def build_default_pipeline(
     Priority order: Custom Presidio > SpanCat > Presidio > GLiNER > Gemma.
     Custom recognizers run first so admin-configured rules always override learned
     model predictions. SpanCat is omitted if no model is trained. Gemma is non-fatal.
+    The occurrence-report span rule (see span_rules) runs on every stage's output
+    before deduplication, for the given data subject.
     Raises ValueError if no GLiNER model is available.
 
     One Presidio snapshot is acquired per pipeline (per document), so all
@@ -152,6 +193,7 @@ def build_default_pipeline(
     from .extractors.presidio_provider import PresidioEngineProvider
     from .extractors.spancat_extractor import extract_with_spancat
     from .loader import GLiNERModelManager, SpanCatModelManager
+    from .span_rules import build_occurrence_report_rule
 
     gliner_model = GLiNERModelManager.get_instance().get_model()
     if not gliner_model:
@@ -202,5 +244,9 @@ def build_default_pipeline(
         else frozenset()
     )
     return ExtractionPipeline(
-        stages=stages, superset_stage_indices=superset_stage_indices
+        stages=stages,
+        superset_stage_indices=superset_stage_indices,
+        span_rules=[
+            build_occurrence_report_rule(data_subject_name, data_subject_dob)
+        ],
     )
