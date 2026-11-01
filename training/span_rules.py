@@ -142,6 +142,35 @@ def _parse_dob(line):
 
 
 @dataclass(frozen=True)
+class _FieldExtent:
+    """Where one field's label ends and its value starts and ends."""
+
+    start: int
+    label_end: int
+    value_start: int
+    end: int
+
+    @classmethod
+    def of(cls, text, label, start, end):
+        label_end = start + len(label)
+        value = text[label_end:end]
+        value_start = label_end + len(value) - len(value.lstrip())
+        return cls(start, label_end, value_start, end)
+
+    def redacts_whole(self, span):
+        """
+        Whether *span* overlaps the field and either reaches into its label
+        or covers its whole value.
+        """
+        span_start, span_end = span["start_char"], span["end_char"]
+        if span_start >= self.end or span_end <= self.start:
+            return False
+        touches_label = span_start < self.label_end
+        covers_value = span_start <= self.value_start and span_end >= self.end
+        return touches_label or covers_value
+
+
+@dataclass(frozen=True)
 class _PersonLine:
     name: str
     roles: frozenset
@@ -152,12 +181,17 @@ def _parse_person_line(line):
     """
     Read one person line: a name, optional bracketed codes, then
     slash-separated roles and details.  A part containing a colon
-    ("DOB: ...") is a detail, not a role.
+    ("DOB: ...") is a detail, not a role.  One part may combine several
+    roles with semicolons ("Person reporting; Victim").
     """
     parts = _PERSON_PART_SEPARATOR_RE.split(line.strip())
     name = _BRACKETED_CODE_RE.sub(" ", parts[0]).strip()
     roles = frozenset(
-        part.strip().casefold() for part in parts[1:] if ":" not in part
+        role.strip().casefold()
+        for part in parts[1:]
+        if ":" not in part
+        for role in part.split(";")
+        if role.strip()
     )
     return _PersonLine(name=name, roles=roles, dob=_parse_dob(line))
 
@@ -165,8 +199,9 @@ def _parse_person_line(line):
 @dataclass(frozen=True)
 class RoleDependentFieldRule:
     """
-    Withhold a record's role-dependent fields unless the data subject is
-    confirmed to hold the role that makes them disclosable.
+    Disclose a record's role-dependent fields when the data subject is
+    confirmed to hold the role that makes them disclosable, and withhold
+    them as third-party information otherwise.
     """
 
     rule_data: RoleDependentFieldRuleData
@@ -187,9 +222,9 @@ class RoleDependentFieldRule:
             reading = self._read_role(text, *sections[0])
 
         if reading is RoleReading.HOLDS_ROLE:
-            # Disclosing the fields is a separate change; until then they are
-            # left as the detectors found them.
-            return SpanRuleResult(stage_results=stage_results)
+            return SpanRuleResult(
+                stage_results=self._disclose_fields(text, stage_results)
+            )
 
         return SpanRuleResult(
             stage_results=stage_results,
@@ -214,7 +249,8 @@ class RoleDependentFieldRule:
         ]
         role = self.rule_data.role.casefold()
 
-        readings = set()
+        # In line order, so the outcome never depends on set ordering.
+        readings = []
         for person in map(_parse_person_line, person_lines):
             verdict = match_person(
                 person.name,
@@ -225,16 +261,38 @@ class RoleDependentFieldRule:
             if verdict is not IdentityMatch.MATCH:
                 continue
             if not person.roles:
-                readings.add(RoleReading.UNKNOWN)
+                readings.append(RoleReading.UNKNOWN)
             elif role in person.roles:
-                readings.add(RoleReading.HOLDS_ROLE)
+                readings.append(RoleReading.HOLDS_ROLE)
             else:
-                readings.add(RoleReading.OTHER_ROLE)
+                readings.append(RoleReading.OTHER_ROLE)
 
-        if len(readings) == 1:
-            return readings.pop()
+        if len(set(readings)) == 1:
+            return readings[0]
         # No line matched, or the matching lines disagree.
         return RoleReading.UNKNOWN
+
+    def _disclose_fields(self, text, stage_results):
+        """
+        Drop, from every detector, each span that would redact a field as a
+        whole: one that overlaps the field and either reaches into its label
+        or covers its whole value.  Spans strictly inside the value, such as
+        a third party named in a summary, are kept.  Nothing records the
+        drop (an accepted exception to "no silent discard"; see ADR-0001).
+        """
+        fields = [
+            _FieldExtent.of(text, label, start, end)
+            for label in self.rule_data.field_labels
+            for start, end in _field_extents(text, label)
+        ]
+        return [
+            [
+                span
+                for span in results
+                if not any(field.redacts_whole(span) for field in fields)
+            ]
+            for results in stage_results
+        ]
 
     @staticmethod
     def _withheld_span(text, start, end):
