@@ -18,10 +18,10 @@ hold the role.
 
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from enum import Enum
 
-from cases.identity import IdentityMatch, match_person
+from cases.identity import IdentityMatch, match_person, parse_dob
 
 from .pipeline import SpanRuleResult
 
@@ -72,8 +72,11 @@ _LABEL_LINE_RE = re.compile(r"[ \t]*[A-Za-z][A-Za-z0-9 ()'&.-]*:")
 # both sides, so the slashes inside a date of birth do not split it.
 _PERSON_PART_SEPARATOR_RE = re.compile(r"\s+/\s+")
 _BRACKETED_CODE_RE = re.compile(r"\[[^\]]*\]")
-_DOB_RE = re.compile(r"\bDOB:\s*(\S+)", re.IGNORECASE)
-_DOB_FORMATS = ("%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y", "%Y-%m-%d")
+# A date of birth runs to the next part separator or the end of the line, so
+# a long-form date ("DOB: 2 January 1960") is read whole.
+_DOB_RE = re.compile(r"\bDOB:[ \t]*(.*?)(?=\s+/\s+|$)", re.IGNORECASE)
+# The longest date format a date of birth is printed in, in words.
+_DOB_MAX_WORDS = 3
 
 
 def _lines(text):
@@ -129,16 +132,24 @@ def _field_extents(text, label):
     return extents
 
 
-def _parse_dob(line):
+def _read_dob(line):
+    """
+    The date of birth a person line gives, as ``(present, dob)``.
+
+    ``present`` is whether the line has a ``DOB:`` detail at all; ``dob`` is
+    its date, or None when it cannot be read.  The date may be followed by
+    other words in the same part ("02/01/1990 (aged 36)"), so the longest
+    leading run of words that reads as a date wins.
+    """
     match = _DOB_RE.search(line)
     if not match:
-        return None
-    for fmt in _DOB_FORMATS:
-        try:
-            return datetime.strptime(match.group(1), fmt).date()
-        except ValueError:
-            continue
-    return None
+        return False, None
+    words = match.group(1).split()
+    for count in range(min(len(words), _DOB_MAX_WORDS), 0, -1):
+        dob = parse_dob(" ".join(words[:count]))
+        if dob is not None:
+            return True, dob
+    return True, None
 
 
 @dataclass(frozen=True)
@@ -172,9 +183,16 @@ class _FieldExtent:
 
 @dataclass(frozen=True)
 class _PersonLine:
+    """
+    One entry in a persons section: the person's name, their roles
+    (casefolded), and their date of birth.  ``dob_unreadable`` marks a line
+    that gives a date of birth the parser cannot read.
+    """
+
     name: str
     roles: frozenset
     dob: date | None
+    dob_unreadable: bool = False
 
 
 def _parse_person_line(line):
@@ -193,7 +211,13 @@ def _parse_person_line(line):
         for role in part.split(";")
         if role.strip()
     )
-    return _PersonLine(name=name, roles=roles, dob=_parse_dob(line))
+    has_dob, dob = _read_dob(line)
+    return _PersonLine(
+        name=name,
+        roles=roles,
+        dob=dob,
+        dob_unreadable=has_dob and dob is None,
+    )
 
 
 @dataclass(frozen=True)
@@ -258,6 +282,12 @@ class RoleDependentFieldRule:
                 ds_name=self.data_subject_name,
                 ds_dob=self.data_subject_dob,
             )
+            if person.dob_unreadable:
+                # The date of birth could have confirmed or refuted the name,
+                # so a name match alone never makes this line theirs.
+                if verdict is not IdentityMatch.NO_MATCH:
+                    readings.append(RoleReading.UNKNOWN)
+                continue
             if verdict is not IdentityMatch.MATCH:
                 continue
             if not person.roles:

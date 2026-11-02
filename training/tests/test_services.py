@@ -1696,6 +1696,20 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
                 (None, None),
                 (_JOE_REPORTING, _JANE_SUSPECT),
             ),
+            "a long-form date of birth that disagrees": (
+                ("Joe Bloggs", date(1990, 1, 2)),
+                (
+                    "BLOGGS, Joe / Person reporting / DOB: 2 January 1960",
+                    _JANE_SUSPECT,
+                ),
+            ),
+            "a date of birth that cannot be read": (
+                ("Joe Bloggs", date(1990, 1, 2)),
+                (
+                    "BLOGGS, Joe / Person reporting / DOB: 2nd Jan 90",
+                    _JANE_SUSPECT,
+                ),
+            ),
         }
         for description, ((ds_name, ds_dob), person_lines) in cases.items():
             with self.subTest(description):
@@ -1735,6 +1749,10 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
             "BLOGGS, Joe / Victim / Person reporting / DOB: 02/01/1990",
             "BLOGGS, Joe [A1B] / Person reporting; Victim / DOB: 02/01/1990",
             "BLOGGS, Joe / Victim;Person reporting / DOB: 02/01/1990",
+            "BLOGGS, Joe / Person reporting / DOB: 2 January 1990",
+            # A partial name with a matching date of birth is the data
+            # subject (the identity matcher's rule).
+            "BLOGGS, J / Person reporting / DOB: 2 January 1990",
         ):
             with self.subTest(person_line):
                 text = _occurrence_report(person_line, _JANE_SUSPECT)
