@@ -63,10 +63,16 @@ class RoleReading(Enum):
     UNKNOWN = "UNKNOWN"
 
 
-# A line that starts with a label: words followed by a colon.  Commas,
-# slashes and brackets are excluded so a person line such as
-# "BLOGGS, Joe [A1B] / Person reporting / DOB: ..." is not read as a label.
-_LABEL_LINE_RE = re.compile(r"[ \t]*[A-Za-z][A-Za-z0-9 ()'&.-]*:")
+# A line that starts with a label: up to four words, the first capitalised,
+# then a colon followed by whitespace or the end of the line.  So a wrapped
+# value line such as "advised as follows: the matter..." is not a label, nor
+# is a time ("10:00").  Commas, slashes and brackets are excluded so a person
+# line such as "BLOGGS, Joe [A1B] / Person reporting / DOB: ..." is not
+# either.
+_LABEL_WORD = r"[A-Za-z0-9()'&.-]"
+_LABEL_LINE_RE = re.compile(
+    rf"[ \t]*[A-Z]{_LABEL_WORD}*(?:[ \t]+{_LABEL_WORD}+){{0,3}}:(?=\s|$)"
+)
 
 # Separates a person line's name from its roles and details.  Whitespace on
 # both sides, so the slashes inside a date of birth do not split it.
@@ -89,10 +95,12 @@ def _lines(text):
 
 
 def _is_blank(text, start, end):
+    """Whether the line [start, end) of *text* holds only whitespace."""
     return not text[start:end].strip()
 
 
 def _is_label_line(text, start, end):
+    """Whether the line [start, end) of *text* starts a new labelled field."""
     return _LABEL_LINE_RE.match(text, start, end) is not None
 
 
@@ -111,8 +119,8 @@ def _field_extents(text, label):
     Every ``(start, end)`` field that *label* starts in *text*.
 
     A field starts at its label at the beginning of a line and runs to just
-    before the next line that starts with a label, or a blank line.  A label
-    that appears mid-line is part of the value.
+    before the next line that starts with a label (see ``_LABEL_LINE_RE``),
+    or a blank line.  A label that appears mid-line is part of the value.
     """
     lines = list(_lines(text))
     extents = []

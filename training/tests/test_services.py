@@ -1594,16 +1594,25 @@ _SUMMARY = (
 _ORIGINAL_REPORT = (
     "Original Incident Report: Caller states that a neighbour shouted at them."
 )
+# A summary whose value wraps onto following lines.  The second line reads
+# like a label ("advised as follows:") but is part of the value.
+_WRAPPED_SUMMARY = (
+    "Summary: Closure Summary: neighbour dispute. Reporting Person\n"
+    "advised as follows: the matter will be filed\n"
+    "and no further action taken."
+)
 _JOE_REPORTING = "BLOGGS, Joe [A1B] / Person reporting / DOB: 02/01/1990"
 _JANE_SUSPECT = "SMITH, Jane / Suspect / DOB: 03/04/1985"
 
 
-def _occurrence_report(
-    *person_lines,
-    head=(_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT),
-    sections=1,
-):
-    lines = ["Occurrence number: 01/000001/26", *head]
+def _occurrence_report(*person_lines, summary=_SUMMARY, sections=1):
+    """Synthetic occurrence report with the given person lines and summary."""
+    lines = [
+        "Occurrence number: 01/000001/26",
+        _REPORTED_TIME,
+        summary,
+        _ORIGINAL_REPORT,
+    ]
     for _ in range(sections):
         lines += ["Involved persons:", *person_lines, ""]
     lines.append("Officer in charge: PC 0000")
@@ -1787,9 +1796,7 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
     def test_third_party_inside_a_disclosed_field_stays_redacted(self):
         summary = "Summary: SMITH, Jane shouted at the reporting person."
         text = _occurrence_report(
-            _JOE_REPORTING,
-            _JANE_SUSPECT,
-            head=(_REPORTED_TIME, summary, _ORIGINAL_REPORT),
+            _JOE_REPORTING, _JANE_SUSPECT, summary=summary
         )
         summary_start = text.index(summary)
         name_start = summary_start + len("Summary: ")
@@ -1835,41 +1842,27 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(result, without_rule)
 
     def test_field_wrapping_onto_following_lines_is_withheld_in_full(self):
-        wrapped_summary = (
-            "Summary: Closure Summary: neighbour dispute.\n"
-            "Advice given by phone\n"
-            "and by letter."
-        )
         text = _occurrence_report(
-            _JOE_REPORTING,
-            _JANE_SUSPECT,
-            head=(_REPORTED_TIME, wrapped_summary, "", _ORIGINAL_REPORT),
+            _JOE_REPORTING, _JANE_SUSPECT, summary=_WRAPPED_SUMMARY
         )
 
         result = self._run(text, "Jane Smith", date(1985, 4, 3))
 
         self.assertFieldsWithheld(
-            result, fields=(_REPORTED_TIME, wrapped_summary, _ORIGINAL_REPORT)
+            result, fields=(_REPORTED_TIME, _WRAPPED_SUMMARY, _ORIGINAL_REPORT)
         )
 
     def test_field_wrapping_onto_following_lines_is_disclosed_in_full(self):
-        wrapped_summary = (
-            "Summary: Closure Summary: neighbour dispute.\n"
-            "Advice given by phone\n"
-            "and by letter."
-        )
         text = _occurrence_report(
-            _JOE_REPORTING,
-            _JANE_SUSPECT,
-            head=(_REPORTED_TIME, wrapped_summary, "", _ORIGINAL_REPORT),
+            _JOE_REPORTING, _JANE_SUSPECT, summary=_WRAPPED_SUMMARY
         )
-        summary_start = text.index(wrapped_summary)
-        summary_end = summary_start + len(wrapped_summary)
+        summary_start = text.index(_WRAPPED_SUMMARY)
+        summary_end = summary_start + len(_WRAPPED_SUMMARY)
         value_start = summary_start + len("Summary: ")
         # One detector spans label and value across every line; another
         # covers the value alone, from its first line to its last.
         whole_field = _span(
-            wrapped_summary, summary_start, summary_end, label="OPERATIONAL"
+            _WRAPPED_SUMMARY, summary_start, summary_end, label="OPERATIONAL"
         )
         whole_value = _span(
             text[value_start:summary_end],
