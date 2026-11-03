@@ -1521,6 +1521,7 @@ class ExtractionPipelineTests(NetworkBlockerMixin, TestCase):
 
 
 def _span(text, start, end, label="THIRD_PARTY", entity_type=None):
+    """A detector span dict."""
     return {
         "text": text,
         "label": label,
@@ -1528,6 +1529,11 @@ def _span(text, start, end, label="THIRD_PARTY", entity_type=None):
         "end_char": end,
         "entity_type": entity_type,
     }
+
+
+def _stage(entities):
+    """A stub detector stage that returns *entities* for any text."""
+    return lambda _text: list(entities)
 
 
 class _StubRule:
@@ -1552,9 +1558,6 @@ class SpanRuleStepTests(NetworkBlockerMixin, TestCase):
 
     TEXT = "Summary: Jane Smith shouted at a neighbour."
 
-    def _stage(self, entities):
-        return lambda text: list(entities)
-
     def test_rule_span_outranks_every_detector(self):
         # Superset stage on purpose: even SpanCat's superset replacement must
         # not widen over a rule span.
@@ -1563,7 +1566,7 @@ class SpanRuleStepTests(NetworkBlockerMixin, TestCase):
         gliner = _span("Jane Smith", 9, 19, entity_type="person name")
         neighbour = _span("neighbour", 33, 42)
         pipeline = ExtractionPipeline(
-            stages=[self._stage([spancat]), self._stage([gliner, neighbour])],
+            stages=[_stage([spancat]), _stage([gliner, neighbour])],
             superset_stage_indices=frozenset({0}),
             span_rules=[_StubRule(added=[rule_span])],
         )
@@ -1578,7 +1581,7 @@ class SpanRuleStepTests(NetworkBlockerMixin, TestCase):
         whole_line = _span(self.TEXT, 0, len(self.TEXT), label="OPERATIONAL")
         gliner = _span("Jane Smith", 9, 19, entity_type="person name")
         pipeline = ExtractionPipeline(
-            stages=[self._stage([whole_line]), self._stage([gliner])],
+            stages=[_stage([whole_line]), _stage([gliner])],
             span_rules=[_StubRule(drop_texts={self.TEXT})],
         )
 
@@ -1605,6 +1608,23 @@ _JOE_REPORTING = "BLOGGS, Joe [A1B] / Person reporting / DOB: 02/01/1990"
 _JANE_SUSPECT = "SMITH, Jane / Suspect / DOB: 03/04/1985"
 
 
+def _labelled(result):
+    """Each span in *result* as a sorted ``(label, text)`` pair."""
+    return sorted((s["label"], s["text"]) for s in result)
+
+
+class _RoleDependentFieldAssertions:
+    """Assertions shared by the role-dependent field tests."""
+
+    def assertFieldsWithheld(
+        self, result, fields=(_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT)
+    ):
+        """*result* is exactly one third-party span per field in *fields*."""
+        self.assertEqual(
+            _labelled(result), sorted(("THIRD_PARTY", f) for f in fields)
+        )
+
+
 def _occurrence_report(*person_lines, summary=_SUMMARY, sections=1):
     """Synthetic occurrence report with the given person lines and summary."""
     lines = [
@@ -1620,7 +1640,9 @@ def _occurrence_report(*person_lines, summary=_SUMMARY, sections=1):
     return "\n".join(lines)
 
 
-class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
+class RoleDependentFieldRuleTests(
+    _RoleDependentFieldAssertions, NetworkBlockerMixin, TestCase
+):
     """
     The occurrence-report span rule, through ExtractionPipeline.run with stub
     detectors and synthetic text.
@@ -1639,22 +1661,15 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
                 )
         return spans
 
-    def _run(self, text, ds_name, ds_dob, *, detectors=None, stages=None):
+    def _run(self, text, ds_name, ds_dob, stages=None):
         """
-        Run the rule over one stub detector's spans, or over several stub
-        detectors in priority order with *stages*.
+        Run the rule over stub detectors, one per span list in *stages*, in
+        priority order.  By default one detector gives the whole-line spans.
         """
         if stages is None:
-            stages = [
-                detectors
-                if detectors is not None
-                else self._whole_line_spans(text)
-            ]
+            stages = [self._whole_line_spans(text)]
         pipeline = ExtractionPipeline(
-            stages=[
-                (lambda spans: lambda _text: list(spans))(spans)
-                for spans in stages
-            ],
+            stages=[_stage(spans) for spans in stages],
             span_rules=[
                 build_occurrence_report_rule(
                     data_subject_name=ds_name, data_subject_dob=ds_dob
@@ -1662,16 +1677,6 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
             ],
         )
         return pipeline.run(text)
-
-    def _labelled(self, result):
-        return sorted((s["label"], s["text"]) for s in result)
-
-    def assertFieldsWithheld(self, result, fields=None):
-        fields = fields or (_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT)
-        self.assertEqual(
-            self._labelled(result),
-            sorted(("THIRD_PARTY", f) for f in fields),
-        )
 
     def test_ds_with_another_role_has_fields_withheld_as_third_party(self):
         text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
@@ -1789,7 +1794,7 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
                 ]
 
                 result = self._run(
-                    text, "Joe Bloggs", date(1990, 1, 2), detectors=detectors
+                    text, "Joe Bloggs", date(1990, 1, 2), stages=[detectors]
                 )
 
                 self.assertEqual(result, [officer])
@@ -1832,12 +1837,10 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
         detectors = self._whole_line_spans(text) + [
             _span("PC 0000", text.find("PC 0000"), len(text))
         ]
-        without_rule = ExtractionPipeline(
-            stages=[lambda _text: list(detectors)]
-        ).run(text)
+        without_rule = ExtractionPipeline(stages=[_stage(detectors)]).run(text)
 
         result = self._run(
-            text, "Jane Smith", date(1985, 4, 3), detectors=detectors
+            text, "Jane Smith", date(1985, 4, 3), stages=[detectors]
         )
 
         self.assertEqual(result, without_rule)
@@ -1881,7 +1884,6 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
 
         self.assertEqual(result, [])
 
-
     def test_span_crossing_a_field_edge_keeps_only_its_part_outside(self):
         text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
 
@@ -1916,7 +1918,7 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
                 )
 
                 self.assertEqual(
-                    self._labelled(result),
+                    _labelled(result),
                     sorted(("THIRD_PARTY", t) for t in (*fields, *outside)),
                 )
                 for span in result:
@@ -1926,7 +1928,9 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
                     )
 
 
-class DefaultPipelineWiringTests(NetworkBlockerMixin, TestCase):
+class DefaultPipelineWiringTests(
+    _RoleDependentFieldAssertions, NetworkBlockerMixin, TestCase
+):
     """build_default_pipeline attaches the occurrence-report rule."""
 
     @patch(
@@ -1960,13 +1964,7 @@ class DefaultPipelineWiringTests(NetworkBlockerMixin, TestCase):
             _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
         )
 
-        self.assertEqual(
-            sorted((s["label"], s["text"]) for s in result),
-            sorted(
-                ("THIRD_PARTY", f)
-                for f in (_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT)
-            ),
-        )
+        self.assertFieldsWithheld(result)
 
 
 class DocumentStructureTests(NetworkBlockerMixin, TestCase):

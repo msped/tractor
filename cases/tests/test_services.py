@@ -14,6 +14,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from training.models import Model as SpacyModel
+from training.pipeline import ExtractionPipeline
+from training.span_rules import build_occurrence_report_rule
 from training.tests.base import NetworkBlockerMixin
 
 from ..models import (
@@ -2581,9 +2583,6 @@ class RoleDependentFieldProcessingTests(NetworkBlockerMixin, TestCase):
         shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
 
     def _process(self):
-        from training.pipeline import ExtractionPipeline
-        from training.span_rules import build_occurrence_report_rule
-
         name_start = self.TEXT.index("SMITH, Jane")
         person = {
             "text": "SMITH, Jane",
