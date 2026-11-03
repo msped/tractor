@@ -1610,6 +1610,7 @@ def _occurrence_report(*person_lines, summary=_SUMMARY, sections=1):
     lines = [
         "Occurrence number: 01/000001/26",
         _REPORTED_TIME,
+        "Location: 1 High Street",
         summary,
         _ORIGINAL_REPORT,
     ]
@@ -1879,6 +1880,50 @@ class RoleDependentFieldRuleTests(NetworkBlockerMixin, TestCase):
         )
 
         self.assertEqual(result, [])
+
+
+    def test_span_crossing_a_field_edge_keeps_only_its_part_outside(self):
+        text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
+
+        def between(first, last):
+            start = text.index(first)
+            end = text.index(last) + len(last)
+            return _span(text[start:end], start, end)
+
+        crossing = [
+            # Across both edges of the reported time.
+            between("01/000001/26", "Location"),
+            # Into the summary's label.
+            between("High Street", "Summary: Closure"),
+            # From inside the original incident report's value past its end.
+            between("at them.", "Involved"),
+        ]
+        outside = ["01/000001/26", "Location", "High Street", "Involved"]
+        branches = {
+            "withheld": (
+                ("Jane Smith", date(1985, 4, 3)),
+                (_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT),
+            ),
+            "disclosed": (("Joe Bloggs", date(1990, 1, 2)), ()),
+        }
+        for description, ((ds_name, ds_dob), fields) in branches.items():
+            with self.subTest(description):
+                result = self._run(
+                    text,
+                    ds_name,
+                    ds_dob,
+                    stages=[self._whole_line_spans(text), crossing],
+                )
+
+                self.assertEqual(
+                    self._labelled(result),
+                    sorted(("THIRD_PARTY", t) for t in (*fields, *outside)),
+                )
+                for span in result:
+                    self.assertEqual(
+                        text[span["start_char"] : span["end_char"]],
+                        span["text"],
+                    )
 
 
 class DefaultPipelineWiringTests(NetworkBlockerMixin, TestCase):

@@ -188,6 +188,47 @@ class _FieldExtent:
         covers_value = span_start <= self.value_start and span_end >= self.end
         return touches_label or covers_value
 
+    def crosses_edge(self, span):
+        """Whether *span* lies partly inside the field and partly outside."""
+        span_start, span_end = span["start_char"], span["end_char"]
+        if span_start >= self.end or span_end <= self.start:
+            return False
+        return span_start < self.start or span_end > self.end
+
+
+def _trimmed(text, span, start, end):
+    """
+    A copy of *span* cut to [start, end) with surrounding whitespace dropped,
+    or None if nothing but whitespace is left.
+    """
+    piece = text[start:end]
+    if not piece.strip():
+        return None
+    start += len(piece) - len(piece.lstrip())
+    end = start + len(piece.strip())
+    return {**span, "text": text[start:end], "start_char": start, "end_char": end}
+
+
+def _outside_fields(text, span, fields):
+    """
+    *span* trimmed to its parts outside every field whose edge it crosses:
+    one piece for each side that reaches outside.  A span that crosses no
+    field edge comes back unchanged.
+    """
+    crossed = sorted(
+        (field for field in fields if field.crosses_edge(span)),
+        key=lambda field: field.start,
+    )
+    if not crossed:
+        return [span]
+    pieces = []
+    cursor = span["start_char"]
+    for field in crossed:
+        pieces.append(_trimmed(text, span, cursor, field.start))
+        cursor = max(cursor, field.end)
+    pieces.append(_trimmed(text, span, cursor, span["end_char"]))
+    return [piece for piece in pieces if piece is not None]
+
 
 @dataclass(frozen=True)
 class _PersonLine:
@@ -253,19 +294,39 @@ class RoleDependentFieldRule:
         else:
             reading = self._read_role(text, *sections[0])
 
+        fields = self._fields(text)
+        # Whichever way the fields go, a span crossing a field's edge keeps
+        # only its part outside the field, so the field's decision never
+        # spills onto the text around it.
+        stage_results = [
+            [
+                piece
+                for span in results
+                for piece in _outside_fields(text, span, fields)
+            ]
+            for results in stage_results
+        ]
+
         if reading is RoleReading.HOLDS_ROLE:
             return SpanRuleResult(
-                stage_results=self._disclose_fields(text, stage_results)
+                stage_results=self._disclose_fields(fields, stage_results)
             )
 
         return SpanRuleResult(
             stage_results=stage_results,
             added=[
-                self._withheld_span(text, start, end)
-                for label in self.rule_data.field_labels
-                for start, end in _field_extents(text, label)
+                self._withheld_span(text, field.start, field.end)
+                for field in fields
             ],
         )
+
+    def _fields(self, text):
+        """Every role-dependent field in *text*, for every field label."""
+        return [
+            _FieldExtent.of(text, label, start, end)
+            for label in self.rule_data.field_labels
+            for start, end in _field_extents(text, label)
+        ]
 
     def _read_role(self, text, section_start, section_end):
         """
@@ -310,7 +371,8 @@ class RoleDependentFieldRule:
         # No line matched, or the matching lines disagree.
         return RoleReading.UNKNOWN
 
-    def _disclose_fields(self, text, stage_results):
+    @staticmethod
+    def _disclose_fields(fields, stage_results):
         """
         Drop, from every detector, each span that would redact a field as a
         whole: one that overlaps the field and either reaches into its label
@@ -318,11 +380,6 @@ class RoleDependentFieldRule:
         a third party named in a summary, are kept.  Nothing records the
         drop (an accepted exception to "no silent discard"; see ADR-0001).
         """
-        fields = [
-            _FieldExtent.of(text, label, start, end)
-            for label in self.rule_data.field_labels
-            for start, end in _field_extents(text, label)
-        ]
         return [
             [
                 span
