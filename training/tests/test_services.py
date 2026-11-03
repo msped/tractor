@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -14,8 +15,14 @@ from ..extraction import (
     extract_document_structure,
     extract_table_with_styling,
 )
-from ..pipeline import ExtractionPipeline, _deduplicate_entities
+from ..pipeline import (
+    ExtractionPipeline,
+    SpanRuleResult,
+    _deduplicate_entities,
+    build_default_pipeline,
+)
 from ..services import _expand_prefix_symbols, extract_entities_from_text
+from ..span_rules import build_occurrence_report_rule
 from .base import NetworkBlockerMixin
 
 
@@ -1511,6 +1518,491 @@ class ExtractionPipelineTests(NetworkBlockerMixin, TestCase):
             self.assertEqual(results[0]["text"], "Jane Smith")
         finally:
             os.remove(path)
+
+
+def _span(text, start, end, label="THIRD_PARTY", entity_type=None):
+    """A detector span dict."""
+    return {
+        "text": text,
+        "label": label,
+        "start_char": start,
+        "end_char": end,
+        "entity_type": entity_type,
+    }
+
+
+def _stage(entities):
+    """A stub detector stage that returns *entities* for any text."""
+    return lambda _text: list(entities)
+
+
+class _StubRule:
+    """A span rule that adds canned spans and drops detector spans by text."""
+
+    def __init__(self, added=(), drop_texts=()):
+        self.added = list(added)
+        self.drop_texts = set(drop_texts)
+
+    def apply(self, text, stage_results):
+        return SpanRuleResult(
+            stage_results=[
+                [s for s in results if s["text"] not in self.drop_texts]
+                for results in stage_results
+            ],
+            added=list(self.added),
+        )
+
+
+class SpanRuleStepTests(NetworkBlockerMixin, TestCase):
+    """The generic span-rule step of ExtractionPipeline, with stub rules."""
+
+    TEXT = "Summary: Jane Smith shouted at a neighbour."
+
+    def test_rule_span_outranks_every_detector(self):
+        # Superset stage on purpose: even SpanCat's superset replacement must
+        # not widen over a rule span.
+        rule_span = _span("Summary: Jane Smith", 0, 19)
+        spancat = _span("Summary: Jane Smith shouted", 0, 27)
+        gliner = _span("Jane Smith", 9, 19, entity_type="person name")
+        neighbour = _span("neighbour", 33, 42)
+        pipeline = ExtractionPipeline(
+            stages=[_stage([spancat]), _stage([gliner, neighbour])],
+            superset_stage_indices=frozenset({0}),
+            span_rules=[_StubRule(added=[rule_span])],
+        )
+
+        result = pipeline.run(self.TEXT)
+
+        self.assertCountEqual(result, [rule_span, neighbour])
+
+    def test_span_dropped_by_rule_never_reaches_deduplication(self):
+        # Dropped before deduplication, so the whole-line SpanCat span cannot
+        # erase the inner name a lower-priority detector found.
+        whole_line = _span(self.TEXT, 0, len(self.TEXT), label="OPERATIONAL")
+        gliner = _span("Jane Smith", 9, 19, entity_type="person name")
+        pipeline = ExtractionPipeline(
+            stages=[_stage([whole_line]), _stage([gliner])],
+            span_rules=[_StubRule(drop_texts={self.TEXT})],
+        )
+
+        self.assertEqual(pipeline.run(self.TEXT), [gliner])
+
+
+# Synthetic occurrence report.  Every name, code and date is invented.
+_REPORTED_TIME = "Reported time: 01/02/2026 10:00"
+_SUMMARY = (
+    "Summary: Closure Summary: XX1 AB12 - Reporting Person given advice "
+    "and advised of NFA decision."
+)
+_ORIGINAL_REPORT = (
+    "Original Incident Report: Caller states that a neighbour shouted at them."
+)
+# A summary whose value wraps onto following lines.  The second line reads
+# like a label ("advised as follows:") but is part of the value.
+_WRAPPED_SUMMARY = (
+    "Summary: Closure Summary: neighbour dispute. Reporting Person\n"
+    "advised as follows: the matter will be filed\n"
+    "and no further action taken."
+)
+_JOE_REPORTING = "BLOGGS, Joe [A1B] / Person reporting / DOB: 02/01/1990"
+_JANE_SUSPECT = "SMITH, Jane / Suspect / DOB: 03/04/1985"
+
+
+def _labelled(result):
+    """Each span in *result* as a sorted ``(label, text)`` pair."""
+    return sorted((s["label"], s["text"]) for s in result)
+
+
+class _RoleDependentFieldAssertions:
+    """Assertions shared by the role-dependent field tests."""
+
+    def assertFieldsWithheld(
+        self, result, fields=(_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT)
+    ):
+        """*result* is exactly one third-party span per field in *fields*."""
+        self.assertEqual(
+            _labelled(result), sorted(("THIRD_PARTY", f) for f in fields)
+        )
+
+
+def _occurrence_report(*person_lines, summary=_SUMMARY, sections=1):
+    """Synthetic occurrence report with the given person lines and summary."""
+    lines = [
+        "Occurrence number: 01/000001/26",
+        _REPORTED_TIME,
+        "Location: 1 High Street",
+        summary,
+        _ORIGINAL_REPORT,
+    ]
+    for _ in range(sections):
+        lines += ["Involved persons:", *person_lines, ""]
+    lines.append("Officer in charge: PC 0000")
+    return "\n".join(lines)
+
+
+class RoleDependentFieldRuleTests(
+    _RoleDependentFieldAssertions, NetworkBlockerMixin, TestCase
+):
+    """
+    The occurrence-report span rule, through ExtractionPipeline.run with stub
+    detectors and synthetic text.
+    """
+
+    def _whole_line_spans(self, text):
+        # How SpanCat treats the summary and original incident report today:
+        # one operational span over each whole line.  The reported time goes
+        # undetected.
+        spans = []
+        for line in (_SUMMARY, _ORIGINAL_REPORT):
+            start = text.find(line)
+            if start != -1:
+                spans.append(
+                    _span(line, start, start + len(line), label="OPERATIONAL")
+                )
+        return spans
+
+    def _run(self, text, ds_name, ds_dob, stages=None):
+        """
+        Run the rule over stub detectors, one per span list in *stages*, in
+        priority order.  By default one detector gives the whole-line spans.
+        """
+        if stages is None:
+            stages = [self._whole_line_spans(text)]
+        pipeline = ExtractionPipeline(
+            stages=[_stage(spans) for spans in stages],
+            span_rules=[
+                build_occurrence_report_rule(
+                    data_subject_name=ds_name, data_subject_dob=ds_dob
+                )
+            ],
+        )
+        return pipeline.run(text)
+
+    def test_ds_with_another_role_has_fields_withheld_as_third_party(self):
+        text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
+
+        result = self._run(text, "Jane Smith", date(1985, 4, 3))
+
+        self.assertFieldsWithheld(result)
+        for span in result:
+            self.assertEqual(
+                text[span["start_char"] : span["end_char"]], span["text"]
+            )
+
+    def test_uncertain_role_has_fields_withheld(self):
+        cases = {
+            "no person line matches the data subject": (
+                ("Alan Partridge", date(1970, 5, 6)),
+                (_JOE_REPORTING, _JANE_SUSPECT),
+            ),
+            "only an ambiguous match (shared surname)": (
+                ("Mary Bloggs", None),
+                (_JOE_REPORTING, _JANE_SUSPECT),
+            ),
+            "the data subject's line shows no role": (
+                ("Joe Bloggs", date(1990, 1, 2)),
+                ("BLOGGS, Joe [A1B] / DOB: 02/01/1990", _JANE_SUSPECT),
+            ),
+            "matching lines disagree on the role": (
+                ("Joe Bloggs", date(1990, 1, 2)),
+                (_JOE_REPORTING, "BLOGGS, Joe / Victim / DOB: 02/01/1990"),
+            ),
+            "no data subject on the case": (
+                (None, None),
+                (_JOE_REPORTING, _JANE_SUSPECT),
+            ),
+            "a long-form date of birth that disagrees": (
+                ("Joe Bloggs", date(1990, 1, 2)),
+                (
+                    "BLOGGS, Joe / Person reporting / DOB: 2 January 1960",
+                    _JANE_SUSPECT,
+                ),
+            ),
+            "a date of birth that cannot be read": (
+                ("Joe Bloggs", date(1990, 1, 2)),
+                (
+                    "BLOGGS, Joe / Person reporting / DOB: 2nd Jan 90",
+                    _JANE_SUSPECT,
+                ),
+            ),
+        }
+        for description, ((ds_name, ds_dob), person_lines) in cases.items():
+            with self.subTest(description):
+                text = _occurrence_report(*person_lines)
+                self.assertFieldsWithheld(self._run(text, ds_name, ds_dob))
+
+    def test_conflicting_lines_never_count_as_the_reporting_person(self):
+        # Whichever order the lines come in, a line saying the data subject
+        # reported is outweighed by any other line for them that disagrees.
+        victim = "BLOGGS, Joe / Victim / DOB: 02/01/1990"
+        no_role = "BLOGGS, Joe [A1B] / DOB: 02/01/1990"
+        for person_lines in (
+            (_JOE_REPORTING, victim),
+            (victim, _JOE_REPORTING),
+            (_JOE_REPORTING, no_role),
+            (no_role, _JOE_REPORTING),
+        ):
+            with self.subTest(person_lines):
+                text = _occurrence_report(*person_lines, _JANE_SUSPECT)
+
+                result = self._run(text, "Joe Bloggs", date(1990, 1, 2))
+
+                self.assertFieldsWithheld(result)
+
+    def test_more_than_one_record_has_fields_withheld(self):
+        # The data subject reports in both, but one record's role must never
+        # decide another record's fields.
+        text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT, sections=2)
+
+        result = self._run(text, "Joe Bloggs", date(1990, 1, 2))
+
+        self.assertFieldsWithheld(result)
+
+    def test_reporting_person_fields_are_disclosed(self):
+        for person_line in (
+            _JOE_REPORTING,
+            "BLOGGS, Joe / Victim / Person reporting / DOB: 02/01/1990",
+            "BLOGGS, Joe [A1B] / Person reporting; Victim / DOB: 02/01/1990",
+            "BLOGGS, Joe / Victim;Person reporting / DOB: 02/01/1990",
+            "BLOGGS, Joe / Person reporting / DOB: 2 January 1990",
+            # A partial name with a matching date of birth is the data
+            # subject (the identity matcher's rule).
+            "BLOGGS, J / Person reporting / DOB: 2 January 1990",
+        ):
+            with self.subTest(person_line):
+                text = _occurrence_report(person_line, _JANE_SUSPECT)
+                time_value = "01/02/2026 10:00"
+                time_start = text.index(time_value)
+                report_start = text.index(_ORIGINAL_REPORT)
+                officer_start = text.index("PC 0000")
+                officer = _span("PC 0000", officer_start, len(text))
+                detectors = self._whole_line_spans(text) + [
+                    # A date detector covering the reported time's whole value.
+                    _span(
+                        time_value,
+                        time_start,
+                        time_start + len(time_value),
+                        entity_type="date",
+                    ),
+                    # A partial span that reaches into the label.
+                    _span(
+                        "Report: Caller",
+                        report_start + len("Original Incident "),
+                        report_start + len("Original Incident Report: Caller"),
+                    ),
+                    officer,
+                ]
+
+                result = self._run(
+                    text, "Joe Bloggs", date(1990, 1, 2), stages=[detectors]
+                )
+
+                self.assertEqual(result, [officer])
+
+    def test_third_party_inside_a_disclosed_field_stays_redacted(self):
+        summary = "Summary: SMITH, Jane shouted at the reporting person."
+        text = _occurrence_report(
+            _JOE_REPORTING, _JANE_SUSPECT, summary=summary
+        )
+        summary_start = text.index(summary)
+        name_start = summary_start + len("Summary: ")
+        # SpanCat (higher priority) covers the whole summary line; GLiNER
+        # (lower priority) finds the third party inside it.
+        spancat = _span(
+            summary,
+            summary_start,
+            summary_start + len(summary),
+            label="OPERATIONAL",
+        )
+        gliner = _span(
+            "SMITH, Jane",
+            name_start,
+            name_start + len("SMITH, Jane"),
+            entity_type="person name",
+        )
+
+        result = self._run(
+            text,
+            "Joe Bloggs",
+            date(1990, 1, 2),
+            stages=[[spancat], [gliner]],
+        )
+
+        self.assertEqual(result, [gliner])
+
+    def test_document_without_persons_section_is_untouched(self):
+        text = "\n".join(
+            [_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT, "Logged by PC 0000"]
+        )
+        detectors = self._whole_line_spans(text) + [
+            _span("PC 0000", text.find("PC 0000"), len(text))
+        ]
+        without_rule = ExtractionPipeline(stages=[_stage(detectors)]).run(text)
+
+        result = self._run(
+            text, "Jane Smith", date(1985, 4, 3), stages=[detectors]
+        )
+
+        self.assertEqual(result, without_rule)
+
+    def test_field_wrapping_onto_following_lines_is_withheld_in_full(self):
+        text = _occurrence_report(
+            _JOE_REPORTING, _JANE_SUSPECT, summary=_WRAPPED_SUMMARY
+        )
+
+        result = self._run(text, "Jane Smith", date(1985, 4, 3))
+
+        self.assertFieldsWithheld(
+            result, fields=(_REPORTED_TIME, _WRAPPED_SUMMARY, _ORIGINAL_REPORT)
+        )
+
+    def test_field_wrapping_onto_following_lines_is_disclosed_in_full(self):
+        text = _occurrence_report(
+            _JOE_REPORTING, _JANE_SUSPECT, summary=_WRAPPED_SUMMARY
+        )
+        summary_start = text.index(_WRAPPED_SUMMARY)
+        summary_end = summary_start + len(_WRAPPED_SUMMARY)
+        value_start = summary_start + len("Summary: ")
+        # One detector spans label and value across every line; another
+        # covers the value alone, from its first line to its last.
+        whole_field = _span(
+            _WRAPPED_SUMMARY, summary_start, summary_end, label="OPERATIONAL"
+        )
+        whole_value = _span(
+            text[value_start:summary_end],
+            value_start,
+            summary_end,
+            label="OPERATIONAL",
+        )
+
+        result = self._run(
+            text,
+            "Joe Bloggs",
+            date(1990, 1, 2),
+            stages=[[whole_field], [whole_value]],
+        )
+
+        self.assertEqual(result, [])
+
+    def test_wrapped_field_stops_at_a_blank_line(self):
+        # The line after the blank is not a label, so only the blank line
+        # can end the summary there.
+        field = "Summary: neighbour dispute, advice given\nby phone."
+        after_blank = "logged by the control room"
+        text = _occurrence_report(
+            _JOE_REPORTING,
+            _JANE_SUSPECT,
+            summary=f"{field}\n\n{after_blank}",
+        )
+        field_end = text.index(field) + len(field)
+        value_start = text.index(field) + len("Summary: ")
+        # Covers the whole value only if the field stops at the blank line.
+        whole_value = _span(
+            text[value_start:field_end], value_start, field_end
+        )
+        after_start = text.index(after_blank)
+        outside = _span(
+            after_blank, after_start, after_start + len(after_blank)
+        )
+        branches = {
+            "withheld": (
+                ("Jane Smith", date(1985, 4, 3)),
+                (_REPORTED_TIME, field, _ORIGINAL_REPORT),
+            ),
+            "disclosed": (("Joe Bloggs", date(1990, 1, 2)), ()),
+        }
+        for description, ((ds_name, ds_dob), fields) in branches.items():
+            with self.subTest(description):
+                result = self._run(
+                    text, ds_name, ds_dob, stages=[[whole_value, outside]]
+                )
+
+                self.assertEqual(
+                    _labelled(result),
+                    sorted(("THIRD_PARTY", t) for t in (*fields, after_blank)),
+                )
+
+    def test_span_crossing_a_field_edge_keeps_only_its_part_outside(self):
+        text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
+
+        def between(first, last):
+            start = text.index(first)
+            end = text.index(last) + len(last)
+            return _span(text[start:end], start, end)
+
+        crossing = [
+            # Across both edges of the reported time.
+            between("01/000001/26", "Location"),
+            # Into the summary's label.
+            between("High Street", "Summary: Closure"),
+            # From inside the original incident report's value past its end.
+            between("at them.", "Involved"),
+        ]
+        outside = ["01/000001/26", "Location", "High Street", "Involved"]
+        branches = {
+            "withheld": (
+                ("Jane Smith", date(1985, 4, 3)),
+                (_REPORTED_TIME, _SUMMARY, _ORIGINAL_REPORT),
+            ),
+            "disclosed": (("Joe Bloggs", date(1990, 1, 2)), ()),
+        }
+        for description, ((ds_name, ds_dob), fields) in branches.items():
+            with self.subTest(description):
+                result = self._run(
+                    text,
+                    ds_name,
+                    ds_dob,
+                    stages=[self._whole_line_spans(text), crossing],
+                )
+
+                self.assertEqual(
+                    _labelled(result),
+                    sorted(("THIRD_PARTY", t) for t in (*fields, *outside)),
+                )
+                for span in result:
+                    self.assertEqual(
+                        text[span["start_char"] : span["end_char"]],
+                        span["text"],
+                    )
+
+
+class DefaultPipelineWiringTests(
+    _RoleDependentFieldAssertions, NetworkBlockerMixin, TestCase
+):
+    """build_default_pipeline attaches the occurrence-report rule."""
+
+    @patch(
+        "training.extractors.gemma_extractor.extract_with_gemma",
+        return_value=[],
+    )
+    @patch(
+        "training.extractors.gliner_extractor.extract_with_gliner",
+        return_value=[],
+    )
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
+    def test_default_pipeline_withholds_role_dependent_fields(
+        self, mock_gliner_mgr, mock_spancat_mgr, _gliner, _gemma
+    ):
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        snapshot = MagicMock()
+        snapshot.extract_custom.return_value = []
+        snapshot.extract_third_party.return_value = []
+        snapshot.extract_operational.return_value = []
+
+        pipeline = build_default_pipeline(
+            "Jane Smith", date(1985, 4, 3), presidio_snapshot=snapshot
+        )
+        result = pipeline.run(
+            _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
+        )
+
+        self.assertFieldsWithheld(result)
 
 
 class DocumentStructureTests(NetworkBlockerMixin, TestCase):

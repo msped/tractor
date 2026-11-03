@@ -12,6 +12,7 @@ the data subject discloses someone else's details.
 """
 
 import re
+from datetime import datetime
 from enum import Enum
 
 # Date formats a document might print the data subject's date of birth in.
@@ -107,6 +108,23 @@ def match_person(name, dob=None, *, ds_name, ds_dob=None):
     if verdict is IdentityMatch.AMBIGUOUS:
         return IdentityMatch.MATCH
     return verdict
+
+
+def parse_dob(text):
+    """
+    The date *text* writes out, in any of the formats a source system might
+    print a date of birth in, or None if it is not one of them.
+    """
+    if not text or not text.strip():
+        return None
+
+    candidate = text.strip()
+    for fmt in _DOB_FORMATS:
+        try:
+            return datetime.strptime(candidate, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def matches_dob_text(text, ds_dob):
