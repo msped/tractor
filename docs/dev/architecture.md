@@ -310,7 +310,7 @@ For Ollama (Gemma), GPU acceleration is handled at the container/host level — 
 
 ### Deduplication
 
-After all four models run, overlapping spans are deduplicated with this priority order:
+After all four models run (five pipeline stages, since Presidio runs once for custom recognizers and once for its built-ins), overlapping spans are deduplicated with this priority order:
 
 1. Custom Presidio results are kept in full (admin-configured patterns always win)
 2. SpanCat results are added where they don't overlap custom Presidio spans — with one exception: if a SpanCat prediction **strictly contains** a custom Presidio span of the same label (e.g. SpanCat produces "OIC / HUGHES, R. #0723222" while Presidio only caught "HUGHES, R. #0723222"), SpanCat's wider span replaces the narrower Presidio one. This lets the trained model capture surrounding context without being clipped.
@@ -320,7 +320,7 @@ After all four models run, overlapping spans are deduplicated with this priority
 
 The superset extension rule is intentionally limited to the SpanCat stage. Lower-priority extractors (GLiNER, Gemma) cannot widen higher-priority matches.
 
-Span rules run before deduplication (see [Role-dependent Fields](#role-dependent-fields)). Spans a rule adds outrank all five stages, and any detector span overlapping one is dropped.
+Span rules run before deduplication (see [Role-dependent Fields](#role-dependent-fields)). Spans a rule adds outrank every stage, and any detector span overlapping one is dropped.
 
 ### Role-dependent Fields
 
@@ -329,9 +329,10 @@ Some fields of a record are disclosable only when the data subject holds a parti
 The rule logic is generic. The occurrence-report wording is declarative rule data (`OCCURRENCE_REPORT`): the `Involved persons:` section heading, the role `Person reporting`, and the field labels `Reported time:`, `Summary:` and `Original Incident Report:`.
 
 - **Recognition.** A document with no `Involved persons:` section is not an occurrence report, so the rule does nothing. With one section the rule runs. With two or more, the document holds several records and the role is unknown.
-- **Reading the role.** Each line in the section is a person entry: a name, optional bracketed codes, then ` / `-separated roles and details. A part containing a colon (`DOB: ...`) is a detail, and one part can combine roles with semicolons (`Person reporting; Victim`). The name and date of birth go through the identity matcher (`cases/identity.py`), and only an unambiguous match counts as the data subject. The data subject holds the role if it is among the roles on every matching line. No matching line, an ambiguous match, a line with no role, or matching lines that disagree all give an unknown role.
-- **Field extent.** A field starts at its label at the beginning of a line. It runs to just before the next line that starts with a label (text followed by a colon) or a blank line, so a value that wraps onto following lines is included. A label that appears mid-line (`Closure Summary:`) is part of the value.
-- **The data subject is the reporting person.** From every detector's output, the rule drops each span that overlaps a field and either reaches into its label or covers its whole value. Spans strictly inside the value are kept. Because this happens before deduplication, a third party named in the summary by a lower-priority detector still wins once SpanCat's whole-line span is gone. No redaction row records the disclosure.
+- **Reading the role.** Each line in the section is a person entry: a name, optional bracketed codes, then ` / `-separated roles and details. A part containing a colon (`DOB: ...`) is a detail, and one part can combine roles with semicolons (`Person reporting; Victim`). The date of birth is read with the identity matcher's own date formats (`parse_dob` in `cases/identity.py`), so long-form dates such as `2 January 1960` count. The name and date of birth go through the identity matcher, and only an unambiguous match counts as the data subject; a partial name with a matching date of birth is a match. The data subject holds the role if it is among the roles on every matching line. No matching line, an ambiguous match, a line with no role, or matching lines that disagree all give an unknown role. A line whose date of birth is present but unreadable gives an unknown role whenever its name matches the data subject at all, so a name alone never confirms them.
+- **Field extent.** A field starts at its label at the beginning of a line. It runs to just before the next label line or blank line, so a value that wraps onto following lines is included. A label line starts with a capitalised word, has at most four words before the colon, and has whitespace or the end of the line after it (`Officer in charge:`). So a wrapped value line such as `advised as follows: the matter…` stays part of the value, as does a label that appears mid-line (`Closure Summary:`).
+- **Edge-crossing spans.** In both branches below, a detector span that crosses a field's edge is first trimmed to its part outside the field, with one piece on each side it reaches out of, and surrounding whitespace dropped. So neither branch's decision spills onto the text around the field.
+- **The data subject is the reporting person.** From every detector's output, the rule drops each span within a field that either reaches into its label or covers its whole value. Spans strictly inside the value are kept. Because this happens before deduplication, a third party named in the summary by a lower-priority detector still wins once SpanCat's whole-line span is gone. No redaction row records the disclosure.
 - **Not the reporting person, or unknown.** The rule adds one `THIRD_PARTY` span per field, covering label and value, with entity type `ROLE_DEPENDENT_FIELD`. That type is outside the attribution whitelist, so DS resolution never reattributes it, and it becomes a pending Third-Party PII suggestion with no rationale.
 
 Configurable per-instance rules, and per-team rules once teams exist, are the intended future. See [ADR-0001](../adr/0001-role-dependent-fields-as-committed-rule-data.md) and [ADR-0002](../adr/0002-teams-not-modelled-yet.md).
