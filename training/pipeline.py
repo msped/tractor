@@ -26,6 +26,11 @@ def _close_thread_connections(stage):
     return wrapper
 
 
+def ranges_overlap(start, end, other_start, other_end):
+    """Whether [start, end) and [other_start, other_end) share a character."""
+    return start < other_end and end > other_start
+
+
 def _deduplicate_entities(
     primary_entities, secondary_entities, allow_superset=False
 ):
@@ -62,8 +67,7 @@ def _deduplicate_entities(
                 i
                 for i, ent in enumerate(combined)
                 if i not in superset_indices
-                and s < ent["end_char"]
-                and e > ent["start_char"]
+                and ranges_overlap(s, e, ent["start_char"], ent["end_char"])
             ]
 
             if superset_indices and not other_overlap_indices:
@@ -75,7 +79,7 @@ def _deduplicate_entities(
             other_overlap_indices = [
                 i
                 for i, ent in enumerate(combined)
-                if s < ent["end_char"] and e > ent["start_char"]
+                if ranges_overlap(s, e, ent["start_char"], ent["end_char"])
             ]
 
         if not other_overlap_indices:
@@ -111,9 +115,14 @@ class SpanRuleResult:
 
 
 def _overlaps_any(span, others):
+    """Whether *span* shares a character with any span in *others*."""
     return any(
-        span["start_char"] < other["end_char"]
-        and span["end_char"] > other["start_char"]
+        ranges_overlap(
+            span["start_char"],
+            span["end_char"],
+            other["start_char"],
+            other["end_char"],
+        )
         for other in others
     )
 

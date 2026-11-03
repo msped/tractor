@@ -23,7 +23,7 @@ from enum import Enum
 
 from cases.identity import IdentityMatch, match_person, parse_dob
 
-from .pipeline import SpanRuleResult
+from .pipeline import SpanRuleResult, ranges_overlap
 
 # The entity type of a span this rule adds.  Deliberately outside the
 # attribution whitelist in ``cases.attribution``, so DS resolution never
@@ -114,30 +114,84 @@ def _label_start(text, start, end, label):
     return None
 
 
-def _field_extents(text, label):
+@dataclass(frozen=True)
+class _LabelledBlock:
     """
-    Every ``(start, end)`` field that *label* starts in *text*.
+    A label at the start of a line and the value that follows it.
 
-    A field starts at its label at the beginning of a line and runs to just
+    ``start`` is where the label starts, ``label_end`` where it ends,
+    ``value_start`` where the value's first non-blank character is, and
+    ``end`` where the value ends, trailing whitespace excluded.  A
+    role-dependent field is one; so is a persons section, whose value is its
+    person lines.
+    """
+
+    start: int
+    label_end: int
+    value_start: int
+    end: int
+
+    @classmethod
+    def of(cls, text, start, label_end, end):
+        """The block of *text* in [start, end), its label ending at *label_end*."""
+        end = start + len(text[start:end].rstrip())
+        value = text[label_end:end]
+        value_start = label_end + len(value) - len(value.lstrip())
+        return cls(start, label_end, value_start, end)
+
+    def overlaps(self, span):
+        """Whether *span* shares a character with the block."""
+        return ranges_overlap(
+            span["start_char"], span["end_char"], self.start, self.end
+        )
+
+    def redacts_whole(self, span):
+        """
+        Whether *span* overlaps the block and either reaches into its label
+        or covers its whole value.
+        """
+        if not self.overlaps(span):
+            return False
+        span_start, span_end = span["start_char"], span["end_char"]
+        touches_label = span_start < self.label_end
+        covers_value = span_start <= self.value_start and span_end >= self.end
+        return touches_label or covers_value
+
+    def crosses_edge(self, span):
+        """Whether *span* lies partly inside the block and partly outside."""
+        return self.overlaps(span) and (
+            span["start_char"] < self.start or span["end_char"] > self.end
+        )
+
+
+def _labelled_blocks(text, label):
+    """
+    Every block that *label* starts in *text*.
+
+    A block starts at its label at the beginning of a line and runs to just
     before the next line that starts with a label (see ``_LABEL_LINE_RE``),
-    or a blank line.  A label that appears mid-line is part of the value.
+    or a blank line, so a value that wraps onto following lines is included.
+    A label that appears mid-line is part of the value.
     """
     lines = list(_lines(text))
-    extents = []
+    blocks = []
     for i, (start, end) in enumerate(lines):
         label_start = _label_start(text, start, end, label)
         if label_start is None:
             continue
-        field_end = end
+        block_end = end
         for next_start, next_end in lines[i + 1 :]:
             if _is_blank(text, next_start, next_end) or _is_label_line(
                 text, next_start, next_end
             ):
                 break
-            field_end = next_end
-        value = text[label_start:field_end].rstrip()
-        extents.append((label_start, label_start + len(value)))
-    return extents
+            block_end = next_end
+        blocks.append(
+            _LabelledBlock.of(
+                text, label_start, label_start + len(label), block_end
+            )
+        )
+    return blocks
 
 
 def _read_dob(line):
@@ -160,42 +214,6 @@ def _read_dob(line):
     return True, None
 
 
-@dataclass(frozen=True)
-class _FieldExtent:
-    """Where one field's label ends and its value starts and ends."""
-
-    start: int
-    label_end: int
-    value_start: int
-    end: int
-
-    @classmethod
-    def of(cls, text, label, start, end):
-        label_end = start + len(label)
-        value = text[label_end:end]
-        value_start = label_end + len(value) - len(value.lstrip())
-        return cls(start, label_end, value_start, end)
-
-    def redacts_whole(self, span):
-        """
-        Whether *span* overlaps the field and either reaches into its label
-        or covers its whole value.
-        """
-        span_start, span_end = span["start_char"], span["end_char"]
-        if span_start >= self.end or span_end <= self.start:
-            return False
-        touches_label = span_start < self.label_end
-        covers_value = span_start <= self.value_start and span_end >= self.end
-        return touches_label or covers_value
-
-    def crosses_edge(self, span):
-        """Whether *span* lies partly inside the field and partly outside."""
-        span_start, span_end = span["start_char"], span["end_char"]
-        if span_start >= self.end or span_end <= self.start:
-            return False
-        return span_start < self.start or span_end > self.end
-
-
 def _trimmed(text, span, start, end):
     """
     A copy of *span* cut to [start, end) with surrounding whitespace dropped,
@@ -206,7 +224,12 @@ def _trimmed(text, span, start, end):
         return None
     start += len(piece) - len(piece.lstrip())
     end = start + len(piece.strip())
-    return {**span, "text": text[start:end], "start_char": start, "end_char": end}
+    return {
+        **span,
+        "text": text[start:end],
+        "start_char": start,
+        "end_char": end,
+    }
 
 
 def _outside_fields(text, span, fields):
@@ -282,7 +305,12 @@ class RoleDependentFieldRule:
     data_subject_dob: date | None = None
 
     def apply(self, text, stage_results):
-        sections = _field_extents(text, self.rule_data.persons_heading)
+        """
+        Adjust every detector's spans for the document's role-dependent
+        fields, and add a withheld-field span for each unless the data
+        subject is confirmed to hold the role.
+        """
+        sections = _labelled_blocks(text, self.rule_data.persons_heading)
         if not sections:
             # Not a record of this format: leave every detector span alone.
             return SpanRuleResult(stage_results=stage_results)
@@ -292,7 +320,7 @@ class RoleDependentFieldRule:
             # never decide another's fields.
             reading = RoleReading.UNKNOWN
         else:
-            reading = self._read_role(text, *sections[0])
+            reading = self._read_role(text, sections[0])
 
         fields = self._fields(text)
         # Whichever way the fields go, a span crossing a field's edge keeps
@@ -314,30 +342,28 @@ class RoleDependentFieldRule:
 
         return SpanRuleResult(
             stage_results=stage_results,
-            added=[
-                self._withheld_span(text, field.start, field.end)
-                for field in fields
-            ],
+            added=[_withheld_span(text, field) for field in fields],
         )
 
     def _fields(self, text):
         """Every role-dependent field in *text*, for every field label."""
         return [
-            _FieldExtent.of(text, label, start, end)
+            field
             for label in self.rule_data.field_labels
-            for start, end in _field_extents(text, label)
+            for field in _labelled_blocks(text, label)
         ]
 
-    def _read_role(self, text, section_start, section_end):
+    def _read_role(self, text, section):
         """
         The data subject's role, read from their own line in the persons
-        section.  Only a line the identity matcher confirms unambiguously
-        counts as theirs.
+        *section*.  Only a line the identity matcher confirms unambiguously
+        counts as theirs.  A line whose date of birth cannot be read is never
+        theirs on the name alone: if the name matches at all, the reading is
+        unknown.
         """
-        heading_end = section_start + len(self.rule_data.persons_heading)
         person_lines = [
             line
-            for line in text[heading_end:section_end].splitlines()
+            for line in text[section.label_end : section.end].splitlines()
             if line.strip()
         ]
         role = self.rule_data.role.casefold()
@@ -389,15 +415,16 @@ class RoleDependentFieldRule:
             for results in stage_results
         ]
 
-    @staticmethod
-    def _withheld_span(text, start, end):
-        return {
-            "text": text[start:end],
-            "label": "THIRD_PARTY",
-            "start_char": start,
-            "end_char": end,
-            "entity_type": ROLE_DEPENDENT_FIELD_ENTITY_TYPE,
-        }
+
+def _withheld_span(text, field):
+    """The third-party span that withholds *field*, label and value."""
+    return {
+        "text": text[field.start : field.end],
+        "label": "THIRD_PARTY",
+        "start_char": field.start,
+        "end_char": field.end,
+        "entity_type": ROLE_DEPENDENT_FIELD_ENTITY_TYPE,
+    }
 
 
 def build_occurrence_report_rule(
