@@ -1884,6 +1884,44 @@ class RoleDependentFieldRuleTests(
 
         self.assertEqual(result, [])
 
+    def test_wrapped_field_stops_at_a_blank_line(self):
+        # The line after the blank is not a label, so only the blank line
+        # can end the summary there.
+        field = "Summary: neighbour dispute, advice given\nby phone."
+        after_blank = "logged by the control room"
+        text = _occurrence_report(
+            _JOE_REPORTING,
+            _JANE_SUSPECT,
+            summary=f"{field}\n\n{after_blank}",
+        )
+        field_end = text.index(field) + len(field)
+        value_start = text.index(field) + len("Summary: ")
+        # Covers the whole value only if the field stops at the blank line.
+        whole_value = _span(
+            text[value_start:field_end], value_start, field_end
+        )
+        after_start = text.index(after_blank)
+        outside = _span(
+            after_blank, after_start, after_start + len(after_blank)
+        )
+        branches = {
+            "withheld": (
+                ("Jane Smith", date(1985, 4, 3)),
+                (_REPORTED_TIME, field, _ORIGINAL_REPORT),
+            ),
+            "disclosed": (("Joe Bloggs", date(1990, 1, 2)), ()),
+        }
+        for description, ((ds_name, ds_dob), fields) in branches.items():
+            with self.subTest(description):
+                result = self._run(
+                    text, ds_name, ds_dob, stages=[[whole_value, outside]]
+                )
+
+                self.assertEqual(
+                    _labelled(result),
+                    sorted(("THIRD_PARTY", t) for t in (*fields, after_blank)),
+                )
+
     def test_span_crossing_a_field_edge_keeps_only_its_part_outside(self):
         text = _occurrence_report(_JOE_REPORTING, _JANE_SUSPECT)
 
