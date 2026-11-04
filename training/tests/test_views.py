@@ -263,6 +263,37 @@ class TrainingScheduleViewTests(BaseTrainingAPITestCase):
             Schedule.objects.filter(func="training.tasks.train_model").exists()
         )
 
+    # The scheduler closes stale connections first, which would close the
+    # test's own connection and leave its query to fail silently.
+    @patch("django_q.scheduler.close_old_django_connections")
+    @patch("django_q.scheduler.async_task")
+    def test_scheduled_run_trains_on_the_requested_source(
+        self, mock_async, _mock_close
+    ):
+        """A schedule posted as the card sends it queues training on its source."""
+        from django_q.scheduler import scheduler
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(
+            reverse("schedule-list"),
+            {
+                "func": "training.tasks.train_model",
+                "kwargs": {"source": "redactions"},
+                "schedule_type": Schedule.WEEKLY,
+                "repeats": -1,
+                "next_run": (timezone.now() - timedelta(minutes=1)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        scheduler(broker=MagicMock())
+
+        mock_async.assert_called_once()
+        func, *_ = mock_async.call_args.args
+        self.assertEqual(func, "training.tasks.train_model")
+        self.assertEqual(mock_async.call_args.kwargs["source"], "redactions")
+
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class RunManualTrainingViewTests(BaseTrainingAPITestCase):
