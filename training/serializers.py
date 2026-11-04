@@ -180,7 +180,21 @@ class ModelSerializer(serializers.ModelSerializer):
         ]
 
 
+class ScheduleKwargsField(serializers.CharField):
+    """Stores an object of task kwargs as the Python literal django-q's
+    scheduler reads back with ``ast.literal_eval``."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            return repr(data)
+        return super().to_internal_value(data)
+
+
 class ScheduleSerializer(serializers.ModelSerializer):
+    kwargs = ScheduleKwargsField(
+        required=False, allow_blank=True, allow_null=True
+    )
+
     class Meta:
         model = Schedule
         fields = [
