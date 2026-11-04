@@ -281,7 +281,9 @@ class TrainingScheduleViewTests(BaseTrainingAPITestCase):
                 "kwargs": {"source": "redactions"},
                 "schedule_type": Schedule.WEEKLY,
                 "repeats": -1,
-                "next_run": (timezone.now() - timedelta(minutes=1)).isoformat(),
+                "next_run": (
+                    timezone.now() - timedelta(minutes=1)
+                ).isoformat(),
             },
             format="json",
         )

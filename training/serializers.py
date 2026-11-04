@@ -191,7 +191,9 @@ class ScheduleKwargsField(serializers.CharField):
 
 
 class ScheduleSerializer(serializers.ModelSerializer):
-    kwargs = ScheduleKwargsField(required=False, allow_blank=True, allow_null=True)
+    kwargs = ScheduleKwargsField(
+        required=False, allow_blank=True, allow_null=True
+    )
 
     class Meta:
         model = Schedule
