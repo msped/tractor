@@ -45,6 +45,7 @@ describe('<RedactionSidebar />', () => {
             onReject: cy.stub().as('onReject'),
             onRemove: cy.stub().as('onRemove'),
             onChangeTypeAndAccept: cy.stub().as('onChangeTypeAndAccept'),
+            onBulkChangeTypeAndAccept: cy.stub().as('onBulkChangeTypeAndAccept'),
             onBulkAccept: cy.stub().as('onBulkAccept'),
             onBulkReject: cy.stub().as('onBulkReject'),
             onRejectAsDisclosable: cy.stub().as('onRejectAsDisclosable'),
@@ -191,6 +192,29 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['p1'], 'S.40 - Personal Information');
         });
 
+        it('rejects as Data Subject from the reject dropdown, reclassifying the span as DS_INFO', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
+            cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'p1', 'DS_INFO');
+            cy.get('@onRejectAsDisclosable').should('not.have.been.called');
+        });
+
+        it('does not offer Reject as Data Subject on a suggestion that is already DS_INFO', () => {
+            const dsInfoPending = {
+                ...mockRedactions,
+                pending: {
+                    total: 1,
+                    items: [
+                        { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: 'ds name', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
+            cy.contains('li', 'ds name').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').should('not.exist');
+        });
+
         it('filters templates by search input', () => {
             cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
             cy.get('input[placeholder="Search exemptions..."]').type('Legal');
@@ -227,8 +251,9 @@ describe('<RedactionSidebar />', () => {
             cy.get('[role="menu"]').should('be.visible');
 
             cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
-            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('be.visible');
             cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').should('not.exist');
+            // DS_INFO discloses rather than redacts, so it is offered under Reject, not Accept.
+            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('not.exist');
         });
 
         it('calls onChangeTypeAndAccept when a new type is selected', () => {
@@ -374,6 +399,12 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'S.40 - Personal Information');
         });
 
+        it('rejects every occurrence in the group as Data Subject', () => {
+            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
+            cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'DS_INFO');
+        });
+
         it('expands group to show individual items when expand icon is clicked', () => {
             cy.contains('button', 'Accept All').should('be.visible');
             // Individual items hidden initially
@@ -490,6 +521,13 @@ describe('<RedactionSidebar />', () => {
             cy.get('button[aria-label="reject with reason"]').click();
             cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible').click();
             cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'S.40 - Personal Information');
+        });
+
+        it('rejects every merged part as Data Subject in one bulk call', () => {
+            cy.get('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
+            cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'DS_INFO');
+            cy.get('@onChangeTypeAndAccept').should('not.have.been.called');
         });
 
         it('does not show the change-type dropdown for merged items', () => {

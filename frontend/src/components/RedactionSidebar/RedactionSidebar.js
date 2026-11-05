@@ -276,7 +276,7 @@ const RedactionSidebarComponent = ({
                                             <Button
                                                 aria-label="reject with reason"
                                                 aria-haspopup="menu"
-                                                onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids }); }}
+                                                onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids, redactionType: item.redaction_type }); }}
                                             >
                                                 <ArrowDropDownIcon />
                                             </Button>
@@ -301,7 +301,7 @@ const RedactionSidebarComponent = ({
                                             <Button
                                                 aria-label="reject with reason"
                                                 aria-haspopup="menu"
-                                                onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids: [item.id || itemKey] }); }}
+                                                onClick={(e) => { setRejectMenuAnchorEl(e.currentTarget); setCurrentItemForRejectMenu({ ids: [item.id || itemKey], redactionType: item.redaction_type }); }}
                                             >
                                                 <ArrowDropDownIcon />
                                             </Button>
@@ -524,7 +524,7 @@ const RedactionSidebarComponent = ({
                         )}
                         {currentItemForMenu?.isGroup && <Divider />}
                         {Object.keys(REDACTION_TYPE_LABELS)
-                            .filter(typeKey => typeKey !== currentItemForMenu?.redaction_type)
+                            .filter(typeKey => typeKey !== currentItemForMenu?.redaction_type && typeKey !== 'DS_INFO')
                             .map(typeKey => (
                                 <MenuItem key={typeKey} onClick={() => handleTypeChange(typeKey)}>
                                     Accept as {REDACTION_TYPE_LABELS[typeKey]}
@@ -537,6 +537,26 @@ const RedactionSidebarComponent = ({
                         onClose={() => { setRejectMenuAnchorEl(null); setCurrentItemForRejectMenu(null); setExemptionSearch(''); }}
                         slotProps={{ paper: { sx: { width: 280 } } }}
                     >
+                        {/* Disclosing the DS's own data is a rejection of the redaction, so it lives here
+                            rather than under Accept; accepting as DS_INFO also propagates it across the case. */}
+                        {currentItemForRejectMenu && currentItemForRejectMenu.redactionType !== 'DS_INFO' && (
+                            <MenuItem
+                                onClick={() => {
+                                    const { ids } = currentItemForRejectMenu;
+                                    if (ids.length > 1) {
+                                        onBulkChangeTypeAndAccept(ids, 'DS_INFO');
+                                    } else {
+                                        onChangeTypeAndAccept(ids[0], 'DS_INFO');
+                                    }
+                                    setRejectMenuAnchorEl(null);
+                                    setCurrentItemForRejectMenu(null);
+                                    setExemptionSearch('');
+                                }}
+                            >
+                                Reject as Data Subject
+                            </MenuItem>
+                        )}
+                        {currentItemForRejectMenu && currentItemForRejectMenu.redactionType !== 'DS_INFO' && <Divider />}
                         <Box sx={{ px: 1, pb: 1 }}>
                             <TextField
                                 size="small"
