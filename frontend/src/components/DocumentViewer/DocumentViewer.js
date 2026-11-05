@@ -2,6 +2,7 @@ import React, { useRef, useMemo } from 'react';
 import { Paper, Box, Typography } from '@mui/material';
 import DOMPurify from 'dompurify';
 import { withheldSpans } from '@/utils/withheldSpans';
+import { isPendingSuggestion, isRejectedSuggestion } from '@/utils/redactionDecision';
 
 const HIGHLIGHT_COLORS = {
     // For pending suggestions, which are always yellow
@@ -412,11 +413,9 @@ export const DocumentViewer = ({ text, tables, structure, redactions, pendingRed
                     return;
                 }
                 if (!r.is_suggestion) return;
-                const isPending = !r.is_accepted && !r.justification;
-                const isRejected = !r.is_accepted && !!r.justification;
-                if (isPending) {
+                if (isPendingSuggestion(r)) {
                     marksToRender.push({ ...r, mark_type: 'suggestion' });
-                } else if (isRejected && (!reviewComplete || r.id === hoveredSuggestionId)) {
+                } else if (isRejectedSuggestion(r) &&(!reviewComplete || r.id === hoveredSuggestionId)) {
                     marksToRender.push({ ...r, mark_type: 'rejected' });
                 }
             });

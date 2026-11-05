@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { bulkMarkByText } from '@/services/redactionService';
 import toast from 'react-hot-toast';
 import { toastError } from '@/api/toastError';
+import { isPendingSuggestion } from '@/utils/redactionDecision';
 
 /**
  * Manages case-wide accept/reject for a specific text+redaction_type pair.
@@ -30,9 +31,9 @@ export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, clos
             const { updated } = await bulkMarkByText(caseId, text, redactionType, 'ACCEPTED', null);
             setRedactions(prev =>
                 prev.map(r =>
-                    r.is_suggestion && !r.is_accepted && !r.justification &&
+                    isPendingSuggestion(r) &&
                     r.text === text && r.redaction_type === redactionType
-                        ? { ...r, is_accepted: true }
+                        ? { ...r, is_accepted: true, decided_by: 'HUMAN' }
                         : r
                 )
             );
@@ -50,9 +51,9 @@ export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, clos
             const { updated } = await bulkMarkByText(caseId, text, redactionType, 'REJECTED', reason);
             setRedactions(prev =>
                 prev.map(r =>
-                    r.is_suggestion && !r.is_accepted && !r.justification &&
+                    isPendingSuggestion(r) &&
                     r.text === text && r.redaction_type === redactionType
-                        ? { ...r, justification: reason }
+                        ? { ...r, justification: reason, decided_by: 'HUMAN' }
                         : r
                 )
             );

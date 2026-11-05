@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { partitionMergeGroups, groupByTextAndType } from '@/utils/partitionMergeGroups';
+import { isPendingSuggestion, isRejectedSuggestion } from '@/utils/redactionDecision';
 
 export function useRedactionDisplay({ redactions, mergePairs }) {
     const [splitMerges, setSplitMerges] = useState(new Set());
@@ -18,9 +19,9 @@ export function useRedactionDisplay({ redactions, mergePairs }) {
     }, [scrollToDocumentId]);
 
     const displaySections = useMemo(() => {
-        const pending = redactions.filter(r => r.is_suggestion && !r.is_accepted && !r.justification);
+        const pending = redactions.filter(isPendingSuggestion);
         const accepted = redactions.filter(r => r.is_suggestion && r.is_accepted);
-        const rejected = redactions.filter(r => r.is_suggestion && !r.is_accepted && !!r.justification);
+        const rejected = redactions.filter(isRejectedSuggestion);
         const manual = redactions.filter(r => !r.is_suggestion);
 
         const processSection = (items) => ({

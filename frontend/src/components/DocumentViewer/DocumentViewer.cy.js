@@ -12,7 +12,7 @@ describe('<DocumentViewer />', () => {
         // Pending suggestion (DS_INFO)
         { id: 'redaction-3', start_char: 73, end_char: 85, text: 'data subject', redaction_type: 'DS_INFO', is_accepted: false, is_suggestion: true, justification: null },
         // Rejected suggestion
-        { id: 'redaction-4', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, justification: 'Not relevant' },
+        { id: 'redaction-4', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, justification: 'Not relevant', decided_by: 'HUMAN' },
     ];
 
     beforeEach(() => {
@@ -594,6 +594,26 @@ describe('<DocumentViewer />', () => {
                 expect(selection.start_char).to.equal(17);
                 expect(selection.end_char).to.equal(21);
             });
+        });
+    });
+
+    context('Decision provenance', () => {
+        const rejectedWithoutReason = [
+            { id: 'redaction-nr', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, justification: '', decided_by: 'HUMAN' },
+        ];
+
+        it('draws a suggestion rejected without a reason as rejected, not pending', () => {
+            cy.mount(<DocumentViewer text={text} redactions={rejectedWithoutReason} viewMode="review" />);
+            cy.contains('span', 'rejected suggestion')
+                .should('be.visible')
+                .and('have.css', 'background-color', 'rgba(189, 195, 199, 0.5)');
+        });
+
+        it('hides a suggestion rejected without a reason once review is complete', () => {
+            cy.mount(<DocumentViewer text={text} redactions={rejectedWithoutReason} viewMode="review" reviewComplete={true} />);
+            // Wait for the text to render so the absence check can't pass early.
+            cy.get('[data-testid="document-viewer"]').should('contain', 'rejected suggestion');
+            cy.get('[data-redaction-id="redaction-nr"]').should('not.exist');
         });
     });
 
