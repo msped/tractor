@@ -20,7 +20,7 @@ Suggestions appear in the Redaction Sidebar for you to review.
 
 Tractor automatically excludes the **data subject's own name and date of birth** from redaction suggestions. Since the data subject's information should remain visible in disclosure documents, it will not appear as a suggested redaction.
 
-If you need to mark the data subject's information for redaction, you can still create manual redactions using the **Data Subject Information** type. These will automatically propagate to matching text across all documents in the case.
+If other text belongs to the data subject, mark it as **Data Subject Information**: use **Reject as Data Subject** on a suggestion, or highlight the text with the **DS Info** tool. Data Subject Information is disclosed rather than redacted, and it automatically propagates to matching text across all documents in the case.
 
 ## Reviewing Redactions
 
@@ -36,9 +36,10 @@ The **Redaction Sidebar** displays all suggested redactions grouped by status (P
 
 For each suggestion, you can:
 
-- **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type if needed.
+- **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type (Third-Party PII or Operational Data) if needed.
 - **Reject** - Click the reject button to dismiss the suggestion. You will be asked to provide a reason for rejection (this is for audit purposes).
 - **Reject with exemption** - Click the dropdown arrow on the Reject button to select a pre-configured exemption reason (e.g. "S.40 - Personal Information"). You can type to search the list. Selecting an exemption rejects the suggestion immediately without opening the dialog.
+- **Reject as Data Subject** - At the top of the same Reject dropdown. Use this when the suggested text is the data subject's own information: it is reclassified as **Data Subject Information**, so it stays visible in the disclosure, and it propagates to matching text across every document in the case. This option is not shown on suggestions that are already Data Subject Information.
 
 ### Merged Redactions
 
@@ -51,7 +52,7 @@ If you need to review or action the individual spans separately, click the **spl
 Items that share the same text and redaction type are grouped together in the sidebar. You can act on the entire group at once:
 
 - **Accept All** — accepts every item in the group in one click
-- **Reject All** — opens the rejection reason dialog and rejects all items in the group
+- **Reject All** — opens the rejection reason dialog and rejects all items in the group. Its dropdown offers the same exemptions and **Reject as Data Subject** as a single suggestion does, applied to every item in the group
 
 Individual items within a group can still be actioned separately by expanding the group.
 

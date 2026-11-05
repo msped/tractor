@@ -39,7 +39,7 @@ While a review is open, you edit redactions exactly as you would during normal r
 
 Marking text as **Data Subject Information** normally propagates to matching text across every document in the case automatically. During a review, this is made explicit so you can see the impact before committing to it.
 
-When you mark a new **DS Info** term while a review is open, a **Propagate data subject information?** dialog appears listing every other document that would gain redactions for that term, along with the number of matches in each. Click **Propagate** to apply the change across the case, or **Cancel** to leave the other documents untouched.
+When you mark a new **DS Info** term while a review is open, whether with the highlight tool or **Reject as Data Subject**, a **Propagate data subject information?** dialog appears listing every other document that would gain redactions for that term, along with the number of matches in each. Click **Propagate** to apply the change across the case, or **Cancel** to leave the other documents untouched.
 
 If no other document is affected, the dialog is skipped and the redaction is simply applied to the current document.
 
