@@ -373,6 +373,32 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         instance = serializer.save()
         self.assertTrue(instance.auto_accepted)
 
+    def test_redaction_serializer_exposes_unjustified_rejection_as_decided(
+        self,
+    ):
+        """A rejection with no reason is still a decision, not pending."""
+        self.redaction.is_accepted = False
+        self.redaction.justification = ""
+        self.redaction.decided_by = Redaction.DecidedBy.HUMAN
+        self.redaction.save()
+
+        data = RedactionSerializer(instance=self.redaction).data
+
+        self.assertEqual(data["decided_by"], "HUMAN")
+        self.assertFalse(data["is_accepted"])
+
+    def test_redaction_serializer_decided_by_is_read_only(self):
+        serializer = RedactionSerializer(
+            instance=self.redaction,
+            data={"decided_by": Redaction.DecidedBy.AUTO_ACCEPT},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(raise_exception=True))
+        instance = serializer.save()
+
+        self.assertIsNone(instance.decided_by)
+        self.assertIn(instance, Redaction.objects.pending())
+
     def test_document_review_serializer_read(self):
         """Test serialization for the document review view."""
         # Add another redaction for a more thorough test

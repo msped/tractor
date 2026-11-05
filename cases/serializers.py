@@ -299,16 +299,19 @@ class RedactionSerializer(serializers.ModelSerializer):
             "rationale",
             "is_suggestion",
             "is_accepted",
+            "decided_by",
             "auto_accepted",
             "source",
             "created_at",
             "context",
         ]
         # rationale is the system's own explanation of why it classified a
-        # span as it did — never a client's to write or revise.
+        # span as it did — never a client's to write or revise. decided_by is
+        # derived from the decision write in create()/update().
         read_only_fields = [
             "id",
             "rationale",
+            "decided_by",
             "auto_accepted",
             "created_at",
         ]
