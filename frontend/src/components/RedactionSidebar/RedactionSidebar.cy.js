@@ -45,6 +45,7 @@ describe('<RedactionSidebar />', () => {
             onReject: cy.stub().as('onReject'),
             onRemove: cy.stub().as('onRemove'),
             onChangeTypeAndAccept: cy.stub().as('onChangeTypeAndAccept'),
+            onBulkChangeTypeAndAccept: cy.stub().as('onBulkChangeTypeAndAccept'),
             onBulkAccept: cy.stub().as('onBulkAccept'),
             onBulkReject: cy.stub().as('onBulkReject'),
             onRejectAsDisclosable: cy.stub().as('onRejectAsDisclosable'),
@@ -191,6 +192,45 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['p1'], 'S.40 - Personal Information');
         });
 
+        it('rejects as Data Subject from the reject dropdown, reclassifying the span as DS_INFO', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
+            cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'p1', 'DS_INFO');
+            cy.get('@onRejectAsDisclosable').should('not.have.been.called');
+        });
+
+        it('does not offer Reject as Data Subject on a suggestion that is already DS_INFO', () => {
+            const dsInfoPending = {
+                ...mockRedactions,
+                pending: {
+                    total: 1,
+                    items: [
+                        { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: 'ds name', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
+            cy.contains('li', 'ds name').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').should('not.exist');
+        });
+
+        it('rejects a DS_INFO suggestion as Third Party, withholding it rather than disclosing it', () => {
+            const dsInfoPending = {
+                ...mockRedactions,
+                pending: {
+                    total: 1,
+                    items: [
+                        { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: 'ds name', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
+            cy.contains('li', 'ds name').contains('button', 'Reject as Third Party').click();
+            cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'd1', 'PII');
+            cy.get('@onReject').should('not.have.been.called');
+        });
+
         it('filters templates by search input', () => {
             cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
             cy.get('input[placeholder="Search exemptions..."]').type('Legal');
@@ -227,7 +267,24 @@ describe('<RedactionSidebar />', () => {
             cy.get('[role="menu"]').should('be.visible');
 
             cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
-            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('be.visible');
+            cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').should('not.exist');
+            // DS_INFO discloses rather than redacts, so it is offered under Reject, not Accept.
+            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('not.exist');
+        });
+
+        it('offers only Operational Data on a DS_INFO suggestion, Third-Party PII being under Reject', () => {
+            const dsInfoPending = {
+                ...mockRedactions,
+                pending: {
+                    total: 1,
+                    items: [
+                        { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: 'ds name', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
+            cy.contains('li', 'ds name').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
             cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').should('not.exist');
         });
 
@@ -374,6 +431,41 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'S.40 - Personal Information');
         });
 
+        it('rejects every occurrence in the group as Data Subject', () => {
+            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
+            cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'DS_INFO');
+        });
+
+        context('DS_INFO group', () => {
+            const dsInfoGroup = {
+                ...mockRedactionsWithGroup,
+                pending: {
+                    total: 3,
+                    items: [{
+                        ...mockRedactionsWithGroup.pending.items[0],
+                        key: 'john doe::ds_info',
+                        redaction_type: 'DS_INFO',
+                        items: mockRedactionsWithGroup.pending.items[0].items.map(i => ({ ...i, redaction_type: 'DS_INFO' })),
+                    }],
+                },
+            };
+
+            it('rejects every occurrence as Third Party', () => {
+                cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoGroup} />);
+                cy.contains('button', 'Reject All as Third Party').click();
+                cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'PII');
+                cy.get('@onBulkReject').should('not.have.been.called');
+            });
+
+            it('does not offer Reject all in case, which would disclose it across the case', () => {
+                cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoGroup} />);
+                cy.get('button[aria-label="reject all with reason"]').click();
+                cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
+                cy.contains('[role="menuitem"]', 'Reject all in case').should('not.exist');
+            });
+        });
+
         it('expands group to show individual items when expand icon is clicked', () => {
             cy.contains('button', 'Accept All').should('be.visible');
             // Individual items hidden initially
@@ -490,6 +582,27 @@ describe('<RedactionSidebar />', () => {
             cy.get('button[aria-label="reject with reason"]').click();
             cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible').click();
             cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'S.40 - Personal Information');
+        });
+
+        it('rejects every merged part as Data Subject in one bulk call', () => {
+            cy.get('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
+            cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'DS_INFO');
+            cy.get('@onChangeTypeAndAccept').should('not.have.been.called');
+        });
+
+        it('rejects every part of a merged DS_INFO item as Third Party in one bulk call', () => {
+            const mergedDsInfo = {
+                ...mockRedactionsWithMerged,
+                pending: {
+                    total: 2,
+                    items: [{ ...mockRedactionsWithMerged.pending.items[0], redaction_type: 'DS_INFO' }],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mergedDsInfo} />);
+            cy.contains('button', 'Reject as Third Party').click();
+            cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'PII');
+            cy.get('@onBulkReject').should('not.have.been.called');
         });
 
         it('does not show the change-type dropdown for merged items', () => {

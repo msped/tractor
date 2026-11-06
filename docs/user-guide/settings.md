@@ -152,7 +152,7 @@ Navigate to **Settings** and find the **Exemption Templates** card.
 
 ### How Reviewers Use Exemptions
 
-When reviewing a document, the dropdown arrow on the **Reject** button opens a searchable list of configured exemptions. Reviewers can type to filter the list and click an exemption to reject the suggestion immediately with that reason recorded.
+When reviewing a document, the dropdown arrow on the **Reject** button opens a searchable list of configured exemptions. Reviewers can type to filter the list and click an exemption to reject the suggestion immediately with that reason recorded. The same dropdown also offers **Reject as Data Subject**, which is not an exemption; see [Redacting Documents](redaction.md).
 
 For one-off reasons that do not fit an existing template, reviewers can still click **Reject** directly to open the free-text dialog.
 

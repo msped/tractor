@@ -371,7 +371,7 @@ describe('<RedactionComponent />', () => {
 
             cy.get('[role="menu"]').should('be.visible');
             cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
-            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('be.visible');
+            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('not.exist');
         });
 
         it('calls updateRedaction API with new type when selected', () => {
@@ -1108,8 +1108,8 @@ describe('<RedactionComponent />', () => {
         });
 
         const reclassifyJohnDoeToDsInfo = () => {
-            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
-            cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').click();
+            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
         };
 
         it('previews and applies propagation when marking DS_INFO during a review', () => {
