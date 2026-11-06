@@ -100,6 +100,9 @@ const RedactionSidebarComponent = ({
     const [currentItemForRemoveMenu, setCurrentItemForRemoveMenu] = useState(null);
     const [exemptionSearch, setExemptionSearch] = useState('');
 
+    // Rejecting DS_INFO across the case would disclose the text in every document.
+    const offerRejectAllInCase = currentItemForRejectMenu?.isGroup && currentItemForRejectMenu.redactionType !== 'DS_INFO';
+
     const handleMenuClick = (event, item) => {
         setMenuAnchorEl(event.currentTarget);
         setCurrentItemForMenu(item);
@@ -171,6 +174,9 @@ const RedactionSidebarComponent = ({
         const ids = item.ids || [item.id];
         const itemKey = ids[0];
         const isMerged = item.isMerged || false;
+        // A plain reject of DS_INFO leaves the text in the clear, which is wrong when the
+        // span is not the data subject's; rejecting it means withholding it as a third party's.
+        const isDsInfo = item.redaction_type === 'DS_INFO';
 
         return (
             <ListItem
@@ -272,7 +278,11 @@ const RedactionSidebarComponent = ({
                                 {isMerged ? (
                                     <>
                                         <ButtonGroup variant="contained" color="error" size="small">
-                                            <Button onClick={() => onBulkReject(ids)}>Reject</Button>
+                                            {isDsInfo ? (
+                                                <Button onClick={() => onBulkChangeTypeAndAccept(ids, 'PII')}>Reject as Third Party</Button>
+                                            ) : (
+                                                <Button onClick={() => onBulkReject(ids)}>Reject</Button>
+                                            )}
                                             <Button
                                                 aria-label="reject with reason"
                                                 aria-haspopup="menu"
@@ -297,7 +307,11 @@ const RedactionSidebarComponent = ({
                                 ) : (
                                     <>
                                         <ButtonGroup variant="contained" color="error" size="small">
-                                            <Button onClick={() => onReject(item)}>Reject</Button>
+                                            {isDsInfo ? (
+                                                <Button onClick={() => onChangeTypeAndAccept(item.id || itemKey, 'PII')}>Reject as Third Party</Button>
+                                            ) : (
+                                                <Button onClick={() => onReject(item)}>Reject</Button>
+                                            )}
                                             <Button
                                                 aria-label="reject with reason"
                                                 aria-haspopup="menu"
@@ -459,7 +473,11 @@ const RedactionSidebarComponent = ({
                                                             {sectionKey === 'pending' && (
                                                                 <CardActions sx={{ justifyContent: 'flex-end', pt: 0, flexWrap: 'wrap', gap: 0.5 }}>
                                                                     <ButtonGroup variant="contained" color="error" size="small">
-                                                                        <Button onClick={() => onBulkReject(allIds)}>Reject All</Button>
+                                                                        {displayItem.redaction_type === 'DS_INFO' ? (
+                                                                            <Button onClick={() => onBulkChangeTypeAndAccept(allIds, 'PII')}>Reject All as Third Party</Button>
+                                                                        ) : (
+                                                                            <Button onClick={() => onBulkReject(allIds)}>Reject All</Button>
+                                                                        )}
                                                                         <Button
                                                                             aria-label="reject all with reason"
                                                                             aria-haspopup="menu"
@@ -524,7 +542,10 @@ const RedactionSidebarComponent = ({
                         )}
                         {currentItemForMenu?.isGroup && <Divider />}
                         {Object.keys(REDACTION_TYPE_LABELS)
-                            .filter(typeKey => typeKey !== currentItemForMenu?.redaction_type && typeKey !== 'DS_INFO')
+                            // DS_INFO ↔ Third-Party PII is a rejection, so both directions sit under Reject.
+                            .filter(typeKey => typeKey !== currentItemForMenu?.redaction_type
+                                && typeKey !== 'DS_INFO'
+                                && !(currentItemForMenu?.redaction_type === 'DS_INFO' && typeKey === 'PII'))
                             .map(typeKey => (
                                 <MenuItem key={typeKey} onClick={() => handleTypeChange(typeKey)}>
                                     Accept as {REDACTION_TYPE_LABELS[typeKey]}
@@ -588,13 +609,13 @@ const RedactionSidebarComponent = ({
                         {exemptionTemplates.filter(t => t.name.toLowerCase().includes(exemptionSearch.toLowerCase())).length === 0 && (
                             <MenuItem disabled>No exemptions found</MenuItem>
                         )}
-                        {currentItemForRejectMenu?.isGroup && <Divider />}
-                        {currentItemForRejectMenu?.isGroup && (
+                        {offerRejectAllInCase && <Divider />}
+                        {offerRejectAllInCase && (
                             <MenuItem disabled sx={{ fontSize: '0.72rem', opacity: '1 !important', color: 'text.secondary', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                                 Across all documents in case
                             </MenuItem>
                         )}
-                        {currentItemForRejectMenu?.isGroup && (
+                        {offerRejectAllInCase && (
                             <MenuItem
                                 onClick={() => {
                                     onMarkAllInCase({ text: currentItemForRejectMenu.text, redactionType: currentItemForRejectMenu.redactionType, action: 'reject' });
