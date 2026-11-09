@@ -259,30 +259,41 @@ class RedactionSerializer(serializers.ModelSerializer):
     context = RedactionContextSerializer(read_only=True)
     # Model property, serialized read-only for API compatibility.
     auto_accepted = serializers.BooleanField(read_only=True)
+    # A reject needs no reason, so it has to say it is one; without this flag
+    # an unjustified non-accept is read as withdrawing the decision.
+    rejected = serializers.BooleanField(write_only=True, required=False)
 
     @staticmethod
-    def _decided_by_for(is_accepted, justification):
+    def _decided_by_for(is_accepted, justification, rejected=False):
         """
         Provenance implied by a decision write through this (human-facing)
-        serializer: any accept or justified rejection is a human decision;
-        an unjustified non-accept means the decision is withdrawn (pending).
+        serializer: any accept, explicit rejection or justified rejection is a
+        human decision; an unjustified non-accept means the decision is
+        withdrawn (pending).
         """
-        if is_accepted or justification:
+        if is_accepted or rejected or justification:
             return Redaction.DecidedBy.HUMAN
         return None
 
     def create(self, validated_data):
+        rejected = validated_data.pop("rejected", False)
         validated_data["decided_by"] = self._decided_by_for(
             validated_data.get("is_accepted", False),
             validated_data.get("justification"),
+            rejected,
         )
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        if {"is_accepted", "justification"} & validated_data.keys():
+        rejected = validated_data.pop("rejected", False)
+        if (
+            rejected
+            or {"is_accepted", "justification"} & validated_data.keys()
+        ):
             validated_data["decided_by"] = self._decided_by_for(
                 validated_data.get("is_accepted", instance.is_accepted),
                 validated_data.get("justification", instance.justification),
+                rejected,
             )
         return super().update(instance, validated_data)
 
@@ -304,6 +315,7 @@ class RedactionSerializer(serializers.ModelSerializer):
             "source",
             "created_at",
             "context",
+            "rejected",
         ]
         # rationale is the system's own explanation of why it classified a
         # span as it did — never a client's to write or revise. decided_by is
@@ -323,6 +335,7 @@ class BulkRedactionUpdateSerializer(serializers.Serializer):
     justification = serializers.CharField(
         required=False, allow_blank=True, allow_null=True, default=None
     )
+    rejected = serializers.BooleanField(required=False, default=False)
 
 
 class BulkByTextSerializer(serializers.Serializer):

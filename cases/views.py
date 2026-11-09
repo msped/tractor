@@ -578,6 +578,7 @@ class BulkRedactionUpdateView(APIView):
         ids = serializer.validated_data["ids"]
         is_accepted = serializer.validated_data["is_accepted"]
         justification = serializer.validated_data["justification"]
+        rejected = serializer.validated_data["rejected"]
 
         target_qs = Redaction.objects.filter(
             document_id=document_id,
@@ -585,11 +586,11 @@ class BulkRedactionUpdateView(APIView):
         )
         if is_accepted:
             target_qs.accept(by=Redaction.DecidedBy.HUMAN)
-        elif justification:
-            target_qs.reject(justification, by=Redaction.DecidedBy.HUMAN)
+        elif rejected or justification:
+            target_qs.reject(justification or "", by=Redaction.DecidedBy.HUMAN)
         else:
-            # No justification means the decision is being withdrawn, not a
-            # blank rejection — mirrors the frontend's pending classification.
+            # Neither the reject flag nor a justification means the decision
+            # is being withdrawn, not a blank rejection.
             target_qs.reset()
 
         updated = Redaction.objects.filter(

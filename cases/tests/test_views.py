@@ -397,6 +397,19 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
             self.redaction.justification, "User accepted this suggestion."
         )
 
+    def test_reject_without_reason_records_a_human_rejection(self):
+        """A one-click reject is a decision, not a withdrawal to pending."""
+        url = reverse("redaction-detail", kwargs={"pk": self.redaction.id})
+        response = self.client.patch(
+            url, {"is_accepted": False, "rejected": True}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.redaction.refresh_from_db()
+        self.assertFalse(self.redaction.is_accepted)
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertFalse(self.redaction.justification)
+
     def test_delete_redaction(self):
         """Test deleting a redaction."""
         url = reverse("redaction-detail", kwargs={"pk": self.redaction.id})
@@ -784,6 +797,44 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         self.r2.refresh_from_db()
         self.assertEqual(self.r1.justification, "Bulk rejection reason")
         self.assertEqual(self.r2.justification, "Bulk rejection reason")
+
+    def test_bulk_reject_without_reason_records_a_human_rejection(self):
+        """A one-click bulk reject is a decision, not a withdrawal to pending."""
+        url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+        data = {
+            "ids": [str(self.r1.id), str(self.r2.id)],
+            "is_accepted": False,
+            "rejected": True,
+        }
+        response = self.client.patch(url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertFalse(r.is_accepted)
+            self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+            self.assertFalse(r.justification)
+
+    def test_bulk_update_without_reason_or_flag_withdraws_to_pending(self):
+        """With neither a reason nor the reject flag, the decision is withdrawn."""
+        Redaction.objects.filter(id__in=[self.r1.id, self.r2.id]).reject(
+            "", by=Redaction.DecidedBy.HUMAN
+        )
+        url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+        data = {
+            "ids": [str(self.r1.id), str(self.r2.id)],
+            "is_accepted": False,
+        }
+        response = self.client.patch(url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertIsNone(r.decided_by)
 
     def test_bulk_update_filters_by_document(self):
         """Redactions belonging to a different document are not updated."""
