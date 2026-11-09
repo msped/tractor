@@ -37,7 +37,7 @@ The **Redaction Sidebar** displays all suggested redactions grouped by status (P
 For each suggestion, you can:
 
 - **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type (Third-Party PII or Operational Data) if needed. On a Data Subject Information suggestion the dropdown offers only Operational Data, because changing it to Third-Party PII is done with **Reject as Third Party**.
-- **Reject** - Click the reject button to dismiss the suggestion. You will be asked to provide a reason for rejection (this is for audit purposes).
+- **Reject** - Click the reject button to dismiss the suggestion. The text will be disclosed. No reason is needed, and the suggestion moves straight to Rejected.
 - **Reject with exemption** - Click the dropdown arrow on the Reject button to select a pre-configured exemption reason (e.g. "S.40 - Personal Information"). You can type to search the list. Selecting an exemption rejects the suggestion immediately without opening the dialog.
 - **Reject as Data Subject** - At the top of the same Reject dropdown. Use this when the suggested text is the data subject's own information: it is reclassified as **Data Subject Information**, so it stays visible in the disclosure, and it propagates to matching text across every document in the case. This option is not shown on suggestions that are already Data Subject Information.
 - **Reject as Third Party** - Replaces the plain **Reject** button on a **Data Subject Information** suggestion. Use it when the text is not the data subject's: it is reclassified as **Third-Party PII** and accepted, so it is withheld from the disclosure. A plain rejection would have left it in the clear. If the text is not personal data at all and can be disclosed, choose an exemption from the dropdown instead.
@@ -53,7 +53,7 @@ If you need to review or action the individual spans separately, click the **spl
 Items that share the same text and redaction type are grouped together in the sidebar. You can act on the entire group at once:
 
 - **Accept All** — accepts every item in the group in one click
-- **Reject All** — opens the rejection reason dialog and rejects all items in the group. Its dropdown offers the same exemptions and **Reject as Data Subject** as a single suggestion does, applied to every item in the group. On a Data Subject Information group the button reads **Reject All as Third Party**, and **Reject all in case** is not offered, since it would disclose the text in every document
+- **Reject All** — rejects all items in the group in one click. Its dropdown offers the same exemptions and **Reject as Data Subject** as a single suggestion does, applied to every item in the group. On a Data Subject Information group the button reads **Reject All as Third Party**, and **Reject all in case** is not offered, since it would disclose the text in every document
 
 Individual items within a group can still be actioned separately by expanding the group.
 
