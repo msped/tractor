@@ -123,12 +123,13 @@ const mergePairsFor = (redactions) => {
 
 // Mirrors RedactionSerializer: any accept or justified rejection written by
 // the reviewer is a human decision; an unjustified non-accept withdraws it.
-const decidedByFor = ({ is_accepted, justification }) => (is_accepted || justification ? 'HUMAN' : null);
+const decidedByFor = ({ is_accepted, justification, rejected }) => (is_accepted || rejected || justification ? 'HUMAN' : null);
 
 // Echoes a decision write the way the server does, recording provenance.
-const withDecision = (existing, body) => (
-    'is_accepted' in body || 'justification' in body
-        ? { ...existing, ...body, decided_by: decidedByFor({ ...existing, ...body }) }
+// `rejected` is write-only on the server, so it is not echoed back.
+const withDecision = (existing, { rejected, ...body }) => (
+    'is_accepted' in body || 'justification' in body || rejected
+        ? { ...existing, ...body, decided_by: decidedByFor({ ...existing, ...body, rejected }) }
         : { ...existing, ...body }
 );
 
@@ -312,25 +313,17 @@ describe('<RedactionComponent />', () => {
             mountRedactionComponent();
         });
 
-        it('opens rejection dialog when clicking Reject', () => {
+        it('rejects in one click, with no reason asked for', () => {
             cy.contains('li', 'John Doe').contains('button', 'Reject').click();
-
-            cy.get('[role="dialog"]').should('be.visible');
-            cy.contains('Rejection Reason').should('be.visible');
-        });
-
-        it('calls updateRedaction API with justification when rejecting', () => {
-            cy.contains('li', 'John Doe').contains('button', 'Reject').click();
-
-            cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('This is not PII');
-                cy.contains('button', 'Submit').click();
-            });
 
             cy.wait('@updateRedaction').its('request.body').should('deep.include', {
                 is_accepted: false,
-                justification: 'This is not PII',
+                rejected: true,
             });
+            cy.get('[role="dialog"]').should('not.exist');
+            // The mock already holds one rejected suggestion.
+            cy.contains('rejected (2)').should('be.visible');
+            cy.contains('pending').should('not.exist');
         });
     });
 
@@ -439,18 +432,15 @@ describe('<RedactionComponent />', () => {
             });
         });
 
-        it('calls bulk API when Reject is clicked on a merged item', () => {
+        it('rejects every part of a merged item in one click', () => {
             cy.contains('button', 'Reject').click();
-
-            cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('Not relevant');
-                cy.contains('button', 'Submit').click();
-            });
 
             cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
                 is_accepted: false,
-                justification: 'Not relevant',
+                rejected: true,
+                ids: ['adj1', 'adj2'],
             });
+            cy.get('[role="dialog"]').should('not.exist');
         });
 
         it('accepting one merged-pair member re-renders sections with no call besides the PATCH', () => {
@@ -500,18 +490,14 @@ describe('<RedactionComponent />', () => {
             });
         });
 
-        it('calls bulk API with justification when Reject All is submitted', () => {
+        it('rejects every item in the group in one click', () => {
             cy.contains('button', 'Reject All').click();
 
-            cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('Not relevant group');
-                cy.contains('button', 'Submit').click();
+            cy.wait('@bulkUpdateRedaction').then((interception) => {
+                expect(interception.request.body).to.deep.include({ is_accepted: false, rejected: true });
+                expect(interception.request.body.ids).to.include.members(['dup1', 'dup2']);
             });
-
-            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
-                is_accepted: false,
-                justification: 'Not relevant group',
-            });
+            cy.get('[role="dialog"]').should('not.exist');
         });
 
         it('moves the group to rejected after Reject all in case', () => {
@@ -520,11 +506,14 @@ describe('<RedactionComponent />', () => {
             cy.get('button[aria-label="reject all with reason"]').click();
             cy.contains('[role="menuitem"]', 'Reject all in case').click();
             cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('Not relevant anywhere');
-                cy.contains('button', 'Submit').click();
+                cy.get('textarea').should('not.exist');
+                cy.contains('button', 'Reject all').click();
             });
 
-            cy.wait('@markAllInCase');
+            cy.wait('@markAllInCase').its('request.body').then((body) => {
+                expect(body.status).to.equal('REJECTED');
+                expect(body.rejection_reason ?? '').to.equal('');
+            });
             cy.contains('rejected (2)').should('be.visible');
             cy.contains('pending').should('not.exist');
         });
