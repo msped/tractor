@@ -41,5 +41,5 @@ The data subject's own personal data. It is disclosed to them, never withheld.
 _Avoid_: DS data, requester data
 
 **Exemption**:
-The stated basis for withholding a piece of operational data, chosen from a list the organisation maintains.
+The stated basis for withholding a redaction, chosen from a list the organisation maintains when the redaction is accepted. Choosing one does not change the redaction's type.
 _Avoid_: Rejection reason, justification
