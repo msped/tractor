@@ -87,32 +87,25 @@ export function useRedactionActions({
         }
     }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
-    const handleRejectAsDisclosable = useCallback(async (ids, justification) => {
+    // The exemption is stored as the template name in `justification`. The bulk
+    // endpoint clears justification on accept, so each id is written on its own.
+    const handleAcceptWithExemption = useCallback(async (ids, justification) => {
         setScrollToId(null);
+        const acceptAll = () => Promise.all(
+            ids.map(id => updateRedaction(id, { is_accepted: true, justification }))
+        );
         try {
-            if (ids.length === 1) {
-                const updated = await updateRedaction(
-                    ids[0], { is_accepted: false, justification }
-                );
-                applySingle(updated);
-                pushHistory(
-                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification: null })),
-                    async () => applySingle(await updateRedaction(ids[0], { is_accepted: false, justification }))
-                );
-            } else {
-                const updatedList = await bulkUpdateRedactions(
-                    documentId, ids, false, justification
-                );
-                applyUpdates(updatedList);
-                pushHistory(
-                    async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
-                    async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, justification))
-                );
-            }
+            applyUpdates(await acceptAll());
+            pushHistory(
+                async () => applyUpdates(await Promise.all(
+                    ids.map(id => updateRedaction(id, { is_accepted: false, justification: null }))
+                )),
+                async () => applyUpdates(await acceptAll())
+            );
         } catch (error) {
-            toastError(error, "Failed to reject suggestion. Please try again.");
+            toastError(error, "Failed to accept suggestion. Please try again.");
         }
-    }, [documentId, pushHistory, applySingle, applyUpdates, setScrollToId]);
+    }, [pushHistory, applyUpdates, setScrollToId]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         setScrollToId(null);
@@ -182,7 +175,7 @@ export function useRedactionActions({
         handleBulkAccept,
         handleReject,
         handleBulkReject,
-        handleRejectAsDisclosable,
+        handleAcceptWithExemption,
         handleChangeTypeAndAccept,
         handleBulkChangeTypeAndAccept,
         handleSplitMerge,
