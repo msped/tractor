@@ -48,7 +48,7 @@ describe('<RedactionSidebar />', () => {
             onBulkChangeTypeAndAccept: cy.stub().as('onBulkChangeTypeAndAccept'),
             onBulkAccept: cy.stub().as('onBulkAccept'),
             onBulkReject: cy.stub().as('onBulkReject'),
-            onRejectAsDisclosable: cy.stub().as('onRejectAsDisclosable'),
+            onAcceptWithExemption: cy.stub().as('onAcceptWithExemption'),
             onSplitMerge: cy.stub().as('onSplitMerge'),
             onRemoveFromMerge: cy.stub().as('onRemoveFromMerge'),
             onSuggestionMouseEnter: cy.stub().as('onSuggestionMouseEnter'),
@@ -99,6 +99,24 @@ describe('<RedactionSidebar />', () => {
             cy.contains('rejected (1)').click();
             cy.contains('li', 'rejected text').within(() => {
                 cy.contains('Reason for rejection: Not relevant').should('be.visible');
+            });
+        });
+
+        it('labels the justification on an accepted card as its exemption', () => {
+            const acceptedWithExemption = {
+                ...mockRedactions,
+                accepted: {
+                    total: 1,
+                    items: [
+                        { id: 'a3', ids: ['a3'], isMerged: false, isGroup: false, text: 'privileged advice', redaction_type: 'OP_DATA', is_suggestion: false, justification: 'S.42 - Legal Privilege' },
+                    ],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={acceptedWithExemption} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'privileged advice').within(() => {
+                cy.contains('Exemption: S.42 - Legal Privilege').should('be.visible');
+                cy.contains('Reason for rejection').should('not.exist');
             });
         });
 
@@ -180,26 +198,20 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onRemove').should('have.been.calledOnceWith', 'r1');
         });
 
-        it('shows exemption templates in the reject dropdown', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
-            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
-        });
-
-        it('calls onRejectAsDisclosable with template name when a template is selected', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
-            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['p1'], 'S.40 - Personal Information');
+        it('does not list exemptions in the reject dropdown, disclosing text needing no reason', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="more reject options"]').click();
+            cy.contains('[role="menuitem"]', 'Reject as Data Subject').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('not.exist');
+            cy.get('input[placeholder="Search exemptions..."]').should('not.exist');
         });
 
         it('rejects as Data Subject from the reject dropdown, reclassifying the span as DS_INFO', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('li', 'pending text').find('button[aria-label="more reject options"]').click();
             cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
             cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'p1', 'DS_INFO');
-            cy.get('@onRejectAsDisclosable').should('not.have.been.called');
         });
 
-        it('does not offer Reject as Data Subject on a suggestion that is already DS_INFO', () => {
+        context('DS_INFO suggestion', () => {
             const dsInfoPending = {
                 ...mockRedactions,
                 pending: {
@@ -209,44 +221,54 @@ describe('<RedactionSidebar />', () => {
                     ],
                 },
             };
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
-            cy.contains('li', 'ds name').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
-            cy.contains('[role="menuitem"]', 'Reject as Data Subject').should('not.exist');
-        });
 
-        it('rejects a DS_INFO suggestion as Third Party, withholding it rather than disclosing it', () => {
-            const dsInfoPending = {
-                ...mockRedactions,
-                pending: {
-                    total: 1,
-                    items: [
-                        { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: 'ds name', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER' },
-                    ],
-                },
-            };
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
-            cy.contains('li', 'ds name').contains('button', 'Reject as Third Party').click();
-            cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'd1', 'PII');
-            cy.get('@onReject').should('not.have.been.called');
+            beforeEach(() => {
+                cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
+            });
+
+            it('rejects with a plain Reject, disclosing a false positive without propagating it', () => {
+                cy.contains('li', 'ds name').contains('button', /^Reject$/).click();
+                cy.get('@onReject').should('have.been.calledOnceWith', dsInfoPending.pending.items[0]);
+                cy.get('@onChangeTypeAndAccept').should('not.have.been.called');
+            });
+
+            it('has no reject dropdown, Reject as Data Subject being its own type', () => {
+                cy.contains('li', 'ds name').within(() => {
+                    cy.contains('button', /^Reject$/).should('be.visible');
+                    cy.get('button[aria-label="more reject options"]').should('not.exist');
+                });
+            });
+
+            it('offers Accept as Third-Party PII first, withholding a span that is not the data subject\'s', () => {
+                cy.contains('li', 'ds name').find('button[aria-label="change redaction type and accept"]').click();
+                cy.get('[role="menuitem"]').first().should('have.text', 'Accept as Third-Party PII').click();
+                cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'd1', 'PII');
+            });
+
+            it('offers exemptions on a DS_INFO suggestion too', () => {
+                cy.contains('li', 'ds name').find('button[aria-label="change redaction type and accept"]').click();
+                cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
+                cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+                cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['d1'], 'S.42 - Legal Privilege');
+            });
         });
 
         it('filters templates by search input', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
             cy.get('input[placeholder="Search exemptions..."]').type('Legal');
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
             cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
         });
 
         it('shows "No exemptions found" when search matches nothing', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
             cy.get('input[placeholder="Search exemptions..."]').type('zzz');
             cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
         });
 
         it('shows "No exemptions found" when no templates are configured', () => {
             cy.fullMount(<RedactionSidebar {...baseProps} exemptionTemplates={[]} redactions={mockRedactions} />);
-            cy.contains('li', 'pending text').find('button[aria-label="reject with reason"]').click();
+            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
         });
 
@@ -268,24 +290,15 @@ describe('<RedactionSidebar />', () => {
 
             cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
             cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').should('not.exist');
-            // DS_INFO discloses rather than redacts, so it is offered under Reject, not Accept.
+            // Disclosing as the data subject's is a rejection, so it is offered under Reject, not Accept.
             cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('not.exist');
         });
 
-        it('offers only Operational Data on a DS_INFO suggestion, Third-Party PII being under Reject', () => {
-            const dsInfoPending = {
-                ...mockRedactions,
-                pending: {
-                    total: 1,
-                    items: [
-                        { id: 'd1', ids: ['d1'], isMerged: false, isGroup: false, text: 'ds name', redaction_type: 'DS_INFO', is_suggestion: true, source: 'NER' },
-                    ],
-                },
-            };
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoPending} />);
-            cy.contains('li', 'ds name').find('button[aria-label="change redaction type and accept"]').click();
-            cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
-            cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').should('not.exist');
+        it('accepts with an exemption picked from the accept dropdown', () => {
+            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['p1'], 'S.42 - Legal Privilege');
+            cy.get('[role="menu"]').should('not.exist');
         });
 
         it('calls onChangeTypeAndAccept when a new type is selected', () => {
@@ -425,14 +438,14 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onBulkReject').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
         });
 
-        it('shows exemption templates in group header dropdown and calls onRejectAsDisclosable', () => {
-            cy.get('button[aria-label="reject all with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible').click();
-            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'S.40 - Personal Information');
+        it('accepts every occurrence in the group with an exemption', () => {
+            cy.get('button[aria-label="change redaction type and accept all"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'S.42 - Legal Privilege');
         });
 
         it('rejects every occurrence in the group as Data Subject', () => {
-            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.get('button[aria-label="more reject all options"]').click();
             cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
             cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'DS_INFO');
         });
@@ -451,18 +464,31 @@ describe('<RedactionSidebar />', () => {
                 },
             };
 
-            it('rejects every occurrence as Third Party', () => {
+                it('rejects every occurrence with a plain Reject All', () => {
                 cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoGroup} />);
-                cy.contains('button', 'Reject All as Third Party').click();
-                cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'PII');
-                cy.get('@onBulkReject').should('not.have.been.called');
+                cy.contains('button', /^Reject All$/).click();
+                cy.get('@onBulkReject').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
+                cy.get('@onBulkChangeTypeAndAccept').should('not.have.been.called');
             });
 
-            it('does not offer Reject all in case, which would disclose it across the case', () => {
+            it('accepts every occurrence as Third-Party PII from the accept dropdown', () => {
                 cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoGroup} />);
-                cy.get('button[aria-label="reject all with reason"]').click();
-                cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible');
-                cy.contains('[role="menuitem"]', 'Reject all in case').should('not.exist');
+                cy.get('button[aria-label="change redaction type and accept all"]').click();
+                cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').click();
+                cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'PII');
+            });
+
+                it('offers Reject all in case, which asks for confirmation before disclosing', () => {
+                const onMarkAllInCase = cy.stub().as('onMarkAllInCase');
+                cy.fullMount(<RedactionSidebar {...baseProps} redactions={dsInfoGroup} onMarkAllInCase={onMarkAllInCase} />);
+                cy.get('button[aria-label="more reject all options"]').click();
+                cy.contains('[role="menuitem"]', 'Reject as Data Subject').should('not.exist');
+                cy.contains('[role="menuitem"]', 'Reject all in case').click();
+                cy.get('@onMarkAllInCase').should('have.been.calledOnceWith', {
+                    text: 'John Doe',
+                    redactionType: 'DS_INFO',
+                    action: 'reject',
+                });
             });
         });
 
@@ -496,7 +522,7 @@ describe('<RedactionSidebar />', () => {
             cy.fullMount(
                 <RedactionSidebar {...baseProps} redactions={mockRedactionsWithGroup} onMarkAllInCase={onMarkAllInCase} />
             );
-            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.get('button[aria-label="more reject all options"]').click();
             cy.contains('[role="menuitem"]', 'Reject all in case').click();
             cy.get('@onMarkAllInCase').should('have.been.calledOnceWith', {
                 text: 'John Doe',
@@ -578,20 +604,14 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onBulkReject').should('have.been.calledOnceWith', ['merge1', 'merge2']);
         });
 
-        it('shows exemption templates in merged item dropdown and calls onRejectAsDisclosable', () => {
-            cy.get('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('be.visible').click();
-            cy.get('@onRejectAsDisclosable').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'S.40 - Personal Information');
-        });
-
         it('rejects every merged part as Data Subject in one bulk call', () => {
-            cy.get('button[aria-label="reject with reason"]').click();
+            cy.get('button[aria-label="more reject options"]').click();
             cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
             cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'DS_INFO');
             cy.get('@onChangeTypeAndAccept').should('not.have.been.called');
         });
 
-        it('rejects every part of a merged DS_INFO item as Third Party in one bulk call', () => {
+        context('merged DS_INFO item', () => {
             const mergedDsInfo = {
                 ...mockRedactionsWithMerged,
                 pending: {
@@ -599,14 +619,28 @@ describe('<RedactionSidebar />', () => {
                     items: [{ ...mockRedactionsWithMerged.pending.items[0], redaction_type: 'DS_INFO' }],
                 },
             };
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mergedDsInfo} />);
-            cy.contains('button', 'Reject as Third Party').click();
-            cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'PII');
-            cy.get('@onBulkReject').should('not.have.been.called');
+
+            beforeEach(() => {
+                cy.fullMount(<RedactionSidebar {...baseProps} redactions={mergedDsInfo} />);
+            });
+
+            it('rejects every part with a plain Reject', () => {
+                cy.contains('button', /^Reject$/).click();
+                cy.get('@onBulkReject').should('have.been.calledOnceWith', ['merge1', 'merge2']);
+                cy.get('@onBulkChangeTypeAndAccept').should('not.have.been.called');
+            });
+
+            it('accepts every part as Third-Party PII in one bulk call', () => {
+                cy.get('button[aria-label="change redaction type and accept"]').click();
+                cy.contains('[role="menuitem"]', 'Accept as Third-Party PII').click();
+                cy.get('@onBulkChangeTypeAndAccept').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'PII');
+            });
         });
 
-        it('does not show the change-type dropdown for merged items', () => {
-            cy.get('button[aria-label="change redaction type and accept"]').should('not.exist');
+        it('accepts every merged part with an exemption', () => {
+            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'S.42 - Legal Privilege');
         });
 
         it('renders a remove-constituent dropdown arrow next to the split button', () => {

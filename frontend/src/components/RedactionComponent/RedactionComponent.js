@@ -8,7 +8,6 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import NextLink from 'next/link';
 import { RedactionSidebar } from '@/components/RedactionSidebar';
 import { ManualRedactionPopover } from '@/components/ManualRedactionPopover';
-import { RejectReasonDialog } from '@/components/RejectReasonDialog';
 import { ResubmitDialog } from '@/components/ResubmitDialog';
 import { PropagationConfirmDialog } from '@/components/PropagationConfirmDialog';
 import { getExemptionTemplates } from '@/services/redactionService';
@@ -33,7 +32,7 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
     );
 
     const store = useRedactionState({ document: currentDocument, initialRedactions, router });
-    const { layout, document: docState, markAllInCase, rejectionDialog } = store;
+    const { layout, document: docState, markAllInCase } = store;
 
     const isAutoAcceptMode = Boolean(currentDocument?.auto_accept_mode);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -158,15 +157,6 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                 onRedact={store.manual.onCreate}
             />
 
-            {rejectionDialog.target && (
-                <RejectReasonDialog
-                    open={rejectionDialog.open}
-                    onClose={rejectionDialog.onClose}
-                    onSubmit={rejectionDialog.onSubmit}
-                    redaction={rejectionDialog.target}
-                />
-            )}
-
             {markAllInCase.target?.action === 'accept' && (
                 <Dialog open onClose={() => markAllInCase.setTarget(null)}>
                     <DialogTitle>Accept all in case</DialogTitle>
@@ -179,6 +169,23 @@ export const RedactionComponent = ({ document: currentDocument, initialRedaction
                     <DialogActions>
                         <Button onClick={() => markAllInCase.setTarget(null)}>Cancel</Button>
                         <Button variant="contained" color="success" onClick={markAllInCase.onAcceptConfirm}>Accept all</Button>
+                    </DialogActions>
+                </Dialog>
+            )}
+
+            {markAllInCase.target?.action === 'reject' && (
+                <Dialog open onClose={() => markAllInCase.setTarget(null)}>
+                    <DialogTitle>Reject all in case</DialogTitle>
+                    <DialogContent>
+                        <DialogContentText>
+                            Reject all pending <strong>{REDACTION_TYPE_LABELS[markAllInCase.target.redactionType] || markAllInCase.target.redactionType}</strong> redactions
+                            for <em>&ldquo;{markAllInCase.target.text}&rdquo;</em> across every document in this case?
+                            The text will be disclosed wherever it appears.
+                        </DialogContentText>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => markAllInCase.setTarget(null)}>Cancel</Button>
+                        <Button variant="contained" color="error" onClick={markAllInCase.onRejectConfirm}>Reject all</Button>
                     </DialogActions>
                 </Dialog>
             )}

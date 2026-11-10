@@ -123,12 +123,13 @@ const mergePairsFor = (redactions) => {
 
 // Mirrors RedactionSerializer: any accept or justified rejection written by
 // the reviewer is a human decision; an unjustified non-accept withdraws it.
-const decidedByFor = ({ is_accepted, justification }) => (is_accepted || justification ? 'HUMAN' : null);
+const decidedByFor = ({ is_accepted, justification, rejected }) => (is_accepted || rejected || justification ? 'HUMAN' : null);
 
 // Echoes a decision write the way the server does, recording provenance.
-const withDecision = (existing, body) => (
-    'is_accepted' in body || 'justification' in body
-        ? { ...existing, ...body, decided_by: decidedByFor({ ...existing, ...body }) }
+// `rejected` is write-only on the server, so it is not echoed back.
+const withDecision = (existing, { rejected, ...body }) => (
+    'is_accepted' in body || 'justification' in body || rejected
+        ? { ...existing, ...body, decided_by: decidedByFor({ ...existing, ...body, rejected }) }
         : { ...existing, ...body }
 );
 
@@ -312,25 +313,17 @@ describe('<RedactionComponent />', () => {
             mountRedactionComponent();
         });
 
-        it('opens rejection dialog when clicking Reject', () => {
+        it('rejects in one click, with no reason asked for', () => {
             cy.contains('li', 'John Doe').contains('button', 'Reject').click();
-
-            cy.get('[role="dialog"]').should('be.visible');
-            cy.contains('Rejection Reason').should('be.visible');
-        });
-
-        it('calls updateRedaction API with justification when rejecting', () => {
-            cy.contains('li', 'John Doe').contains('button', 'Reject').click();
-
-            cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('This is not PII');
-                cy.contains('button', 'Submit').click();
-            });
 
             cy.wait('@updateRedaction').its('request.body').should('deep.include', {
                 is_accepted: false,
-                justification: 'This is not PII',
+                rejected: true,
             });
+            cy.get('[role="dialog"]').should('not.exist');
+            // The mock already holds one rejected suggestion.
+            cy.contains('rejected (2)').should('be.visible');
+            cy.contains('pending').should('not.exist');
         });
     });
 
@@ -439,18 +432,15 @@ describe('<RedactionComponent />', () => {
             });
         });
 
-        it('calls bulk API when Reject is clicked on a merged item', () => {
+        it('rejects every part of a merged item in one click', () => {
             cy.contains('button', 'Reject').click();
-
-            cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('Not relevant');
-                cy.contains('button', 'Submit').click();
-            });
 
             cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
                 is_accepted: false,
-                justification: 'Not relevant',
+                rejected: true,
+                ids: ['adj1', 'adj2'],
             });
+            cy.get('[role="dialog"]').should('not.exist');
         });
 
         it('accepting one merged-pair member re-renders sections with no call besides the PATCH', () => {
@@ -500,31 +490,30 @@ describe('<RedactionComponent />', () => {
             });
         });
 
-        it('calls bulk API with justification when Reject All is submitted', () => {
+        it('rejects every item in the group in one click', () => {
             cy.contains('button', 'Reject All').click();
 
-            cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('Not relevant group');
-                cy.contains('button', 'Submit').click();
+            cy.wait('@bulkUpdateRedaction').then((interception) => {
+                expect(interception.request.body).to.deep.include({ is_accepted: false, rejected: true });
+                expect(interception.request.body.ids).to.include.members(['dup1', 'dup2']);
             });
-
-            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
-                is_accepted: false,
-                justification: 'Not relevant group',
-            });
+            cy.get('[role="dialog"]').should('not.exist');
         });
 
         it('moves the group to rejected after Reject all in case', () => {
             cy.intercept('POST', '**/cases/*/redactions/bulk-by-text/', { statusCode: 200, body: { updated: 2 } }).as('markAllInCase');
 
-            cy.get('button[aria-label="reject all with reason"]').click();
+            cy.get('button[aria-label="more reject all options"]').click();
             cy.contains('[role="menuitem"]', 'Reject all in case').click();
             cy.get('[role="dialog"]').within(() => {
-                cy.get('textarea#reject-reason').type('Not relevant anywhere');
-                cy.contains('button', 'Submit').click();
+                cy.get('textarea').should('not.exist');
+                cy.contains('button', 'Reject all').click();
             });
 
-            cy.wait('@markAllInCase');
+            cy.wait('@markAllInCase').its('request.body').then((body) => {
+                expect(body.status).to.equal('REJECTED');
+                expect(body.rejection_reason ?? '').to.equal('');
+            });
             cy.contains('rejected (2)').should('be.visible');
             cy.contains('pending').should('not.exist');
         });
@@ -672,62 +661,59 @@ describe('<RedactionComponent />', () => {
         });
     });
 
-    context('Exemption Template Quick-Reject', () => {
-        it('calls updateRedaction with the selected template name as justification', () => {
-            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false, justification: req.body.justification }) });
-            }).as('exemptionUpdate');
-
+    context('Accept with Exemption', () => {
+        it('accepts with the template name as justification, keeping the redaction type', () => {
             mountRedactionComponent();
 
-            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
-            cy.wait('@exemptionUpdate').its('request.body').should('deep.include', {
-                is_accepted: false,
-                justification: 'S.40 - Personal Information',
+            cy.wait('@updateRedaction').its('request.body').should((body) => {
+                expect(body).to.deep.equal({ is_accepted: true, justification: 'S.42 - Legal Privilege' });
+            });
+            cy.contains('accepted (2)').click();
+            cy.contains('li', 'John Doe').within(() => {
+                cy.contains('Third-Party PII').should('be.visible');
+                cy.contains('Exemption: S.42 - Legal Privilege').should('be.visible');
             });
         });
 
-        it('calls bulk API with selected template justification for merged items', () => {
+        it('undo returns the suggestion to pending without its exemption', () => {
+            mountRedactionComponent();
+            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.wait('@updateRedaction');
+
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@updateRedaction').its('request.body').should('deep.equal', { is_accepted: false, justification: null });
+            cy.contains('pending (1)').should('be.visible');
+            cy.contains('accepted (1)').should('be.visible');
+        });
+
+        it('accepts every part of a merged item with the exemption, one write per part', () => {
+            cy.intercept('PATCH', '**/cases/document/redaction/adj*', (req) => {
+                const existing = mockRedactionsWithAdjacent.find(r => r.id === req.url.split('/').pop());
+                req.reply({ statusCode: 200, body: withDecision(existing, req.body) });
+            }).as('updateRedaction');
             mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
-
-            cy.get('button[aria-label="reject with reason"]').click();
+            cy.get('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
-            cy.wait('@bulkUpdateRedaction').its('request.body').should('deep.include', {
-                is_accepted: false,
-                justification: 'S.42 - Legal Privilege',
-                ids: ['adj1', 'adj2'],
+            cy.wait(['@updateRedaction', '@updateRedaction']).then((interceptions) => {
+                expect(interceptions.map(i => i.request.url.split('/').pop()).sort()).to.deep.equal(['adj1', 'adj2']);
+                interceptions.forEach(i => expect(i.request.body).to.deep.equal({ is_accepted: true, justification: 'S.42 - Legal Privilege' }));
             });
+            cy.get('@bulkUpdateRedaction.all').should('have.length', 0);
         });
 
-        it('filters templates by search input before selecting', () => {
-            cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false, justification: req.body.justification }) });
-            }).as('exemptionUpdate');
-
-            mountRedactionComponent();
-
-            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
-            cy.get('input[placeholder="Search exemptions..."]').type('Legal');
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
-            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
-
-            cy.wait('@exemptionUpdate').its('request.body').should('deep.include', {
-                justification: 'S.42 - Legal Privilege',
-            });
-        });
-
-        it('shows error toast when exemption reject fails', () => {
+        it('shows an error toast when the accept fails', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedExemption');
             mountRedactionComponent();
-
-            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
             cy.wait('@failedExemption');
-            cy.contains('Failed to reject suggestion. Please try again.').should('be.visible');
+            cy.contains('Failed to accept suggestion. Please try again.').should('be.visible');
         });
     });
 
@@ -1108,7 +1094,7 @@ describe('<RedactionComponent />', () => {
         });
 
         const reclassifyJohnDoeToDsInfo = () => {
-            cy.contains('li', 'John Doe').find('button[aria-label="reject with reason"]').click();
+            cy.contains('li', 'John Doe').find('button[aria-label="more reject options"]').click();
             cy.contains('[role="menuitem"]', 'Reject as Data Subject').click();
         };
 

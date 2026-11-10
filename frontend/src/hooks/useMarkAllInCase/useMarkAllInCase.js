@@ -7,22 +7,16 @@ import { isPendingSuggestion } from '@/utils/redactionDecision';
 /**
  * Manages case-wide accept/reject for a specific text+redaction_type pair.
  *
- * Accepts two callbacks that bridge to the shared rejection dialog:
- *   openRejectDialog(target)  — opens RejectReasonDialog with the given target
- *   closeRejectDialog()       — closes the dialog and clears its target
- *
- * The parent must still own rejectionDialogOpen / rejectionTarget state because
- * that dialog is also shared with per-document reject actions.
+ * Both actions change every document in the case, so each waits for the
+ * parent's confirmation dialog: handleMarkAllInCase sets the target, and the
+ * matching confirm handler applies it. A rejection carries no reason.
  */
-export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, closeRejectDialog }) {
+export function useMarkAllInCase({ caseId, setRedactions }) {
     const [markAllInCaseTarget, setMarkAllInCaseTarget] = useState(null);
 
     const handleMarkAllInCase = useCallback(({ text, redactionType, action }) => {
         setMarkAllInCaseTarget({ text, redactionType, action });
-        if (action === 'reject') {
-            openRejectDialog({ id: null, text });
-        }
-    }, [openRejectDialog]);
+    }, []);
 
     const handleMarkAllInCaseAcceptConfirm = useCallback(async () => {
         const { text, redactionType } = markAllInCaseTarget;
@@ -43,17 +37,16 @@ export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, clos
         }
     }, [markAllInCaseTarget, caseId, setRedactions]);
 
-    const handleMarkAllInCaseRejectConfirm = useCallback(async (_id, reason) => {
+    const handleMarkAllInCaseRejectConfirm = useCallback(async () => {
         const { text, redactionType } = markAllInCaseTarget;
-        closeRejectDialog();
         setMarkAllInCaseTarget(null);
         try {
-            const { updated } = await bulkMarkByText(caseId, text, redactionType, 'REJECTED', reason);
+            const { updated } = await bulkMarkByText(caseId, text, redactionType, 'REJECTED', null);
             setRedactions(prev =>
                 prev.map(r =>
                     isPendingSuggestion(r) &&
                     r.text === text && r.redaction_type === redactionType
-                        ? { ...r, justification: reason, decided_by: 'HUMAN' }
+                        ? { ...r, is_accepted: false, decided_by: 'HUMAN' }
                         : r
                 )
             );
@@ -61,7 +54,7 @@ export function useMarkAllInCase({ caseId, setRedactions, openRejectDialog, clos
         } catch (error) {
             toastError(error, 'Failed to mark all in case. Please try again.');
         }
-    }, [markAllInCaseTarget, caseId, setRedactions, closeRejectDialog]);
+    }, [markAllInCaseTarget, caseId, setRedactions]);
 
     return {
         markAllInCaseTarget,

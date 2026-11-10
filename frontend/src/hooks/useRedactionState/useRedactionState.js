@@ -12,9 +12,6 @@ import { useDsInfoPropagation } from '@/hooks/useDsInfoPropagation';
 export function useRedactionState({ document: currentDocument, initialRedactions, router }) {
     const [redactions, setRedactions] = useState(initialRedactions || []);
     const [mergePairs, setMergePairs] = useState(currentDocument?.merge_structure?.pairs || []);
-    const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
-    const [rejectionTarget, setRejectionTarget] = useState(null);
-    const [bulkRejectIds, setBulkRejectIds] = useState([]);
 
     // Merge pairs depend only on span geometry (positions + types), so
     // accept/reject decisions never require a fetch. When geometry changes
@@ -80,16 +77,6 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         handleResubmit,
     } = useDocumentControls({ undo, redo, clearHistory, currentDocument, router });
 
-    const openRejectDialog = useCallback(({ id, text }) => {
-        setRejectionTarget({ id, text });
-        setRejectionDialogOpen(true);
-    }, []);
-
-    const closeRejectDialog = useCallback(() => {
-        setRejectionDialogOpen(false);
-        setRejectionTarget(null);
-    }, []);
-
     const {
         markAllInCaseTarget,
         setMarkAllInCaseTarget,
@@ -99,19 +86,16 @@ export function useRedactionState({ document: currentDocument, initialRedactions
     } = useMarkAllInCase({
         caseId: currentDocument.case,
         setRedactions,
-        openRejectDialog,
-        closeRejectDialog,
     });
 
     const {
         handleAcceptSuggestion,
         handleBulkAccept,
-        handleRejectAsDisclosable,
+        handleReject,
+        handleBulkReject,
+        handleAcceptWithExemption,
         handleChangeTypeAndAccept,
         handleBulkChangeTypeAndAccept,
-        handleOpenRejectDialog,
-        handleOpenBulkRejectDialog,
-        handleRejectConfirm,
         handleSplitMerge,
         handleRemoveFromMerge,
     } = useRedactionActions({
@@ -122,10 +106,6 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         setSplitMerges,
         setIsolatedIds,
         setScrollToId,
-        bulkRejectIds,
-        setBulkRejectIds,
-        setRejectionDialogOpen,
-        setRejectionTarget,
     });
 
     const {
@@ -170,21 +150,6 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         if (newType === 'DS_INFO') propagation.requestPropagationPreview(ids?.[0]);
     }, [handleBulkChangeTypeAndAccept, propagation]);
 
-    const handleCloseRejectionDialog = useCallback(() => {
-        setRejectionDialogOpen(false);
-        setRejectionTarget(null);
-        setBulkRejectIds([]);
-        setMarkAllInCaseTarget(null);
-    }, [setMarkAllInCaseTarget]);
-
-    // Routes to the correct handler based on what triggered the rejection dialog.
-    const handleRejectDialogSubmit = useCallback((id, reason) => {
-        if (markAllInCaseTarget?.action === 'reject') {
-            return handleMarkAllInCaseRejectConfirm(id, reason);
-        }
-        return handleRejectConfirm(id, reason);
-    }, [markAllInCaseTarget, handleMarkAllInCaseRejectConfirm, handleRejectConfirm]);
-
     return {
         redactions,
         displaySections,
@@ -214,11 +179,11 @@ export function useRedactionState({ document: currentDocument, initialRedactions
         commands: {
             accept: handleAcceptSuggestion,
             bulkAccept: handleBulkAccept,
-            rejectAsDisclosable: handleRejectAsDisclosable,
+            acceptWithExemption: handleAcceptWithExemption,
             changeTypeAndAccept,
             bulkChangeTypeAndAccept,
-            openRejectDialog: handleOpenRejectDialog,
-            openBulkRejectDialog: handleOpenBulkRejectDialog,
+            reject: handleReject,
+            bulkReject: handleBulkReject,
             splitMerge: handleSplitMerge,
             removeFromMerge: handleRemoveFromMerge,
             remove: handleRemoveRedaction,
@@ -229,6 +194,7 @@ export function useRedactionState({ document: currentDocument, initialRedactions
             setTarget: setMarkAllInCaseTarget,
             onMarkAll: handleMarkAllInCase,
             onAcceptConfirm: handleMarkAllInCaseAcceptConfirm,
+            onRejectConfirm: handleMarkAllInCaseRejectConfirm,
         },
 
         layout: {
@@ -260,13 +226,6 @@ export function useRedactionState({ document: currentDocument, initialRedactions
             setResubmitDialogOpen,
             onMarkAsComplete: handleMarkAsComplete,
             onResubmit: handleResubmit,
-        },
-
-        rejectionDialog: {
-            open: rejectionDialogOpen,
-            target: rejectionTarget,
-            onClose: handleCloseRejectionDialog,
-            onSubmit: handleRejectDialogSubmit,
         },
 
         propagation: {
@@ -302,13 +261,13 @@ export function getRedactionSidebarProps(store, { exemptionTemplates, documentCo
         redactions: store.displaySections,
         exemptionTemplates,
         onAccept: store.commands.accept,
-        onReject: store.commands.openRejectDialog,
+        onReject: store.commands.reject,
         onRemove: store.commands.remove,
         onChangeTypeAndAccept: store.commands.changeTypeAndAccept,
         onBulkChangeTypeAndAccept: store.commands.bulkChangeTypeAndAccept,
         onBulkAccept: store.commands.bulkAccept,
-        onBulkReject: store.commands.openBulkRejectDialog,
-        onRejectAsDisclosable: store.commands.rejectAsDisclosable,
+        onBulkReject: store.commands.bulkReject,
+        onAcceptWithExemption: store.commands.acceptWithExemption,
         onMarkAllInCase: store.markAllInCase.onMarkAll,
         onSplitMerge: store.commands.splitMerge,
         onRemoveFromMerge: store.commands.removeFromMerge,

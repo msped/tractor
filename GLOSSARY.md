@@ -25,3 +25,21 @@ _Avoid_: Occurrence, incident (these name one source system's kind of record)
 **Role-dependent Field**:
 A field of a record whose disclosure to the data subject depends on the data subject's role on that record.
 _Avoid_: Conditional field, RP field
+
+## Redaction
+
+**Operational Data**:
+Information about how the organisation operates, such as internal references or methods, withheld from the data subject under an exemption.
+_Avoid_: Internal data, op data
+
+**Third-Party PII**:
+Personal data about anyone other than the data subject. It is withheld by default and needs no exemption.
+_Avoid_: Third-party data, PII on its own
+
+**Data Subject Information**:
+The data subject's own personal data. It is disclosed to them, never withheld.
+_Avoid_: DS data, requester data
+
+**Exemption**:
+The stated basis for withholding a redaction, chosen from a list the organisation maintains when the redaction is accepted. Choosing one does not change the redaction's type.
+_Avoid_: Rejection reason, justification
