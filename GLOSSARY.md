@@ -41,5 +41,5 @@ The data subject's own personal data. It is disclosed to them, never withheld.
 _Avoid_: DS data, requester data
 
 **Exemption**:
-The stated basis for withholding a redaction, chosen from a list the organisation maintains when the redaction is accepted. Choosing one does not change the redaction's type.
+The stated basis for withholding Operational Data, chosen from a list the organisation maintains. Other types never carry one: Third-Party PII is withheld by default and Data Subject Information is disclosed. A template can be excluded from training, so Operational Data withheld under it does not teach the model.
 _Avoid_: Rejection reason, justification

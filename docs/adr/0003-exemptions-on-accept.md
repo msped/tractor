@@ -5,3 +5,5 @@ Exemptions were first offered on **reject**, recorded as the reason a suggestion
 Choosing an exemption accepts the suggestion as it is: a Third-Party PII span accepted under an exemption stays Third-Party PII. An earlier version of this decision turned every exempted span into Operational Data, on the view that only operational data needs a basis for withholding. That was dropped because the type drives both the highlight a reviewer sees and the SpanCat training data, so a name withheld under legal privilege would have shown as operational data and taught the model that names are operational.
 
 The exemption is stored as the template's name in the existing `justification` text, rather than a new link to the template, so the mechanism already in place is moved instead of replaced. This is an interim shape: whether a redaction can carry more than one exemption, whether exemptions link to their templates, and whether some exemptions should feed training are left to a later decision. Rows rejected before this change keep their old reasons.
+
+The interim storage is superseded by [ADR-0004](0004-exemptions-link-to-templates.md).
