@@ -333,6 +333,11 @@ class RedactionSerializer(serializers.ModelSerializer):
             rejected
             or {"is_accepted", "justification"} & validated_data.keys()
         ):
+            # Saving the instance skips the queryset decision methods, so
+            # the post-disclosure lock is checked here instead.
+            Redaction.objects.filter(
+                pk=instance.pk
+            ).assert_disclosure_unlocked(Redaction.DecidedBy.HUMAN)
             validated_data["decided_by"] = self._decided_by_for(
                 validated_data.get("is_accepted", instance.is_accepted),
                 validated_data.get("justification", instance.justification),

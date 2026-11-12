@@ -1070,6 +1070,99 @@ class RedactionExemptionViewTests(NetworkBlockerMixin, APITestCase):
         self.assertIsNone(names[str(self.r2.id)])
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionDisclosureLockViewTests(NetworkBlockerMixin, APITestCase):
+    """
+    The post-disclosure lock holds for every decision write through the API,
+    single or bulk, and is refused with a 403 that says why.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="lockuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="LOCK01",
+            data_subject_name="Lock Test",
+            created_by=self.user,
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "lock.pdf", b"content", "application/pdf"
+            ),
+        )
+        self.redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="1234",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+        )
+        self.url = reverse(
+            "redaction-detail", kwargs={"pk": self.redaction.id}
+        )
+        Export.objects.create(
+            case=self.case,
+            export_file=SimpleUploadedFile("d.zip", b"zip"),
+            sequence=1,
+            label="Original disclosure",
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def test_single_decision_writes_are_refused_while_locked(self):
+        for body in (
+            {"is_accepted": True},
+            {"is_accepted": False, "rejected": True},
+        ):
+            with self.subTest(body=body):
+                response = self.client.patch(self.url, body, format="json")
+
+                self.assertEqual(
+                    response.status_code, status.HTTP_403_FORBIDDEN
+                )
+                self.assertIn("Internal Review", response.data["detail"])
+                self.redaction.refresh_from_db()
+                self.assertIsNone(self.redaction.decided_by)
+
+    def test_bulk_decision_write_is_refused_with_403_not_500(self):
+        url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.patch(
+            url,
+            {"ids": [str(self.redaction.id)], "is_accepted": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Internal Review", response.data["detail"])
+
+    def test_single_decision_write_is_allowed_while_a_review_is_open(self):
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.OPEN
+        )
+        response = self.client.patch(
+            self.url, {"is_accepted": True}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.redaction.refresh_from_db()
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_a_write_that_is_not_a_decision_is_not_locked(self):
+        """The lock guards decisions; span geometry is not one."""
+        response = self.client.patch(
+            self.url, {"end_char": 3, "text": "123"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
 class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()

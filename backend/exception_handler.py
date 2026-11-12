@@ -1,8 +1,11 @@
 import logging
 import uuid
 
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from cases.models import DisclosureLockError
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,12 @@ def api_exception_handler(exc, context):
     Unhandled exceptions get a short reference id that appears both in the
     response and the log line, so a user-reported error can be tied back to a
     stack trace without asking them to reproduce it.
+
+    A post-disclosure lock refusal is expected traffic, not a fault, so it
+    becomes a 403 carrying the lock's own message.
     """
+    if isinstance(exc, DisclosureLockError):
+        exc = PermissionDenied(str(exc))
     response = drf_exception_handler(exc, context)
     view = context.get("view")
     request = context.get("request")

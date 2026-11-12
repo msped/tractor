@@ -280,7 +280,7 @@ class RedactionQuerySet(models.QuerySet):
         UPDATE otherwise.  Scope with .pending() first if prior decisions
         must be preserved.  Single UPDATE.
         """
-        self._assert_disclosure_unlocked(by)
+        self.assert_disclosure_unlocked(by)
         return super().update(
             is_accepted=True,
             justification=None,
@@ -290,7 +290,7 @@ class RedactionQuerySet(models.QuerySet):
 
     def reject(self, justification="", *, by):
         """Reject everything in the queryset as decided by `by`."""
-        self._assert_disclosure_unlocked(by)
+        self.assert_disclosure_unlocked(by)
         return super().update(
             is_accepted=False,
             justification=justification,
@@ -302,7 +302,7 @@ class RedactionQuerySet(models.QuerySet):
         """Return all redactions in the queryset to pending (no decision)."""
         # No actor is passed to reset(); it is only ever a human withdrawal of
         # a decision, so it is always subject to the post-disclosure lock.
-        self._assert_disclosure_unlocked(None)
+        self.assert_disclosure_unlocked(None)
         return super().update(
             is_accepted=False,
             justification=None,
@@ -311,10 +311,12 @@ class RedactionQuerySet(models.QuerySet):
         )
 
     # ---- post-disclosure lock ----
-    def _assert_disclosure_unlocked(self, by):
+    def assert_disclosure_unlocked(self, by):
         """
         Refuse a human decision write to a disclosed case unless an Internal
-        Review is open for it.
+        Review is open for it.  The decision methods call this themselves;
+        ``RedactionSerializer`` calls it for decision writes that save the
+        instance directly.
 
         A case is "disclosed" once it has at least one preserved ``Export``.
         System writes — initial processing, case-decision propagation and
