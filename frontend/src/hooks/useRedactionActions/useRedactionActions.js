@@ -87,25 +87,21 @@ export function useRedactionActions({
         }
     }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
-    // The exemption is stored as the template name in `justification`. The bulk
-    // endpoint clears justification on accept, so each id is written on its own.
-    const handleAcceptWithExemption = useCallback(async (ids, justification) => {
+    // Every part of a merged or grouped suggestion is accepted under the same
+    // exemption template in one bulk write; withdrawing the accept clears it.
+    const handleAcceptWithExemption = useCallback(async (ids, exemptionId) => {
         setScrollToId(null);
-        const acceptAll = () => Promise.all(
-            ids.map(id => updateRedaction(id, { is_accepted: true, justification }))
-        );
+        const acceptAll = () => bulkUpdateRedactions(documentId, ids, true, null, { exemption: exemptionId });
         try {
             applyUpdates(await acceptAll());
             pushHistory(
-                async () => applyUpdates(await Promise.all(
-                    ids.map(id => updateRedaction(id, { is_accepted: false, justification: null }))
-                )),
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
                 async () => applyUpdates(await acceptAll())
             );
         } catch (error) {
             toastError(error, "Failed to accept suggestion. Please try again.");
         }
-    }, [pushHistory, applyUpdates, setScrollToId]);
+    }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         setScrollToId(null);
@@ -114,6 +110,7 @@ export function useRedactionActions({
         const originalType = prev.redaction_type;
         const originalIsAccepted = prev.is_accepted;
         const originalIsSuggestion = prev.is_suggestion;
+        const originalExemption = prev.exemption ?? null;
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId,
@@ -122,7 +119,7 @@ export function useRedactionActions({
             applySingle(updatedRedaction);
             toast.success("Suggestion type changed and accepted.");
             pushHistory(
-                async () => applySingle(await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion })),
+                async () => applySingle(await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion, exemption: originalExemption })),
                 async () => applySingle(await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }))
             );
         } catch (error) {
@@ -141,7 +138,7 @@ export function useRedactionActions({
             toast.success("Suggestions type changed and accepted.");
             pushHistory(
                 async () => applyUpdates(await Promise.all(
-                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion }))
+                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion, exemption: o.exemption ?? null }))
                 )),
                 async () => applyUpdates(await Promise.all(
                     ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }))

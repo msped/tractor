@@ -119,6 +119,7 @@ const RedactionSidebarComponent = ({
         setExemptionSearch('');
     };
 
+    const offerExemptions = currentItemForMenu?.redaction_type === 'OP_DATA';
     const filteredExemptions = exemptionTemplates
         .filter(t => t.name.toLowerCase().includes(exemptionSearch.toLowerCase()));
 
@@ -216,9 +217,14 @@ const RedactionSidebarComponent = ({
                                 {item.rationale}
                             </Typography>
                         )}
-                        {item.justification && (
+                        {item.exemption_name && (
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                {sectionKey === 'rejected' ? 'Reason for rejection' : 'Exemption'}: {item.justification}
+                                Exemption: {item.exemption_name}
+                            </Typography>
+                        )}
+                        {sectionKey === 'rejected' && item.justification && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                Reason for rejection: {item.justification}
                             </Typography>
                         )}
                     </CardContent>
@@ -552,32 +558,36 @@ const RedactionSidebarComponent = ({
                                     Accept as {REDACTION_TYPE_LABELS[typeKey]}
                                 </MenuItem>
                             ))}
-                        <Divider />
-                        <Box sx={{ px: 1, pb: 1 }}>
-                            <TextField
-                                size="small"
-                                placeholder="Search exemptions..."
-                                value={exemptionSearch}
-                                onChange={(e) => setExemptionSearch(e.target.value)}
-                                onKeyDown={(e) => e.stopPropagation()}
-                                autoFocus
-                                fullWidth
-                            />
-                        </Box>
-                        {filteredExemptions.map(t => (
-                            <MenuItem
-                                key={t.id}
-                                onClick={() => {
-                                    onAcceptWithExemption(currentItemForMenu.ids || [currentItemForMenu.id], t.name);
-                                    handleMenuClose();
-                                }}
-                            >
-                                {t.name}
-                            </MenuItem>
-                        ))}
-                        {filteredExemptions.length === 0 && (
-                            <MenuItem disabled>No exemptions found</MenuItem>
-                        )}
+                        {/* Only Operational Data needs a basis for withholding: Third-Party PII is withheld
+                            by default and DS_INFO is disclosed. Menu takes no Fragment children, hence the array. */}
+                        {offerExemptions && [
+                            <Divider key="exemptions-divider" />,
+                            <Box key="exemptions-search" sx={{ px: 1, pb: 1 }}>
+                                <TextField
+                                    size="small"
+                                    placeholder="Search exemptions..."
+                                    value={exemptionSearch}
+                                    onChange={(e) => setExemptionSearch(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    autoFocus
+                                    fullWidth
+                                />
+                            </Box>,
+                            ...filteredExemptions.map(t => (
+                                <MenuItem
+                                    key={t.id}
+                                    onClick={() => {
+                                        onAcceptWithExemption(currentItemForMenu.ids || [currentItemForMenu.id], t.id);
+                                        handleMenuClose();
+                                    }}
+                                >
+                                    {t.name}
+                                </MenuItem>
+                            )),
+                            filteredExemptions.length === 0 && (
+                                <MenuItem key="exemptions-none" disabled>No exemptions found</MenuItem>
+                            ),
+                        ]}
                     </Menu>
                     <Menu
                         anchorEl={rejectMenuAnchorEl}

@@ -8,7 +8,8 @@ from unittest.mock import patch
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
@@ -17,6 +18,7 @@ from cases.models import (
     DisclosureLockError,
     Document,
     DocumentExportSettings,
+    ExemptionTemplate,
     Export,
     InternalReview,
     ProvenanceError,
@@ -504,6 +506,98 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
         self.assertNotIn(ds_info, trainable)
         self.assertNotIn(rejected, trainable)
         self.assertNotIn(pending, trainable)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionExemptionTests(NetworkBlockerMixin, TestCase):
+    """An exemption is part of the decision to withhold Operational Data."""
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="202541", data_subject_name="Exemption Test"
+        )
+        file = SimpleUploadedFile("ex.txt", b"content")
+        self.document = Document.objects.create(
+            case=self.case, original_file=file
+        )
+        self.template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **kwargs):
+        defaults = {
+            "document": self.document,
+            "start_char": 0,
+            "end_char": 4,
+            "text": "test",
+            "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
+        }
+        defaults.update(kwargs)
+        return Redaction.objects.create(**defaults)
+
+    def _make_exempted(self):
+        return self._make_redaction(
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+            exemption=self.template,
+        )
+
+    def test_accept_with_exemption_links_the_template(self):
+        r = self._make_redaction()
+        Redaction.objects.filter(pk=r.pk).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        r.refresh_from_db()
+        self.assertTrue(r.is_accepted)
+        self.assertEqual(r.exemption, self.template)
+
+    def test_plain_accept_clears_the_exemption(self):
+        r = self._make_exempted()
+        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
+        r.refresh_from_db()
+        self.assertTrue(r.is_accepted)
+        self.assertIsNone(r.exemption)
+
+    def test_reject_clears_the_exemption(self):
+        r = self._make_exempted()
+        Redaction.objects.filter(pk=r.pk).reject(by=Redaction.DecidedBy.HUMAN)
+        r.refresh_from_db()
+        self.assertFalse(r.is_accepted)
+        self.assertIsNone(r.exemption)
+
+    def test_reset_clears_the_exemption(self):
+        r = self._make_exempted()
+        Redaction.objects.filter(pk=r.pk).reset()
+        r.refresh_from_db()
+        self.assertIsNone(r.decided_by)
+        self.assertIsNone(r.exemption)
+
+    def test_update_of_exemption_raises_provenance_error(self):
+        self._make_redaction()
+        with self.assertRaises(ProvenanceError):
+            Redaction.objects.all().update(exemption=self.template)
+
+    def test_constraint_refuses_an_exemption_off_operational_data(self):
+        for redaction_type in (
+            Redaction.RedactionType.THIRD_PARTY_PII,
+            Redaction.RedactionType.DS_INFORMATION,
+        ):
+            with self.subTest(redaction_type=redaction_type):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    self._make_redaction(
+                        redaction_type=redaction_type,
+                        is_accepted=True,
+                        decided_by=Redaction.DecidedBy.HUMAN,
+                        exemption=self.template,
+                    )
+
+    def test_template_in_use_cannot_be_deleted(self):
+        self._make_exempted()
+        with self.assertRaises(ProtectedError):
+            self.template.delete()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)

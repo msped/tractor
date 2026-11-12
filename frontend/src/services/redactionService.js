@@ -60,11 +60,11 @@ export const bulkMarkByText = async (caseId, text, redactionType, markStatus, re
     }
 };
 
-export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification, { rejected = false } = {}) => {
+export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification, { rejected = false, exemption = null } = {}) => {
     try {
         const response = await apiClient.patch(
             `cases/document/${documentId}/redactions/bulk/`,
-            { ids, is_accepted: isAccepted, justification: justification ?? null, rejected },
+            { ids, is_accepted: isAccepted, justification: justification ?? null, rejected, exemption },
         );
         return response.data;
     } catch (error) {

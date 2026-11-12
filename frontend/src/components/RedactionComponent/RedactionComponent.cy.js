@@ -662,54 +662,143 @@ describe('<RedactionComponent />', () => {
     });
 
     context('Accept with Exemption', () => {
-        it('accepts with the template name as justification, keeping the redaction type', () => {
-            mountRedactionComponent();
+        const exemptionNames = { 1: 'S.40 - Personal Information', 2: 'S.42 - Legal Privilege' };
 
-            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+        // Echoes the server: a decision write without an exemption clears it,
+        // and the template name comes back next to its id.
+        const withExemption = (row, body) => {
+            const exemption = body.exemption ?? null;
+            return { ...row, exemption, exemption_name: exemptionNames[exemption] ?? null };
+        };
+
+        const opDataPending = {
+            id: 'o1',
+            text: 'sensitive information',
+            redaction_type: 'OP_DATA',
+            is_suggestion: true,
+            is_accepted: false,
+            justification: null,
+            exemption: null,
+            exemption_name: null,
+            decided_by: null,
+            start_char: 34,
+            end_char: 55,
+        };
+
+        const exemptedManual = {
+            id: 'm1',
+            text: 'John Doe',
+            redaction_type: 'OP_DATA',
+            is_suggestion: false,
+            is_accepted: true,
+            justification: null,
+            exemption: 2,
+            exemption_name: 'S.42 - Legal Privilege',
+            decided_by: 'HUMAN',
+            start_char: 61,
+            end_char: 69,
+        };
+
+        const exemptedSuggestion = { ...exemptedManual, id: 's1', is_suggestion: true };
+
+        const opDataAdjacent = mockRedactionsWithAdjacent.map(r => ({ ...r, redaction_type: 'OP_DATA' }));
+
+        const interceptWrites = (rows) => {
+            const byId = Object.fromEntries(rows.map(r => [r.id, r]));
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', (req) => {
+                req.reply({
+                    statusCode: 200,
+                    body: req.body.ids.map(id => withExemption(withDecision(byId[id], req.body), req.body)),
+                });
+            }).as('bulkUpdateRedaction');
+            cy.intercept('PATCH', '**/cases/document/redaction/*', (req) => {
+                const row = withDecision(byId[req.url.split('/').pop()], req.body);
+                req.reply({ statusCode: 200, body: 'is_accepted' in req.body ? withExemption(row, req.body) : row });
+            }).as('updateRedaction');
+            cy.intercept('POST', '**/cases/document/*/redaction', (req) => {
+                req.reply({ statusCode: 201, body: { ...withExemption(withDecision({}, req.body), req.body), id: 'recreated' } });
+            }).as('createRedaction');
+        };
+
+        it('accepts an OP_DATA suggestion under the exemption in one bulk request', () => {
+            interceptWrites([opDataPending]);
+            mountRedactionComponent(mockDocument, [opDataPending]);
+
+            cy.contains('li', 'sensitive information').find('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
-            cy.wait('@updateRedaction').its('request.body').should((body) => {
-                expect(body).to.deep.equal({ is_accepted: true, justification: 'S.42 - Legal Privilege' });
+            cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {
+                expect(body.ids).to.deep.equal(['o1']);
+                expect(body).to.include({ is_accepted: true, exemption: 2 });
             });
-            cy.contains('accepted (2)').click();
-            cy.contains('li', 'John Doe').within(() => {
-                cy.contains('Third-Party PII').should('be.visible');
+            cy.get('@updateRedaction.all').should('have.length', 0);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'sensitive information').within(() => {
+                cy.contains('Operational Data').should('be.visible');
                 cy.contains('Exemption: S.42 - Legal Privilege').should('be.visible');
             });
         });
 
         it('undo returns the suggestion to pending without its exemption', () => {
-            mountRedactionComponent();
-            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            interceptWrites([opDataPending]);
+            mountRedactionComponent(mockDocument, [opDataPending]);
+            cy.contains('li', 'sensitive information').find('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
-            cy.wait('@updateRedaction');
+            cy.wait('@bulkUpdateRedaction');
 
             cy.get('button[aria-label="Undo"]').click();
-            cy.wait('@updateRedaction').its('request.body').should('deep.equal', { is_accepted: false, justification: null });
+            cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {
+                expect(body.ids).to.deep.equal(['o1']);
+                expect(body).to.include({ is_accepted: false, rejected: false, exemption: null });
+            });
             cy.contains('pending (1)').should('be.visible');
-            cy.contains('accepted (1)').should('be.visible');
+            cy.contains('Exemption:').should('not.exist');
         });
 
-        it('accepts every part of a merged item with the exemption, one write per part', () => {
-            cy.intercept('PATCH', '**/cases/document/redaction/adj*', (req) => {
-                const existing = mockRedactionsWithAdjacent.find(r => r.id === req.url.split('/').pop());
-                req.reply({ statusCode: 200, body: withDecision(existing, req.body) });
-            }).as('updateRedaction');
-            mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
+        it('accepts every part of a merged OP_DATA item in one bulk request', () => {
+            interceptWrites(opDataAdjacent);
+            mountRedactionComponent(mockDocument, opDataAdjacent, [{ a: 'adj1', b: 'adj2', type: 'OP_DATA', joiner: ' ', blockers: [] }]);
             cy.get('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
-            cy.wait(['@updateRedaction', '@updateRedaction']).then((interceptions) => {
-                expect(interceptions.map(i => i.request.url.split('/').pop()).sort()).to.deep.equal(['adj1', 'adj2']);
-                interceptions.forEach(i => expect(i.request.body).to.deep.equal({ is_accepted: true, justification: 'S.42 - Legal Privilege' }));
+            cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {
+                expect([...body.ids].sort()).to.deep.equal(['adj1', 'adj2']);
+                expect(body).to.include({ is_accepted: true, exemption: 2 });
             });
-            cy.get('@bulkUpdateRedaction.all').should('have.length', 0);
+            cy.get('@bulkUpdateRedaction.all').should('have.length', 1);
+            cy.get('@updateRedaction.all').should('have.length', 0);
+        });
+
+        it('undo of a Remove recreates a manual redaction with its exemption', () => {
+            interceptWrites([exemptedManual]);
+            mountRedactionComponent(mockDocument, [exemptedManual]);
+            cy.contains('manual (1)').click();
+            cy.contains('li', 'John Doe').contains('button', 'Remove').click();
+            cy.wait('@deleteRedaction');
+
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@createRedaction').its('request.body').should('include', { redaction_type: 'OP_DATA', exemption: 2 });
+            cy.contains('li', 'John Doe').contains('Exemption: S.42 - Legal Privilege').should('be.visible');
+        });
+
+        it('undo of a Remove restores an accepted suggestion\'s exemption', () => {
+            interceptWrites([exemptedSuggestion]);
+            mountRedactionComponent(mockDocument, [exemptedSuggestion]);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'John Doe').contains('button', 'Remove').click();
+            cy.wait('@updateRedaction');
+            cy.contains('pending (1)').should('be.visible');
+
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@updateRedaction').its('request.body').should('include', { is_accepted: true, exemption: 2 });
+            cy.contains('accepted (1)').should('be.visible');
+            cy.contains('li', 'John Doe').contains('Exemption: S.42 - Legal Privilege').should('be.visible');
         });
 
         it('shows an error toast when the accept fails', () => {
-            cy.intercept('PATCH', '**/cases/document/redaction/r1', { statusCode: 500 }).as('failedExemption');
-            mountRedactionComponent();
-            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', { statusCode: 500 }).as('failedExemption');
+            mountRedactionComponent(mockDocument, [opDataPending]);
+            cy.contains('li', 'sensitive information').find('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
 
             cy.wait('@failedExemption');

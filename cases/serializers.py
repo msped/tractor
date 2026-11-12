@@ -262,6 +262,49 @@ class RedactionSerializer(serializers.ModelSerializer):
     # A reject needs no reason, so it has to say it is one; without this flag
     # an unjustified non-accept is read as withdrawing the decision.
     rejected = serializers.BooleanField(write_only=True, required=False)
+    exemption = serializers.PrimaryKeyRelatedField(
+        queryset=ExemptionTemplate.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    exemption_name = serializers.CharField(
+        source="exemption.name", read_only=True, allow_null=True
+    )
+
+    def validate(self, attrs):
+        """
+        Only accepted Operational Data carries an exemption. Naming one on
+        anything else is refused. Like the queryset decision methods, a
+        decision write without one clears it, and so does a write that moves
+        a row off Operational Data.
+        """
+        instance = self.instance
+
+        def resulting(field):
+            return attrs.get(field, getattr(instance, field, None))
+
+        is_op_data = (
+            resulting("redaction_type")
+            == Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        withholds = bool(resulting("is_accepted")) and not attrs.get(
+            "rejected"
+        )
+        decision_write = bool({"is_accepted", "rejected"} & attrs.keys())
+        if attrs.get("exemption") is not None:
+            if not is_op_data:
+                raise serializers.ValidationError(
+                    {"exemption": "Only Operational Data can be exempted."}
+                )
+            if not withholds:
+                raise serializers.ValidationError(
+                    {
+                        "exemption": "Only an accepted redaction can be exempted."
+                    }
+                )
+        elif decision_write or not (is_op_data and withholds):
+            attrs["exemption"] = None
+        return attrs
 
     @staticmethod
     def _decided_by_for(is_accepted, justification, rejected=False):
@@ -307,6 +350,8 @@ class RedactionSerializer(serializers.ModelSerializer):
             "text",
             "redaction_type",
             "justification",
+            "exemption",
+            "exemption_name",
             "rationale",
             "is_suggestion",
             "is_accepted",
@@ -336,6 +381,19 @@ class BulkRedactionUpdateSerializer(serializers.Serializer):
         required=False, allow_blank=True, allow_null=True, default=None
     )
     rejected = serializers.BooleanField(required=False, default=False)
+    exemption = serializers.PrimaryKeyRelatedField(
+        queryset=ExemptionTemplate.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+    def validate(self, attrs):
+        if attrs["exemption"] is not None and not attrs["is_accepted"]:
+            raise serializers.ValidationError(
+                {"exemption": "Only an accepted redaction can be exempted."}
+            )
+        return attrs
 
 
 class BulkByTextSerializer(serializers.Serializer):

@@ -261,30 +261,41 @@ class DisclosureLockError(ProvenanceError):
 
 # Fields that together encode an accept/reject decision.  They may only be
 # written through the decision methods below, never via a generic update().
-_DECISION_FIELDS = frozenset({"is_accepted", "justification", "decided_by"})
+_DECISION_FIELDS = frozenset(
+    {"is_accepted", "justification", "exemption", "decided_by"}
+)
 
 
 class RedactionQuerySet(models.QuerySet):
     # ---- writes: provenance is keyword-only with no default ----
-    def accept(self, *, by):
+    def accept(self, *, by, exemption=None):
         """
-        Accept everything in the queryset as decided by `by`.
+        Accept everything in the queryset as decided by `by`, withheld under
+        `exemption` if one is given.
 
         Overwrites prior provenance — a HUMAN accept over a machine-accepted
         row flips it to human-decided — and clears any stale rejection
-        justification.  Scope with .pending() first if prior decisions must
-        be preserved.  Single UPDATE.
+        justification.  A plain accept clears any earlier exemption.  Only
+        Operational Data may carry one; the check constraint refuses the
+        UPDATE otherwise.  Scope with .pending() first if prior decisions
+        must be preserved.  Single UPDATE.
         """
         self._assert_disclosure_unlocked(by)
         return super().update(
-            is_accepted=True, justification=None, decided_by=by
+            is_accepted=True,
+            justification=None,
+            exemption=exemption,
+            decided_by=by,
         )
 
     def reject(self, justification="", *, by):
         """Reject everything in the queryset as decided by `by`."""
         self._assert_disclosure_unlocked(by)
         return super().update(
-            is_accepted=False, justification=justification, decided_by=by
+            is_accepted=False,
+            justification=justification,
+            exemption=None,
+            decided_by=by,
         )
 
     def reset(self):
@@ -293,7 +304,10 @@ class RedactionQuerySet(models.QuerySet):
         # a decision, so it is always subject to the post-disclosure lock.
         self._assert_disclosure_unlocked(None)
         return super().update(
-            is_accepted=False, justification=None, decided_by=None
+            is_accepted=False,
+            justification=None,
+            exemption=None,
+            decided_by=None,
         )
 
     # ---- post-disclosure lock ----
@@ -420,6 +434,18 @@ class Redaction(models.Model):
             "presence as 'rejected'."
         ),
     )
+    exemption = models.ForeignKey(
+        "ExemptionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="redactions",
+        help_text=(
+            "The basis for withholding this Operational Data. Only accepted "
+            "Operational Data carries one; a template in use cannot be "
+            "deleted, only deactivated."
+        ),
+    )
 
     redaction_type = models.CharField(
         max_length=10, choices=RedactionType.choices
@@ -467,6 +493,12 @@ class Redaction(models.Model):
             models.CheckConstraint(
                 name="redaction_accept_requires_decided_by",
                 check=Q(is_accepted=False) | Q(decided_by__isnull=False),
+            ),
+            # Third-Party PII is withheld by default and Data Subject
+            # Information is disclosed, so neither has a basis to record.
+            models.CheckConstraint(
+                name="redaction_exemption_requires_op_data",
+                check=Q(exemption__isnull=True) | Q(redaction_type="OP_DATA"),
             ),
         ]
         indexes = [

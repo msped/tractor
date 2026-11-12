@@ -579,6 +579,157 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(context_data["text"], "This is important context.")
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionExemptionSerializerTests(NetworkBlockerMixin, TestCase):
+    """An exemption is a template link, allowed on Operational Data only."""
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="202002", data_subject_name="Jane Doe"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "document.pdf", _make_pdf_bytes(), "application/pdf"
+            ),
+            extracted_text="Ref 1234 and Jane Doe.",
+        )
+        self.template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **kwargs):
+        defaults = {
+            "document": self.document,
+            "start_char": 4,
+            "end_char": 8,
+            "text": "1234",
+            "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
+        }
+        defaults.update(kwargs)
+        return Redaction.objects.create(**defaults)
+
+    def _save(self, instance, data):
+        serializer = RedactionSerializer(
+            instance=instance, data=data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        return serializer.save()
+
+    def test_accept_with_exemption_links_the_template(self):
+        r = self._save(
+            self._make_redaction(),
+            {"is_accepted": True, "exemption": self.template.pk},
+        )
+        self.assertTrue(r.is_accepted)
+        self.assertEqual(r.exemption, self.template)
+        self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_read_returns_the_exemption_id_and_name(self):
+        r = self._make_redaction(
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+            exemption=self.template,
+        )
+        data = RedactionSerializer(instance=r).data
+        self.assertEqual(data["exemption"], self.template.pk)
+        self.assertEqual(data["exemption_name"], "S.42 - Legal Privilege")
+
+    def test_read_without_an_exemption_returns_nulls(self):
+        data = RedactionSerializer(instance=self._make_redaction()).data
+        self.assertIsNone(data["exemption"])
+        self.assertIsNone(data["exemption_name"])
+
+    def test_exemption_off_operational_data_is_refused(self):
+        for redaction_type in (
+            Redaction.RedactionType.THIRD_PARTY_PII,
+            Redaction.RedactionType.DS_INFORMATION,
+        ):
+            with self.subTest(redaction_type=redaction_type):
+                serializer = RedactionSerializer(
+                    instance=self._make_redaction(
+                        redaction_type=redaction_type
+                    ),
+                    data={"is_accepted": True, "exemption": self.template.pk},
+                    partial=True,
+                )
+                self.assertFalse(serializer.is_valid())
+                self.assertIn("exemption", serializer.errors)
+
+    def test_exemption_with_a_type_change_off_operational_data_is_refused(
+        self,
+    ):
+        serializer = RedactionSerializer(
+            instance=self._make_redaction(),
+            data={
+                "redaction_type": Redaction.RedactionType.THIRD_PARTY_PII,
+                "is_accepted": True,
+                "exemption": self.template.pk,
+            },
+            partial=True,
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("exemption", serializer.errors)
+
+    def test_type_change_off_operational_data_clears_the_exemption(self):
+        r = self._save(
+            self._make_redaction(
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.HUMAN,
+                exemption=self.template,
+            ),
+            {"redaction_type": Redaction.RedactionType.DS_INFORMATION},
+        )
+        self.assertEqual(
+            r.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertIsNone(r.exemption)
+
+    def test_withdrawing_the_decision_clears_the_exemption(self):
+        r = self._save(
+            self._make_redaction(
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.HUMAN,
+                exemption=self.template,
+            ),
+            {"is_accepted": False},
+        )
+        self.assertIsNone(r.decided_by)
+        self.assertIsNone(r.exemption)
+
+    def test_reject_clears_the_exemption(self):
+        r = self._save(
+            self._make_redaction(
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.HUMAN,
+                exemption=self.template,
+            ),
+            {"is_accepted": False, "rejected": True},
+        )
+        self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertIsNone(r.exemption)
+
+    def test_manual_redaction_created_with_an_exemption(self):
+        """Undoing the Remove of a manual row recreates it with its exemption."""
+        serializer = RedactionSerializer(
+            data={
+                "document": self.document.pk,
+                "start_char": 4,
+                "end_char": 8,
+                "text": "1234",
+                "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
+                "is_suggestion": False,
+                "is_accepted": True,
+                "exemption": self.template.pk,
+            }
+        )
+        serializer.is_valid(raise_exception=True)
+        self.assertEqual(serializer.save().exemption, self.template)
+
+
 class BulkByTextSerializerTests(TestCase):
     def _valid_data(self, **overrides):
         data = {

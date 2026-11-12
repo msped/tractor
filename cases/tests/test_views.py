@@ -908,6 +908,168 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionExemptionViewTests(NetworkBlockerMixin, APITestCase):
+    """Accepting Operational Data under an exemption, single and bulk."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="exemptuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="EXMT01",
+            data_subject_name="Exempt Test",
+            created_by=self.user,
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "exempt.pdf", b"content", "application/pdf"
+            ),
+        )
+        self.template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        self.r1 = self._make_redaction(start_char=0, end_char=4, text="1234")
+        self.r2 = self._make_redaction(start_char=5, end_char=9, text="5678")
+        self.bulk_url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **kwargs):
+        defaults = {
+            "document": self.document,
+            "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
+        }
+        defaults.update(kwargs)
+        return Redaction.objects.create(**defaults)
+
+    def test_bulk_accept_with_exemption_applies_it_to_every_id(self):
+        response = self.client.patch(
+            self.bulk_url,
+            {
+                "ids": [str(self.r1.id), str(self.r2.id)],
+                "is_accepted": True,
+                "exemption": self.template.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for item in response.data:
+            self.assertEqual(item["exemption"], self.template.pk)
+            self.assertEqual(item["exemption_name"], "S.42 - Legal Privilege")
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertTrue(r.is_accepted)
+            self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+            self.assertEqual(r.exemption, self.template)
+
+    def test_bulk_accept_with_exemption_refuses_a_non_operational_row(self):
+        pii = self._make_redaction(
+            start_char=10,
+            end_char=14,
+            text="Jane",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        response = self.client.patch(
+            self.bulk_url,
+            {
+                "ids": [str(self.r1.id), str(pii.id)],
+                "is_accepted": True,
+                "exemption": self.template.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        for r in (self.r1, pii):
+            r.refresh_from_db()
+            self.assertIsNone(r.decided_by)
+
+    def test_bulk_exemption_without_accept_is_refused(self):
+        response = self.client.patch(
+            self.bulk_url,
+            {
+                "ids": [str(self.r1.id)],
+                "is_accepted": False,
+                "rejected": True,
+                "exemption": self.template.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.r1.refresh_from_db()
+        self.assertIsNone(self.r1.decided_by)
+
+    def test_bulk_withdraw_clears_the_exemption(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        response = self.client.patch(
+            self.bulk_url,
+            {"ids": [str(self.r1.id)], "is_accepted": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.r1.refresh_from_db()
+        self.assertIsNone(self.r1.decided_by)
+        self.assertIsNone(self.r1.exemption)
+
+    def test_single_accept_with_exemption_returns_its_name(self):
+        url = reverse("redaction-detail", kwargs={"pk": self.r1.id})
+        response = self.client.patch(
+            url,
+            {"is_accepted": True, "exemption": self.template.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["exemption"], self.template.pk)
+        self.assertEqual(
+            response.data["exemption_name"], "S.42 - Legal Privilege"
+        )
+
+    def test_single_exemption_on_pii_returns_400(self):
+        pii = self._make_redaction(
+            start_char=10,
+            end_char=14,
+            text="Jane",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        url = reverse("redaction-detail", kwargs={"pk": pii.id})
+        response = self.client.patch(
+            url,
+            {"is_accepted": True, "exemption": self.template.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        pii.refresh_from_db()
+        self.assertIsNone(pii.exemption)
+
+    def test_document_redaction_list_carries_the_exemption_name(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        url = reverse(
+            "redaction-list-create", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {r["id"]: r["exemption_name"] for r in response.data}
+        self.assertEqual(names[str(self.r1.id)], "S.42 - Legal Privilege")
+        self.assertIsNone(names[str(self.r2.id)])
+
+
 class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()

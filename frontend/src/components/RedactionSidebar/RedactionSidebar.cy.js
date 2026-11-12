@@ -102,13 +102,13 @@ describe('<RedactionSidebar />', () => {
             });
         });
 
-        it('labels the justification on an accepted card as its exemption', () => {
+        it('shows the exemption on an accepted card by name', () => {
             const acceptedWithExemption = {
                 ...mockRedactions,
                 accepted: {
                     total: 1,
                     items: [
-                        { id: 'a3', ids: ['a3'], isMerged: false, isGroup: false, text: 'privileged advice', redaction_type: 'OP_DATA', is_suggestion: false, justification: 'S.42 - Legal Privilege' },
+                        { id: 'a3', ids: ['a3'], isMerged: false, isGroup: false, text: 'privileged advice', redaction_type: 'OP_DATA', is_suggestion: false, exemption: 2, exemption_name: 'S.42 - Legal Privilege' },
                     ],
                 },
             };
@@ -245,31 +245,54 @@ describe('<RedactionSidebar />', () => {
                 cy.get('@onChangeTypeAndAccept').should('have.been.calledOnceWith', 'd1', 'PII');
             });
 
-            it('offers exemptions on a DS_INFO suggestion too', () => {
+            it('offers no exemptions on a DS_INFO suggestion, which is disclosed', () => {
                 cy.contains('li', 'ds name').find('button[aria-label="change redaction type and accept"]').click();
                 cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
-                cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
-                cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['d1'], 'S.42 - Legal Privilege');
+                cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('not.exist');
+                cy.get('input[placeholder="Search exemptions..."]').should('not.exist');
             });
         });
 
-        it('filters templates by search input', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
-            cy.get('input[placeholder="Search exemptions..."]').type('Legal');
-            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
-        });
+        context('OP_DATA suggestion', () => {
+            const opDataPending = {
+                ...mockRedactions,
+                pending: {
+                    total: 1,
+                    items: [
+                        { id: 'o1', ids: ['o1'], isMerged: false, isGroup: false, text: 'ref 1234', redaction_type: 'OP_DATA', is_suggestion: true, source: 'NER' },
+                    ],
+                },
+            };
 
-        it('shows "No exemptions found" when search matches nothing', () => {
-            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
-            cy.get('input[placeholder="Search exemptions..."]').type('zzz');
-            cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
-        });
+            beforeEach(() => {
+                cy.fullMount(<RedactionSidebar {...baseProps} redactions={opDataPending} />);
+            });
 
-        it('shows "No exemptions found" when no templates are configured', () => {
-            cy.fullMount(<RedactionSidebar {...baseProps} exemptionTemplates={[]} redactions={mockRedactions} />);
-            cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
-            cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
+            it('accepts with the id of the exemption picked from the accept dropdown', () => {
+                cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
+                cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+                cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['o1'], 2);
+                cy.get('[role="menu"]').should('not.exist');
+            });
+
+            it('filters templates by search input', () => {
+                cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
+                cy.get('input[placeholder="Search exemptions..."]').type('Legal');
+                cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
+                cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
+            });
+
+            it('shows "No exemptions found" when search matches nothing', () => {
+                cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
+                cy.get('input[placeholder="Search exemptions..."]').type('zzz');
+                cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
+            });
+
+            it('shows "No exemptions found" when no templates are configured', () => {
+                cy.fullMount(<RedactionSidebar {...baseProps} exemptionTemplates={[]} redactions={opDataPending} />);
+                cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
+                cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
+            });
         });
 
         it('calls onCardClick with the item id when card content is clicked', () => {
@@ -294,11 +317,11 @@ describe('<RedactionSidebar />', () => {
             cy.contains('[role="menuitem"]', 'Accept as Data Subject Information').should('not.exist');
         });
 
-        it('accepts with an exemption picked from the accept dropdown', () => {
+        it('offers no exemptions on a Third-Party PII suggestion, which is withheld by default', () => {
             cy.contains('li', 'pending text').find('button[aria-label="change redaction type and accept"]').click();
-            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
-            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['p1'], 'S.42 - Legal Privilege');
-            cy.get('[role="menu"]').should('not.exist');
+            cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('not.exist');
+            cy.get('input[placeholder="Search exemptions..."]').should('not.exist');
         });
 
         it('calls onChangeTypeAndAccept when a new type is selected', () => {
@@ -438,10 +461,29 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onBulkReject').should('have.been.calledOnceWith', ['g1', 'g2', 'g3']);
         });
 
-        it('accepts every occurrence in the group with an exemption', () => {
+        it('offers no exemptions on a Third-Party PII group', () => {
+            cy.get('button[aria-label="change redaction type and accept all"]').click();
+            cy.contains('[role="menuitem"]', 'Accept all in case').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('not.exist');
+        });
+
+        it('accepts every occurrence of an OP_DATA group with an exemption', () => {
+            const opDataGroup = {
+                ...mockRedactionsWithGroup,
+                pending: {
+                    total: 3,
+                    items: [{
+                        ...mockRedactionsWithGroup.pending.items[0],
+                        key: 'john doe::op_data',
+                        redaction_type: 'OP_DATA',
+                        items: mockRedactionsWithGroup.pending.items[0].items.map(i => ({ ...i, redaction_type: 'OP_DATA' })),
+                    }],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={opDataGroup} />);
             cy.get('button[aria-label="change redaction type and accept all"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
-            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 'S.42 - Legal Privilege');
+            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['g1', 'g2', 'g3'], 2);
         });
 
         it('rejects every occurrence in the group as Data Subject', () => {
@@ -637,10 +679,24 @@ describe('<RedactionSidebar />', () => {
             });
         });
 
-        it('accepts every merged part with an exemption', () => {
+        it('offers no exemptions on a merged Third-Party PII item', () => {
+            cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
+            cy.contains('[role="menuitem"]', 'Accept as Operational Data').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('not.exist');
+        });
+
+        it('accepts every part of a merged OP_DATA item with an exemption', () => {
+            const mergedOpData = {
+                ...mockRedactionsWithMerged,
+                pending: {
+                    total: 2,
+                    items: [{ ...mockRedactionsWithMerged.pending.items[0], redaction_type: 'OP_DATA' }],
+                },
+            };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={mergedOpData} />);
             cy.contains('li', 'John Doe').find('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
-            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['merge1', 'merge2'], 'S.42 - Legal Privilege');
+            cy.get('@onAcceptWithExemption').should('have.been.calledOnceWith', ['merge1', 'merge2'], 2);
         });
 
         it('renders a remove-constituent dropdown arrow next to the split button', () => {

@@ -325,7 +325,9 @@ class CaseDetailView(RetrieveUpdateDestroyAPIView):
                 queryset=Document.objects.prefetch_related(
                     Prefetch(
                         "redactions",
-                        queryset=Redaction.objects.select_related("context"),
+                        queryset=Redaction.objects.select_related(
+                            "context", "exemption"
+                        ),
                     )
                 ),
             )
@@ -358,7 +360,9 @@ class DocumentListCreateView(ListCreateAPIView):
         return Document.objects.prefetch_related(
             Prefetch(
                 "redactions",
-                queryset=Redaction.objects.select_related("context"),
+                queryset=Redaction.objects.select_related(
+                    "context", "exemption"
+                ),
             )
         )
 
@@ -472,7 +476,9 @@ class DocumentReviewView(RetrieveAPIView):
         return Document.objects.prefetch_related(
             Prefetch(
                 "redactions",
-                queryset=Redaction.objects.select_related("context"),
+                queryset=Redaction.objects.select_related(
+                    "context", "exemption"
+                ),
             )
         )
 
@@ -495,7 +501,7 @@ class RedactionListCreateView(ListCreateAPIView):
     def get_queryset(self):
         return Redaction.objects.filter(
             document_id=self.kwargs["document_id"]
-        ).select_related("context")
+        ).select_related("context", "exemption")
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
@@ -579,13 +585,24 @@ class BulkRedactionUpdateView(APIView):
         is_accepted = serializer.validated_data["is_accepted"]
         justification = serializer.validated_data["justification"]
         rejected = serializer.validated_data["rejected"]
+        exemption = serializer.validated_data["exemption"]
 
         target_qs = Redaction.objects.filter(
             document_id=document_id,
             id__in=ids,
         )
+        if (
+            exemption is not None
+            and target_qs.exclude(
+                redaction_type=Redaction.RedactionType.OPERATIONAL_DATA
+            ).exists()
+        ):
+            return Response(
+                {"exemption": ["Only Operational Data can be exempted."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if is_accepted:
-            target_qs.accept(by=Redaction.DecidedBy.HUMAN)
+            target_qs.accept(by=Redaction.DecidedBy.HUMAN, exemption=exemption)
         elif rejected or justification:
             target_qs.reject(justification or "", by=Redaction.DecidedBy.HUMAN)
         else:
@@ -595,7 +612,7 @@ class BulkRedactionUpdateView(APIView):
 
         updated = Redaction.objects.filter(
             id__in=ids, document_id=document_id
-        ).select_related("context")
+        ).select_related("context", "exemption")
         serializer = RedactionSerializer(updated, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
