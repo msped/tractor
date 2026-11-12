@@ -22,6 +22,7 @@ from ..models import (
     Case,
     Document,
     DocumentExportSettings,
+    ExemptionTemplate,
     InternalReview,
     Redaction,
     RedactionContext,
@@ -2359,6 +2360,8 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
         )
         self.assertTrue(name.is_accepted)
         self.assertEqual(name.decided_by, Redaction.DecidedBy.DS_RECORD_MATCH)
+        # Resolution only creates rows, and a new DS_INFO row has no basis.
+        self.assertIsNone(name.exemption)
 
     def test_a_third_partys_detail_stays_third_party_with_no_rationale(self):
         text = "SMITH, Jane\t07700 900111"
@@ -2735,6 +2738,23 @@ class ReclaimDataSubjectSpansTests(NetworkBlockerMixin, TestCase):
             op.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
         )
         self.assertEqual((op.start_char, op.end_char), (0, 55))
+
+    def test_an_exempted_burying_span_keeps_its_exemption(self):
+        """Record match only creates rows: the carved one carries no basis."""
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        op = self._whole_sentence_operational()
+        Redaction.objects.filter(pk=op.pk).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=template
+        )
+
+        reclaim_data_subject_spans(self.document)
+
+        op.refresh_from_db()
+        self.assertEqual(op.exemption, template)
+        [row] = self._ds_rows()
+        self.assertIsNone(row.exemption)
 
     def test_the_disclosure_export_now_shows_the_name(self):
         """End to end: the carve-out plus the subtraction rule."""

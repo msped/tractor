@@ -16,7 +16,7 @@ from ..ds_info_propagation import (
     propagate_terms_to_document,
     summarize_propagation,
 )
-from ..models import Case, Document, Redaction
+from ..models import Case, Document, ExemptionTemplate, Redaction
 
 MEDIA_ROOT = tempfile.mkdtemp()
 
@@ -251,6 +251,30 @@ class ApplyPlanTests(PlanApplyTestCase):
             created.redaction_type, Redaction.RedactionType.DS_INFORMATION
         )
         self.assertTrue(created.is_accepted)
+
+    def test_upgrading_an_exempted_operational_row_clears_its_exemption(self):
+        """Disclosed text has no basis for withholding, so the upgrade drops it."""
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        exempted = self._redaction(
+            15, 18, "Bob", Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        Redaction.objects.filter(pk=exempted.pk).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=template
+        )
+
+        apply_plan(plan_document(self.document, build_term_patterns(["Bob"])))
+
+        exempted.refresh_from_db()
+        self.assertEqual(
+            exempted.redaction_type, Redaction.RedactionType.DS_INFORMATION
+        )
+        self.assertTrue(exempted.is_accepted)
+        self.assertEqual(
+            exempted.decided_by, Redaction.DecidedBy.DS_INFO_PROPAGATION
+        )
+        self.assertIsNone(exempted.exemption)
 
     def test_write_query_count_is_constant(self):
         # No deletes here: auditlog's per-object delete signals make the
