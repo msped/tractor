@@ -49,6 +49,7 @@ describe('<RedactionSidebar />', () => {
             onBulkAccept: cy.stub().as('onBulkAccept'),
             onBulkReject: cy.stub().as('onBulkReject'),
             onAcceptWithExemption: cy.stub().as('onAcceptWithExemption'),
+            onSetExemption: cy.stub().as('onSetExemption'),
             onSplitMerge: cy.stub().as('onSplitMerge'),
             onRemoveFromMerge: cy.stub().as('onRemoveFromMerge'),
             onSuggestionMouseEnter: cy.stub().as('onSuggestionMouseEnter'),
@@ -407,6 +408,83 @@ describe('<RedactionSidebar />', () => {
                 cy.contains('button', 'Cancel').click();
                 cy.get('textarea[name="Context for Disclosure"]').should('not.exist');
             });
+        });
+    });
+
+    context('Exemption menu on accepted cards', () => {
+        const countIds = (items) => items.reduce((n, i) => n + i.ids.length, 0);
+        const withAccepted = (accepted, manual = []) => ({
+            pending: { total: 0, items: [] },
+            accepted: { total: countIds(accepted), items: accepted },
+            rejected: { total: 0, items: [] },
+            manual: { total: countIds(manual), items: manual },
+        });
+
+        const exempted = { id: 'a3', ids: ['a3'], isMerged: false, isGroup: false, text: 'privileged advice', redaction_type: 'OP_DATA', is_suggestion: true, is_accepted: true, exemption: 2, exemption_name: 'S.42 - Legal Privilege' };
+        const unexempted = { id: 'a4', ids: ['a4'], isMerged: false, isGroup: false, text: 'ref 1234', redaction_type: 'OP_DATA', is_suggestion: true, is_accepted: true, exemption: null, exemption_name: null };
+
+        it('changes the exemption on an accepted OP_DATA suggestion', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([exempted])} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'privileged advice').find('button[aria-label="change exemption"]').should('have.text', 'Exemption: S.42 - Legal Privilege').click();
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+            cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a3'], 1);
+            cy.get('[role="menu"]').should('not.exist');
+        });
+
+        it('clears the exemption, keeping the redaction accepted', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([exempted])} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'privileged advice').find('button[aria-label="change exemption"]').click();
+            cy.contains('[role="menuitem"]', 'Clear exemption').click();
+            cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a3'], null);
+            cy.get('@onRemove').should('not.have.been.called');
+        });
+
+        it('sets an exemption on an accepted OP_DATA card that has none', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([unexempted])} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'ref 1234').find('button[aria-label="change exemption"]').should('have.text', 'Add exemption').click();
+            cy.contains('[role="menuitem"]', 'Clear exemption').should('not.exist');
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a4'], 2);
+        });
+
+        it('does not open the card when the exemption menu is clicked', () => {
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([unexempted])} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'ref 1234').find('button[aria-label="change exemption"]').click();
+            cy.get('@onCardClick').should('not.have.been.called');
+        });
+
+        it('offers the menu on a manual OP_DATA redaction', () => {
+            const manual = { ...unexempted, id: 'm2', ids: ['m2'], text: 'privileged paragraph', is_suggestion: false };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([], [manual])} />);
+            cy.contains('manual (1)').click();
+            cy.contains('li', 'privileged paragraph').find('button[aria-label="change exemption"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.get('@onSetExemption').should('have.been.calledOnceWith', ['m2'], 2);
+        });
+
+        it('applies to every part of a merged OP_DATA card', () => {
+            const merged = { ...unexempted, ids: ['a4', 'a5'], isMerged: true, constituents: [{ id: 'a4', text: 'ref' }, { id: 'a5', text: '1234' }] };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([merged])} />);
+            cy.contains('accepted (2)').click();
+            cy.contains('li', 'ref 1234').find('button[aria-label="change exemption"]').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
+            cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a4', 'a5'], 2);
+        });
+
+        it('offers no exemption menu on PII or DS_INFO cards', () => {
+            const pii = { ...unexempted, id: 'a6', ids: ['a6'], text: 'Jane Smith', redaction_type: 'PII' };
+            const dsInfo = { ...unexempted, id: 'a7', ids: ['a7'], text: 'Joe Bloggs', redaction_type: 'DS_INFO' };
+            const manualPii = { ...pii, id: 'm3', ids: ['m3'], text: 'typed name', is_suggestion: false };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([pii, dsInfo], [manualPii])} />);
+            cy.contains('accepted (2)').click();
+            cy.contains('manual (1)').click();
+            cy.contains('li', 'Jane Smith').should('be.visible');
+            cy.contains('li', 'typed name').should('be.visible');
+            cy.get('button[aria-label="change exemption"]').should('not.exist');
         });
     });
 

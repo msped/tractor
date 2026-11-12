@@ -1069,6 +1069,85 @@ class RedactionExemptionViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(names[str(self.r1.id)], "S.42 - Legal Privilege")
         self.assertIsNone(names[str(self.r2.id)])
 
+    def _patch_exemption(self, redaction, exemption):
+        url = reverse("redaction-detail", kwargs={"pk": redaction.id})
+        return self.client.patch(url, {"exemption": exemption}, format="json")
+
+    def test_changing_the_exemption_on_an_accepted_card(self):
+        other = ExemptionTemplate.objects.create(name="S.31 - Law Enforcement")
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        response = self._patch_exemption(self.r1, other.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["exemption_name"], other.name)
+        self.r1.refresh_from_db()
+        self.assertTrue(self.r1.is_accepted)
+        self.assertEqual(self.r1.exemption, other)
+
+    def test_clearing_the_exemption_keeps_the_redaction_accepted(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        response = self._patch_exemption(self.r1, None)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.r1.refresh_from_db()
+        self.assertTrue(self.r1.is_accepted)
+        self.assertIsNone(self.r1.exemption)
+
+    def test_setting_an_exemption_is_a_human_decision(self):
+        """A machine-accepted row becomes human-decided once its basis is set."""
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.CASE_PROPAGATION
+        )
+
+        self._patch_exemption(self.r1, self.template.pk)
+
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.exemption, self.template)
+        self.assertEqual(self.r1.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_a_manual_redaction_takes_an_exemption(self):
+        manual = self._make_redaction(
+            start_char=10,
+            end_char=14,
+            text="9999",
+            is_suggestion=False,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        response = self._patch_exemption(manual, self.template.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        manual.refresh_from_db()
+        self.assertEqual(manual.exemption, self.template)
+
+    def test_a_pending_suggestion_cannot_be_given_an_exemption(self):
+        response = self._patch_exemption(self.r1, self.template.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.r1.refresh_from_db()
+        self.assertIsNone(self.r1.exemption)
+
+    def test_trimming_an_exempted_span_keeps_its_exemption(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        url = reverse("redaction-detail", kwargs={"pk": self.r1.id})
+
+        response = self.client.patch(
+            url, {"end_char": 3, "text": "123"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.exemption, self.template)
+
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class RedactionDisclosureLockViewTests(NetworkBlockerMixin, APITestCase):
@@ -1153,6 +1232,37 @@ class RedactionDisclosureLockViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.redaction.refresh_from_db()
         self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_an_exemption_change_is_refused_while_locked(self):
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        exempted = Redaction.objects.create(
+            document=self.document,
+            start_char=5,
+            end_char=9,
+            text="5678",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+            exemption=template,
+        )
+        url = reverse("redaction-detail", kwargs={"pk": exempted.id})
+
+        for exemption in (
+            None,
+            ExemptionTemplate.objects.create(name="S.31").pk,
+        ):
+            with self.subTest(exemption=exemption):
+                response = self.client.patch(
+                    url, {"exemption": exemption}, format="json"
+                )
+
+                self.assertEqual(
+                    response.status_code, status.HTTP_403_FORBIDDEN
+                )
+                exempted.refresh_from_db()
+                self.assertEqual(exempted.exemption, template)
 
     def test_a_write_that_is_not_a_decision_is_not_locked(self):
         """The lock guards decisions; span geometry is not one."""

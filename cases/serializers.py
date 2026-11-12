@@ -329,8 +329,16 @@ class RedactionSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         rejected = validated_data.pop("rejected", False)
+        # Setting, changing or clearing the basis for withholding is a
+        # decision too, even when it is the only field written.
+        exemption_changed = (
+            "exemption" in validated_data
+            and getattr(validated_data["exemption"], "pk", None)
+            != instance.exemption_id
+        )
         if (
             rejected
+            or exemption_changed
             or {"is_accepted", "justification"} & validated_data.keys()
         ):
             # Saving the instance skips the queryset decision methods, so

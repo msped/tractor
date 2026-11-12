@@ -103,6 +103,31 @@ export function useRedactionActions({
         }
     }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
+    // Setting, changing or clearing an accepted card's exemption re-accepts it
+    // under the new one (null clears). Parts of a merged card may have differed,
+    // so undo restores each previous exemption with its own write.
+    const handleSetExemption = useCallback(async (ids, exemptionId) => {
+        setScrollToId(null);
+        const idsByPrevious = new Map();
+        for (const r of redactions.filter(r => ids.includes(r.id))) {
+            const previous = r.exemption ?? null;
+            idsByPrevious.set(previous, [...(idsByPrevious.get(previous) ?? []), r.id]);
+        }
+        const setAll = () => bulkUpdateRedactions(documentId, ids, true, null, { exemption: exemptionId });
+        try {
+            applyUpdates(await setAll());
+            pushHistory(
+                async () => applyUpdates((await Promise.all(
+                    [...idsByPrevious].map(([exemption, partIds]) =>
+                        bulkUpdateRedactions(documentId, partIds, true, null, { exemption }))
+                )).flat()),
+                async () => applyUpdates(await setAll())
+            );
+        } catch (error) {
+            toastError(error, "Failed to change the exemption. Please try again.");
+        }
+    }, [documentId, redactions, pushHistory, applyUpdates, setScrollToId]);
+
     const handleChangeTypeAndAccept = useCallback(async (redactionId, newType) => {
         setScrollToId(null);
         const prev = redactions.find(r => r.id === redactionId);
@@ -173,6 +198,7 @@ export function useRedactionActions({
         handleReject,
         handleBulkReject,
         handleAcceptWithExemption,
+        handleSetExemption,
         handleChangeTypeAndAccept,
         handleBulkChangeTypeAndAccept,
         handleSplitMerge,

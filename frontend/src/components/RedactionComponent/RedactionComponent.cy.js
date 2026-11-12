@@ -795,6 +795,60 @@ describe('<RedactionComponent />', () => {
             cy.contains('li', 'John Doe').contains('Exemption: S.42 - Legal Privilege').should('be.visible');
         });
 
+        const openCardExemptionMenu = (section, text) => {
+            cy.contains(section).click();
+            cy.contains('li', text).find('button[aria-label="change exemption"]').click();
+        };
+
+        it('changes an accepted card\'s exemption in one bulk write, and undo restores it', () => {
+            interceptWrites([exemptedSuggestion]);
+            mountRedactionComponent(mockDocument, [exemptedSuggestion]);
+            openCardExemptionMenu('accepted (1)', 'John Doe');
+            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {
+                expect(body.ids).to.deep.equal(['s1']);
+                expect(body).to.include({ is_accepted: true, exemption: 1 });
+            });
+            cy.contains('li', 'John Doe').contains('Exemption: S.40 - Personal Information').should('be.visible');
+
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {
+                expect(body.ids).to.deep.equal(['s1']);
+                expect(body).to.include({ is_accepted: true, exemption: 2 });
+            });
+            cy.contains('li', 'John Doe').contains('Exemption: S.42 - Legal Privilege').should('be.visible');
+        });
+
+        it('clears a manual redaction\'s exemption without removing it, and undo restores it', () => {
+            interceptWrites([exemptedManual]);
+            mountRedactionComponent(mockDocument, [exemptedManual]);
+            openCardExemptionMenu('manual (1)', 'John Doe');
+            cy.contains('[role="menuitem"]', 'Clear exemption').click();
+
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('include', { is_accepted: true, exemption: null });
+            cy.get('@deleteRedaction.all').should('have.length', 0);
+            cy.contains('li', 'John Doe').contains('Add exemption').should('be.visible');
+
+            cy.get('button[aria-label="Undo"]').click();
+            cy.wait('@bulkUpdateRedaction').its('request.body').should('include', { is_accepted: true, exemption: 2 });
+            cy.contains('li', 'John Doe').contains('Exemption: S.42 - Legal Privilege').should('be.visible');
+        });
+
+        it('explains a change refused by the disclosure lock', () => {
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', {
+                statusCode: 403,
+                body: { detail: 'This case has been disclosed — redaction decisions can only be changed while an Internal Review is open.' },
+            }).as('lockedChange');
+            mountRedactionComponent(mockDocument, [exemptedManual]);
+            openCardExemptionMenu('manual (1)', 'John Doe');
+            cy.contains('[role="menuitem"]', 'Clear exemption').click();
+
+            cy.wait('@lockedChange');
+            cy.contains('only be changed while an Internal Review is open').should('be.visible');
+            cy.contains('li', 'John Doe').contains('Exemption: S.42 - Legal Privilege').should('be.visible');
+        });
+
         it('shows an error toast when the accept fails', () => {
             cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', { statusCode: 500 }).as('failedExemption');
             mountRedactionComponent(mockDocument, [opDataPending]);
