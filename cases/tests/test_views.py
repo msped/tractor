@@ -1334,6 +1334,44 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
             ).exists()
         )
 
+    def test_new_template_is_not_trainable(self):
+        url = reverse("exemption-template-list")
+        response = self.admin_client.post(
+            url, {"name": "S.31 - Law Enforcement"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIs(response.data["trainable"], False)
+
+    def test_list_returns_trainable(self):
+        url = reverse("exemption-template-list")
+        response = self.client.get(url)
+
+        self.assertIs(response.data[0]["trainable"], False)
+
+    def test_admin_sets_trainable(self):
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.admin_client.patch(
+            url, {"trainable": True}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIs(response.data["trainable"], True)
+        self.active.refresh_from_db()
+        self.assertTrue(self.active.trainable)
+
+    def test_trainable_change_forbidden_for_non_admin(self):
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.client.patch(url, {"trainable": True}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.active.refresh_from_db()
+        self.assertFalse(self.active.trainable)
+
     def test_create_forbidden_for_non_admin(self):
         """POST by a regular user is rejected with 403."""
         url = reverse("exemption-template-list")

@@ -518,7 +518,10 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(data["id"], template.pk)
         self.assertEqual(data["name"], "S.40 - Personal Information")
         self.assertEqual(data["description"], "Personal data exemption")
-        self.assertEqual(set(data.keys()), {"id", "name", "description"})
+        self.assertIs(data["trainable"], False)
+        self.assertEqual(
+            set(data.keys()), {"id", "name", "description", "trainable"}
+        )
 
     def test_exemption_template_serializer_create(self):
         """Test deserialization and creation of an ExemptionTemplate."""

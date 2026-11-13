@@ -11,8 +11,8 @@ const TestWrapper = ({ children }) => (
 );
 
 const mockTemplates = [
-    { id: 1, name: 'S.40 - Personal Information', description: 'Personal data exemption' },
-    { id: 2, name: 'S.42 - Legal Privilege', description: '' },
+    { id: 1, name: 'S.40 - Personal Information', description: 'Personal data exemption', trainable: false },
+    { id: 2, name: 'S.42 - Legal Privilege', description: '', trainable: true },
 ];
 
 describe('<ExemptionTemplatesCard />', () => {
@@ -151,6 +151,49 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.get('[role="dialog"]').should('be.visible');
         cy.get('button[aria-label="close"]').click();
         cy.get('[role="dialog"]').should('not.exist');
+    });
+
+    context('Trains the model toggle', () => {
+        const toggleFor = (name) => cy.get(`input[aria-label="${name} trains the model"]`);
+
+        it('shows each template\'s current setting and explains it', () => {
+            cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+            cy.wait('@getTemplates');
+            cy.contains('button', 'Manage').click();
+            cy.get('[role="dialog"]').contains('teaches the model').should('be.visible');
+            toggleFor('S.40 - Personal Information').should('not.be.checked');
+            toggleFor('S.42 - Legal Privilege').should('be.checked');
+        });
+
+        it('saves a change to the template', () => {
+            cy.intercept('PATCH', '**/cases/exemptions/1', {
+                body: { ...mockTemplates[0], trainable: true },
+            }).as('updateTemplate');
+            cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+            cy.wait('@getTemplates');
+            cy.contains('button', 'Manage').click();
+            cy.intercept('GET', '**/cases/exemptions', {
+                body: [{ ...mockTemplates[0], trainable: true }, mockTemplates[1]],
+            }).as('refetchTemplates');
+
+            toggleFor('S.40 - Personal Information').click();
+
+            cy.wait('@updateTemplate').its('request.body').should('deep.equal', { trainable: true });
+            cy.wait('@refetchTemplates');
+            toggleFor('S.40 - Personal Information').should('be.checked');
+        });
+
+        it('keeps the setting when saving fails', () => {
+            cy.intercept('PATCH', '**/cases/exemptions/2', { statusCode: 500, body: {} }).as('updateFail');
+            cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+            cy.wait('@getTemplates');
+            cy.contains('button', 'Manage').click();
+
+            toggleFor('S.42 - Legal Privilege').click();
+
+            cy.wait('@updateFail');
+            toggleFor('S.42 - Legal Privilege').should('be.checked');
+        });
     });
 
     it('deletes a template after confirmation', () => {

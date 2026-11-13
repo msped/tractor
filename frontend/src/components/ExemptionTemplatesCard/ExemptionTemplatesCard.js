@@ -13,7 +13,9 @@ import {
     DialogContent,
     DialogTitle,
     Divider,
+    FormControlLabel,
     IconButton,
+    Switch,
     TextField,
     Typography,
 } from '@mui/material';
@@ -25,6 +27,7 @@ import {
     createExemptionTemplate,
     deleteExemptionTemplate,
     getExemptionTemplates,
+    updateExemptionTemplate,
 } from '@/services/redactionService';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
@@ -73,6 +76,18 @@ export const ExemptionTemplatesCard = () => {
             await mutate();
         } catch (e) {
             toastError(e, 'Failed to delete template.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleTrainableChange = async (template, trainable) => {
+        setIsSubmitting(true);
+        try {
+            await updateExemptionTemplate(template.id, { trainable });
+            await mutate();
+        } catch (e) {
+            toastError(e, 'Failed to update template.');
         } finally {
             setIsSubmitting(false);
         }
@@ -159,6 +174,10 @@ export const ExemptionTemplatesCard = () => {
                     {templates && (
                         templates.length > 0 ? (
                             <Box>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                    Operational Data withheld under an exemption only teaches the model when that
+                                    exemption trains it. Leave it off for exemptions that cover people&apos;s details.
+                                </Typography>
                                 {templates.map((template, index) => (
                                     <Box key={template.id}>
                                         {index > 0 && <Divider />}
@@ -171,15 +190,30 @@ export const ExemptionTemplatesCard = () => {
                                                     </Typography>
                                                 )}
                                             </Box>
-                                            <IconButton
-                                                aria-label={`delete ${template.name}`}
-                                                color="error"
-                                                size="small"
-                                                onClick={() => setConfirmDelete(template)}
-                                                disabled={isSubmitting}
-                                            >
-                                                <DeleteIcon />
-                                            </IconButton>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                                                <FormControlLabel
+                                                    label="Trains model"
+                                                    slotProps={{ typography: { variant: 'caption' } }}
+                                                    control={
+                                                        <Switch
+                                                            size="small"
+                                                            checked={template.trainable}
+                                                            onChange={(e) => handleTrainableChange(template, e.target.checked)}
+                                                            disabled={isSubmitting}
+                                                            slotProps={{ input: { 'aria-label': `${template.name} trains the model` } }}
+                                                        />
+                                                    }
+                                                />
+                                                <IconButton
+                                                    aria-label={`delete ${template.name}`}
+                                                    color="error"
+                                                    size="small"
+                                                    onClick={() => setConfirmDelete(template)}
+                                                    disabled={isSubmitting}
+                                                >
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </Box>
                                         </Box>
                                     </Box>
                                 ))}

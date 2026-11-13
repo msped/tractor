@@ -124,6 +124,15 @@ export const createExemptionTemplate = async (data) => {
     }
 };
 
+export const updateExemptionTemplate = async (templateId, data) => {
+    try {
+        const response = await apiClient.patch(`cases/exemptions/${templateId}`, data);
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to update exemption template. Please try again.');
+    }
+};
+
 export const deleteExemptionTemplate = async (templateId) => {
     try {
         await apiClient.delete(`cases/exemptions/${templateId}`);

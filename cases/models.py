@@ -361,11 +361,18 @@ class RedactionQuerySet(models.QuerySet):
     def trainable(self):
         """
         The canonical SpanCat training selection: human-accepted redactions,
-        excluding data-subject information.
+        excluding data-subject information and anything withheld under an
+        exemption template that is not trainable.
+
+        The template's flag is read live, so changing it applies to past
+        redactions at the next run.  An excluded span's text stays in its
+        document, where SpanCat reads it as a negative.
         """
-        return self.filter(
-            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
-        ).exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+        return (
+            self.filter(is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN)
+            .exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+            .exclude(exemption__trainable=False)
+        )
 
     # ---- enforcement: no naked writes to decision state ----
     def update(self, **kwargs):
@@ -697,6 +704,14 @@ class ExemptionTemplate(models.Model):
     )
     is_active = models.BooleanField(
         default=True, help_text="Inactive templates are hidden from the UI."
+    )
+    trainable = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether Operational Data withheld under this exemption trains "
+            "the model. Off by default, so a personal-information style "
+            "exemption cannot teach it that names are operational."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

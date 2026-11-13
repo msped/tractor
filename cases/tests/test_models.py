@@ -594,6 +594,25 @@ class RedactionExemptionTests(NetworkBlockerMixin, TestCase):
                         exemption=self.template,
                     )
 
+    def test_templates_start_not_trainable(self):
+        self.assertFalse(self.template.trainable)
+
+    def test_trainable_reads_the_exemption_flag(self):
+        exempted = self._make_exempted()
+        plain = self._make_redaction(
+            start_char=5,
+            end_char=9,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        self.assertNotIn(exempted, Redaction.objects.trainable())
+        self.assertIn(plain, Redaction.objects.trainable())
+
+        self.template.trainable = True
+        self.template.save()
+
+        self.assertIn(exempted, Redaction.objects.trainable())
+
     def test_template_in_use_cannot_be_deleted(self):
         self._make_exempted()
         with self.assertRaises(ProtectedError):
