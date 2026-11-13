@@ -45,6 +45,9 @@ export const ExemptionTemplatesCard = () => {
     const [isAdding, setIsAdding] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(null);
+    // A template redactions are withheld under can't be deleted; the server
+    // says why, and the admin can deactivate it instead.
+    const [inUse, setInUse] = useState(null);
     const [manageOpen, setManageOpen] = useState(false);
 
     const handleAdd = async () => {
@@ -67,15 +70,34 @@ export const ExemptionTemplatesCard = () => {
     };
 
     const handleDeleteConfirm = async () => {
-        const id = confirmDelete.id;
+        const template = confirmDelete;
         setConfirmDelete(null);
         setIsSubmitting(true);
         try {
-            await deleteExemptionTemplate(id);
+            await deleteExemptionTemplate(template.id);
             toast.success('Exemption template deleted.');
             await mutate();
         } catch (e) {
-            toastError(e, 'Failed to delete template.');
+            if (e.status === 409) {
+                setInUse({ template, message: e.message });
+            } else {
+                toastError(e, 'Failed to delete template.');
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeactivateConfirm = async () => {
+        const { template } = inUse;
+        setInUse(null);
+        setIsSubmitting(true);
+        try {
+            await updateExemptionTemplate(template.id, { is_active: false });
+            toast.success('Exemption template deactivated.');
+            await mutate();
+        } catch (e) {
+            toastError(e, 'Failed to deactivate template.');
         } finally {
             setIsSubmitting(false);
         }
@@ -105,6 +127,15 @@ export const ExemptionTemplatesCard = () => {
                 description={`Are you sure you want to delete "${confirmDelete?.name}"? This cannot be undone.`}
                 confirmLabel="Delete"
                 confirmColor="error"
+            />
+
+            <ConfirmationDialog
+                open={!!inUse}
+                onClose={() => setInUse(null)}
+                onConfirm={handleDeactivateConfirm}
+                title="Template in use"
+                description={inUse?.message}
+                confirmLabel="Deactivate"
             />
 
             <Dialog open={manageOpen} onClose={() => setManageOpen(false)} maxWidth="sm" fullWidth>

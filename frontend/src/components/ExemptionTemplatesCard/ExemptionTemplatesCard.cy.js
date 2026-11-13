@@ -196,6 +196,53 @@ describe('<ExemptionTemplatesCard />', () => {
         });
     });
 
+    context('Deleting a template in use', () => {
+        const inUseMessage = '"S.40 - Personal Information" is used by 2 redactions, so it can\'t be deleted. Deactivate it to hide it from reviewers; existing redactions keep it.';
+
+        const attemptDelete = () => {
+            cy.intercept('DELETE', '**/cases/exemptions/1', { statusCode: 409, body: { detail: inUseMessage, in_use: 2 } }).as('deleteInUse');
+            cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
+            cy.wait('@getTemplates');
+            cy.contains('button', 'Manage').click();
+            cy.get('button[aria-label="delete S.40 - Personal Information"]').click();
+            cy.get('button').contains('Delete').last().click();
+            cy.wait('@deleteInUse');
+        };
+
+        it('explains the template is in use and offers to deactivate it instead', () => {
+            attemptDelete();
+            cy.contains('[role="dialog"]', 'Template in use').within(() => {
+                cy.contains('is used by 2 redactions').should('be.visible');
+                cy.contains('button', 'Deactivate').should('be.visible');
+            });
+        });
+
+        it('deactivates the template, which leaves the list', () => {
+            cy.intercept('PATCH', '**/cases/exemptions/1', { body: { ...mockTemplates[0], is_active: false } }).as('deactivate');
+            attemptDelete();
+            cy.intercept('GET', '**/cases/exemptions', { body: [mockTemplates[1]] }).as('refetchTemplates');
+
+            cy.contains('[role="dialog"]', 'Template in use').contains('button', 'Deactivate').click();
+
+            cy.wait('@deactivate').its('request.body').should('deep.equal', { is_active: false });
+            cy.wait('@refetchTemplates');
+            cy.contains('Template in use').should('not.exist');
+            cy.contains('S.40 - Personal Information').should('not.exist');
+            cy.contains('S.42 - Legal Privilege').should('be.visible');
+        });
+
+        it('leaves the template alone on cancel', () => {
+            cy.intercept('PATCH', '**/cases/exemptions/1').as('deactivate');
+            attemptDelete();
+
+            cy.contains('[role="dialog"]', 'Template in use').contains('button', 'Cancel').click();
+
+            cy.contains('Template in use').should('not.exist');
+            cy.get('@deactivate.all').should('have.length', 0);
+            cy.contains('S.40 - Personal Information').should('be.visible');
+        });
+    });
+
     it('deletes a template after confirmation', () => {
         cy.intercept('DELETE', '**/cases/exemptions/1', { statusCode: 204 }).as('deleteTemplate');
 

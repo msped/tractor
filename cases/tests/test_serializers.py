@@ -520,7 +520,8 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(data["description"], "Personal data exemption")
         self.assertIs(data["trainable"], False)
         self.assertEqual(
-            set(data.keys()), {"id", "name", "description", "trainable"}
+            set(data.keys()),
+            {"id", "name", "description", "trainable", "is_active"},
         )
 
     def test_exemption_template_serializer_create(self):

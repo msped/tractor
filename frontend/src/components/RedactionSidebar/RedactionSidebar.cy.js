@@ -475,6 +475,18 @@ describe('<RedactionSidebar />', () => {
             cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a4', 'a5'], 2);
         });
 
+        it('still names a deactivated exemption on its card, though the menu no longer lists it', () => {
+            // The picker list holds only active templates; S.30 has been deactivated.
+            const underRetired = { ...exempted, exemption: 9, exemption_name: 'S.30 - Retired Exemption' };
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([underRetired])} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'privileged advice').find('button[aria-label="change exemption"]')
+                .should('have.text', 'Exemption: S.30 - Retired Exemption').click();
+            cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
+            cy.contains('[role="menuitem"]', 'S.30 - Retired Exemption').should('not.exist');
+            cy.contains('[role="menuitem"]', 'Clear exemption').should('be.visible');
+        });
+
         it('offers no exemption menu on PII or DS_INFO cards', () => {
             const pii = { ...unexempted, id: 'a6', ids: ['a6'], text: 'Jane Smith', redaction_type: 'PII' };
             const dsInfo = { ...unexempted, id: 'a7', ids: ['a7'], text: 'Joe Bloggs', redaction_type: 'DS_INFO' };

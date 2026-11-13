@@ -122,11 +122,32 @@ class ExemptionTemplateListView(ListCreateAPIView):
 class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
     """
     GET/PATCH/DELETE a single exemption template.
+
+    A template that redactions are withheld under cannot be deleted, so they
+    keep their basis; the refusal points the admin at deactivating it.
     """
 
     permission_classes = [IsAdminUser]
     serializer_class = ExemptionTemplateSerializer
     queryset = ExemptionTemplate.objects.all()
+
+    def destroy(self, request, *args, **kwargs):
+        template = self.get_object()
+        in_use = template.redactions.count()
+        if in_use:
+            noun = "redaction" if in_use == 1 else "redactions"
+            return Response(
+                {
+                    "detail": (
+                        f'"{template.name}" is used by {in_use} {noun}, so '
+                        "it can't be deleted. Deactivate it to hide it from "
+                        "reviewers; existing redactions keep it."
+                    ),
+                    "in_use": in_use,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class CaseExportView(APIView):

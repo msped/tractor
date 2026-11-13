@@ -1134,6 +1134,36 @@ class RedactionExemptionViewTests(NetworkBlockerMixin, APITestCase):
         self.r1.refresh_from_db()
         self.assertIsNone(self.r1.exemption)
 
+    def _exemption_name_of(self, redaction):
+        url = reverse("redaction-detail", kwargs={"pk": redaction.id})
+        return self.client.get(url).data["exemption_name"]
+
+    def test_a_renamed_template_renames_every_redaction_using_it(self):
+        Redaction.objects.filter(id__in=[self.r1.id, self.r2.id]).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        self.template.name = "S.42 - Legal Professional Privilege"
+        self.template.save()
+
+        for r in (self.r1, self.r2):
+            self.assertEqual(
+                self._exemption_name_of(r),
+                "S.42 - Legal Professional Privilege",
+            )
+
+    def test_a_deactivated_template_still_names_its_redactions(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        self.template.is_active = False
+        self.template.save()
+
+        self.assertEqual(
+            self._exemption_name_of(self.r1), "S.42 - Legal Privilege"
+        )
+
     def test_trimming_an_exempted_span_keeps_its_exemption(self):
         Redaction.objects.filter(id=self.r1.id).accept(
             by=Redaction.DecidedBy.HUMAN, exemption=self.template
@@ -1404,6 +1434,53 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(
+            ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
+        )
+
+    def _use(self, template):
+        document = Document.objects.create(
+            case=Case.objects.create(case_reference="TPL01"),
+            original_file=SimpleUploadedFile("t.pdf", b"x", "application/pdf"),
+        )
+        for start in (0, 5):
+            Redaction.objects.create(
+                document=document,
+                start_char=start,
+                end_char=start + 4,
+                text="1234",
+                redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.HUMAN,
+                exemption=template,
+            )
+
+    def test_deleting_a_template_in_use_is_refused_with_a_reason(self):
+        self._use(self.active)
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.admin_client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("2 redactions", response.data["detail"])
+        self.assertIn("Deactivate", response.data["detail"])
+        self.assertTrue(
+            ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
+        )
+
+    def test_admin_deactivates_a_template(self):
+        """Deactivated, it leaves the picker list but is not deleted."""
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.admin_client.patch(
+            url, {"is_active": False}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        listed = self.client.get(reverse("exemption-template-list")).data
+        self.assertNotIn(self.active.pk, [t["id"] for t in listed])
+        self.assertTrue(
             ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
         )
 

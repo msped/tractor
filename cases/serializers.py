@@ -434,7 +434,7 @@ class ReviewWorkflowSettingsSerializer(serializers.ModelSerializer):
 class ExemptionTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExemptionTemplate
-        fields = ["id", "name", "description", "trainable"]
+        fields = ["id", "name", "description", "trainable", "is_active"]
 
 
 class DocumentExportSettingsSerializer(serializers.ModelSerializer):
