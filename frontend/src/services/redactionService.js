@@ -49,7 +49,7 @@ export const deleteRedaction = async (redactionId) => {
 export const bulkMarkByText = async (caseId, text, redactionType, markStatus) => {
     try {
         const response = await apiClient.post(
-            `cases/${caseId}/redactions/bulk-by-text/`,
+            `cases/${caseId}/redactions/bulk-by-text`,
             { text, redaction_type: redactionType, status: markStatus },
         );
         return response.data;
@@ -61,7 +61,7 @@ export const bulkMarkByText = async (caseId, text, redactionType, markStatus) =>
 export const bulkUpdateRedactions = async (documentId, ids, isAccepted, { rejected = false, exemption = null } = {}) => {
     try {
         const response = await apiClient.patch(
-            `cases/document/${documentId}/redactions/bulk/`,
+            `cases/document/${documentId}/redactions/bulk`,
             { ids, is_accepted: isAccepted, rejected, exemption },
         );
         return response.data;

@@ -134,12 +134,12 @@ urlpatterns = [
         name="redaction-detail",
     ),
     path(
-        "cases/document/<uuid:document_id>/redactions/bulk/",
+        "cases/document/<uuid:document_id>/redactions/bulk",
         BulkRedactionUpdateView.as_view(),
         name="bulk-redaction-update",
     ),
     path(
-        "cases/<uuid:case_id>/redactions/bulk-by-text/",
+        "cases/<uuid:case_id>/redactions/bulk-by-text",
         BulkByTextRedactionView.as_view(),
         name="bulk-by-text-redaction-update",
     ),

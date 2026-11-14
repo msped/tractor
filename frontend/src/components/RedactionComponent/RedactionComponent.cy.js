@@ -173,7 +173,7 @@ describe('<RedactionComponent />', () => {
             req.reply({ statusCode: 201, body: { ...withDecision({}, req.body), id: 'new-redaction-id' } });
         }).as('createRedaction');
         cy.intercept('PATCH', '**/cases/documents/*', { statusCode: 200, body: { ...mockDocument, status: 'Completed' } }).as('markComplete');
-        cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', (req) => {
+        cy.intercept('PATCH', '**/cases/document/*/redactions/bulk', (req) => {
             const updated = req.body.ids.map(id => ({
                 id,
                 is_accepted: req.body.is_accepted,
@@ -504,7 +504,7 @@ describe('<RedactionComponent />', () => {
         });
 
         it('moves the group to rejected after Reject all in case', () => {
-            cy.intercept('POST', '**/cases/*/redactions/bulk-by-text/', { statusCode: 200, body: { updated: 2 } }).as('markAllInCase');
+            cy.intercept('POST', '**/cases/*/redactions/bulk-by-text', { statusCode: 200, body: { updated: 2 } }).as('markAllInCase');
 
             cy.get('button[aria-label="more reject all options"]').click();
             cy.contains('[role="menuitem"]', 'Reject all in case').click();
@@ -522,7 +522,7 @@ describe('<RedactionComponent />', () => {
         });
 
         it('moves the group to accepted after Accept all in case', () => {
-            cy.intercept('POST', '**/cases/*/redactions/bulk-by-text/', { statusCode: 200, body: { updated: 2 } }).as('markAllInCase');
+            cy.intercept('POST', '**/cases/*/redactions/bulk-by-text', { statusCode: 200, body: { updated: 2 } }).as('markAllInCase');
 
             cy.get('button[aria-label="change redaction type and accept all"]').click();
             cy.contains('[role="menuitem"]', 'Accept all in case').click();
@@ -706,7 +706,7 @@ describe('<RedactionComponent />', () => {
 
         const interceptWrites = (rows) => {
             const byId = Object.fromEntries(rows.map(r => [r.id, r]));
-            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', (req) => {
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk', (req) => {
                 req.reply({
                     statusCode: 200,
                     body: req.body.ids.map(id => withExemption(withDecision(byId[id], req.body), req.body)),
@@ -837,7 +837,7 @@ describe('<RedactionComponent />', () => {
         });
 
         it('explains a change refused by the disclosure lock', () => {
-            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', {
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk', {
                 statusCode: 403,
                 body: { detail: 'This case has been disclosed — redaction decisions can only be changed while an Internal Review is open.' },
             }).as('lockedChange');
@@ -851,7 +851,7 @@ describe('<RedactionComponent />', () => {
         });
 
         it('shows an error toast when the accept fails', () => {
-            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', { statusCode: 500 }).as('failedExemption');
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk', { statusCode: 500 }).as('failedExemption');
             mountRedactionComponent(mockDocument, [opDataPending]);
             cy.contains('li', 'sensitive information').find('button[aria-label="change redaction type and accept"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
@@ -1010,7 +1010,7 @@ describe('<RedactionComponent />', () => {
         });
 
         it('shows error toast when bulk accept fails', () => {
-            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk/', { statusCode: 500 }).as('failedBulk');
+            cy.intercept('PATCH', '**/cases/document/*/redactions/bulk', { statusCode: 500 }).as('failedBulk');
             mountRedactionComponent(mockDocument, mockRedactionsWithAdjacent);
 
             cy.contains('button', 'Accept').click();
