@@ -36,11 +36,21 @@ The **Redaction Sidebar** displays all suggested redactions grouped by status (P
 
 For each suggestion, you can:
 
-- **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept as a different redaction type (Third-Party PII or Operational Data) if needed. On a Data Subject Information suggestion the dropdown offers only Operational Data, because changing it to Third-Party PII is done with **Reject as Third Party**.
+- **Accept** - Click the accept button to confirm the redaction. Use the dropdown arrow to accept it as a different redaction type instead. On a **Data Subject Information** suggestion, choose **Accept as Third-Party PII** when the text is someone else's personal data, so it is withheld rather than disclosed.
+- **Accept with an exemption** - On an **Operational Data** suggestion, the same dropdown lists your organisation's exemptions below the types. Type to search, then click one to accept the suggestion withheld under that exemption. See [Exemptions](#exemptions) below.
 - **Reject** - Click the reject button to dismiss the suggestion. The text will be disclosed. No reason is needed, and the suggestion moves straight to Rejected.
-- **Reject with exemption** - Click the dropdown arrow on the Reject button to select a pre-configured exemption reason (e.g. "S.40 - Personal Information"). You can type to search the list. Selecting an exemption rejects the suggestion immediately without opening the dialog.
-- **Reject as Data Subject** - At the top of the same Reject dropdown. Use this when the suggested text is the data subject's own information: it is reclassified as **Data Subject Information**, so it stays visible in the disclosure, and it propagates to matching text across every document in the case. This option is not shown on suggestions that are already Data Subject Information.
-- **Reject as Third Party** - Replaces the plain **Reject** button on a **Data Subject Information** suggestion. Use it when the text is not the data subject's: it is reclassified as **Third-Party PII** and accepted, so it is withheld from the disclosure. A plain rejection would have left it in the clear. If the text is not personal data at all and can be disclosed, choose an exemption from the dropdown instead.
+- **Reject as Data Subject** - In the dropdown on the Reject button. Use this when the suggested text is the data subject's own information: it is reclassified as **Data Subject Information**, so it stays visible in the disclosure, and it propagates to matching text across every document in the case. A Data Subject Information suggestion has no Reject dropdown, since it already is one; its plain **Reject** discloses the text without propagating it.
+
+### Exemptions
+
+An exemption is the stated basis for withholding **Operational Data**, chosen from a list your organisation maintains (see [Settings](settings.md#exemption-templates)). Only Operational Data carries one: Third-Party PII is withheld by default and needs no basis, and Data Subject Information is disclosed. If a Third-Party PII or Data Subject Information suggestion is really operational, accept it as Operational Data first, then give it an exemption on its card.
+
+- **Choosing one** - Pick it from the Accept dropdown on an Operational Data suggestion. On a merged or grouped item it applies to every part.
+- **Changing or clearing one** - Every accepted Operational Data card, including manual redactions, shows its exemption as a button, or **Add exemption** when it has none. Click it to pick another exemption, or **Clear exemption** to keep withholding the text with no stated basis. The redaction stays accepted either way.
+- **What clears one** - Rejecting a redaction, returning it to pending, or changing its type away from Operational Data removes its exemption.
+- **Across the case** - When a new document arrives, text accepted in every other document of the case is accepted again. It keeps an exemption only if all those earlier accepts used the same one.
+
+Once a case has been disclosed, exemptions are locked along with every other decision until an Internal Review is opened.
 
 ### Merged Redactions
 
@@ -52,8 +62,8 @@ If you need to review or action the individual spans separately, click the **spl
 
 Items that share the same text and redaction type are grouped together in the sidebar. You can act on the entire group at once:
 
-- **Accept All** — accepts every item in the group in one click
-- **Reject All** — rejects all items in the group in one click. Its dropdown offers the same exemptions and **Reject as Data Subject** as a single suggestion does, applied to every item in the group. On a Data Subject Information group the button reads **Reject All as Third Party**, and **Reject all in case** is not offered, since it would disclose the text in every document
+- **Accept All** — accepts every item in the group in one click. Its dropdown offers the same types, and on an Operational Data group the same exemptions, as a single suggestion does, plus **Accept all in case**
+- **Reject All** — rejects all items in the group in one click. Its dropdown offers **Reject as Data Subject** (except on a Data Subject Information group) and **Reject all in case**, which asks you to confirm before disclosing the text in every document
 
 Individual items within a group can still be actioned separately by expanding the group.
 

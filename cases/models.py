@@ -672,8 +672,9 @@ class RedactionSnapshot(models.Model):
 
 class ExemptionTemplate(models.Model):
     """
-    A reusable rejection reason (e.g. "S.40 - Personal Information") that
-    admins configure and users select when rejecting redaction suggestions.
+    A basis for withholding Operational Data (e.g. "S.42 - Legal Privilege")
+    that admins configure and reviewers choose when accepting it.  See
+    docs/adr/0004-exemptions-link-to-templates.md.
     """
 
     name = models.CharField(
@@ -685,7 +686,11 @@ class ExemptionTemplate(models.Model):
         blank=True, help_text="Optional longer description of this exemption."
     )
     is_active = models.BooleanField(
-        default=True, help_text="Inactive templates are hidden from the UI."
+        default=True,
+        help_text=(
+            "Inactive templates are hidden from reviewers' lists, but "
+            "redactions already withheld under one still show it."
+        ),
     )
     trainable = models.BooleanField(
         default=False,

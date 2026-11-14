@@ -11,7 +11,7 @@ const TestWrapper = ({ children }) => (
 );
 
 const mockTemplates = [
-    { id: 1, name: 'S.40 - Personal Information', description: 'Personal data exemption', trainable: false },
+    { id: 1, name: 'S.31 - Law Enforcement', description: 'Law enforcement exemption', trainable: false },
     { id: 2, name: 'S.42 - Legal Privilege', description: '', trainable: true },
 ];
 
@@ -24,7 +24,7 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
         cy.wait('@getTemplates');
         cy.contains('Exemption Templates').should('be.visible');
-        cy.contains('Configurable rejection reasons').should('be.visible');
+        cy.contains('Bases reviewers can withhold Operational Data under').should('be.visible');
     });
 
     it('shows template count on the card', () => {
@@ -45,8 +45,8 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
         cy.wait('@getTemplates');
         cy.contains('button', 'Manage').click();
-        cy.contains('S.40 - Personal Information').should('be.visible');
-        cy.contains('Personal data exemption').should('be.visible');
+        cy.contains('S.31 - Law Enforcement').should('be.visible');
+        cy.contains('Law enforcement exemption').should('be.visible');
         cy.contains('S.42 - Legal Privilege').should('be.visible');
     });
 
@@ -111,9 +111,9 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
         cy.wait('@getTemplates');
         cy.contains('button', 'Manage').click();
-        cy.get(`button[aria-label="delete S.40 - Personal Information"]`).click();
+        cy.get(`button[aria-label="delete S.31 - Law Enforcement"]`).click();
         cy.contains('[role="dialog"]', 'Delete Exemption Template').within(() => {
-            cy.contains('S.40 - Personal Information').should('be.visible');
+            cy.contains('S.31 - Law Enforcement').should('be.visible');
         });
     });
 
@@ -137,11 +137,11 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
         cy.wait('@getTemplates');
         cy.contains('button', 'Manage').click();
-        cy.get(`button[aria-label="delete S.40 - Personal Information"]`).click();
+        cy.get(`button[aria-label="delete S.31 - Law Enforcement"]`).click();
         cy.get('button').contains('Delete').last().click();
         cy.wait('@deleteFail');
         // Template should still be visible after failed delete
-        cy.contains('S.40 - Personal Information').should('be.visible');
+        cy.contains('S.31 - Law Enforcement').should('be.visible');
     });
 
     it('closes the dialog when the X button is clicked', () => {
@@ -161,7 +161,7 @@ describe('<ExemptionTemplatesCard />', () => {
             cy.wait('@getTemplates');
             cy.contains('button', 'Manage').click();
             cy.get('[role="dialog"]').contains('teaches the model').should('be.visible');
-            toggleFor('S.40 - Personal Information').should('not.be.checked');
+            toggleFor('S.31 - Law Enforcement').should('not.be.checked');
             toggleFor('S.42 - Legal Privilege').should('be.checked');
         });
 
@@ -176,11 +176,11 @@ describe('<ExemptionTemplatesCard />', () => {
                 body: [{ ...mockTemplates[0], trainable: true }, mockTemplates[1]],
             }).as('refetchTemplates');
 
-            toggleFor('S.40 - Personal Information').click();
+            toggleFor('S.31 - Law Enforcement').click();
 
             cy.wait('@updateTemplate').its('request.body').should('deep.equal', { trainable: true });
             cy.wait('@refetchTemplates');
-            toggleFor('S.40 - Personal Information').should('be.checked');
+            toggleFor('S.31 - Law Enforcement').should('be.checked');
         });
 
         it('keeps the setting when saving fails', () => {
@@ -197,14 +197,14 @@ describe('<ExemptionTemplatesCard />', () => {
     });
 
     context('Deleting a template in use', () => {
-        const inUseMessage = '"S.40 - Personal Information" is used by 2 redactions, so it can\'t be deleted. Deactivate it to hide it from reviewers; existing redactions keep it.';
+        const inUseMessage = '"S.31 - Law Enforcement" is used by 2 redactions, so it can\'t be deleted. Deactivate it to hide it from reviewers; existing redactions keep it.';
 
         const attemptDelete = () => {
             cy.intercept('DELETE', '**/cases/exemptions/1', { statusCode: 409, body: { detail: inUseMessage, in_use: 2 } }).as('deleteInUse');
             cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
             cy.wait('@getTemplates');
             cy.contains('button', 'Manage').click();
-            cy.get('button[aria-label="delete S.40 - Personal Information"]').click();
+            cy.get('button[aria-label="delete S.31 - Law Enforcement"]').click();
             cy.get('button').contains('Delete').last().click();
             cy.wait('@deleteInUse');
         };
@@ -227,7 +227,7 @@ describe('<ExemptionTemplatesCard />', () => {
             cy.wait('@deactivate').its('request.body').should('deep.equal', { is_active: false });
             cy.wait('@refetchTemplates');
             cy.contains('Template in use').should('not.exist');
-            cy.contains('S.40 - Personal Information').should('not.exist');
+            cy.contains('S.31 - Law Enforcement').should('not.exist');
             cy.contains('S.42 - Legal Privilege').should('be.visible');
         });
 
@@ -239,7 +239,7 @@ describe('<ExemptionTemplatesCard />', () => {
 
             cy.contains('Template in use').should('not.exist');
             cy.get('@deactivate.all').should('have.length', 0);
-            cy.contains('S.40 - Personal Information').should('be.visible');
+            cy.contains('S.31 - Law Enforcement').should('be.visible');
         });
     });
 
@@ -249,7 +249,7 @@ describe('<ExemptionTemplatesCard />', () => {
         cy.fullMount(<TestWrapper><ExemptionTemplatesCard /></TestWrapper>, mountOpts);
         cy.wait('@getTemplates');
         cy.contains('button', 'Manage').click();
-        cy.get(`button[aria-label="delete S.40 - Personal Information"]`).click();
+        cy.get(`button[aria-label="delete S.31 - Law Enforcement"]`).click();
         cy.get('button').contains('Delete').last().click();
         cy.wait('@deleteTemplate');
     });

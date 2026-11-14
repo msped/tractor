@@ -264,7 +264,7 @@ export const ExemptionTemplatesCard = () => {
                         Exemption Templates
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Configurable rejection reasons shown to reviewers.
+                        Bases reviewers can withhold Operational Data under.
                     </Typography>
                     {templates && (
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

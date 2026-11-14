@@ -504,15 +504,15 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
     def test_exemption_template_serializer_read(self):
         """Test serialization of an ExemptionTemplate instance."""
         template = ExemptionTemplate.objects.create(
-            name="S.40 - Personal Information",
-            description="Personal data exemption",
+            name="S.31 - Law Enforcement",
+            description="Law enforcement exemption",
         )
         serializer = ExemptionTemplateSerializer(instance=template)
         data = serializer.data
 
         self.assertEqual(data["id"], template.pk)
-        self.assertEqual(data["name"], "S.40 - Personal Information")
-        self.assertEqual(data["description"], "Personal data exemption")
+        self.assertEqual(data["name"], "S.31 - Law Enforcement")
+        self.assertEqual(data["description"], "Law enforcement exemption")
         self.assertIs(data["trainable"], False)
         self.assertEqual(
             set(data.keys()),
@@ -545,8 +545,8 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
 
     def test_exemption_template_serializer_duplicate_name_invalid(self):
         """A duplicate name must fail validation."""
-        ExemptionTemplate.objects.create(name="S.40 - Personal Information")
-        data = {"name": "S.40 - Personal Information"}
+        ExemptionTemplate.objects.create(name="S.31 - Law Enforcement")
+        data = {"name": "S.31 - Law Enforcement"}
         serializer = ExemptionTemplateSerializer(data=data)
 
         self.assertFalse(serializer.is_valid())

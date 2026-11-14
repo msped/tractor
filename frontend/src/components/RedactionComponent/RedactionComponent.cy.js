@@ -158,7 +158,7 @@ describe('<RedactionComponent />', () => {
         cy.intercept('GET', '**/cases/exemptions', {
             statusCode: 200,
             body: [
-                { id: 1, name: 'S.40 - Personal Information', description: '' },
+                { id: 1, name: 'S.31 - Law Enforcement', description: '' },
                 { id: 2, name: 'S.42 - Legal Privilege', description: '' },
             ],
         }).as('getExemptions');
@@ -665,7 +665,7 @@ describe('<RedactionComponent />', () => {
     });
 
     context('Accept with Exemption', () => {
-        const exemptionNames = { 1: 'S.40 - Personal Information', 2: 'S.42 - Legal Privilege' };
+        const exemptionNames = { 1: 'S.31 - Law Enforcement', 2: 'S.42 - Legal Privilege' };
 
         // Echoes the server: a decision write without an exemption clears it,
         // and the template name comes back next to its id.
@@ -805,13 +805,13 @@ describe('<RedactionComponent />', () => {
             interceptWrites([exemptedSuggestion]);
             mountRedactionComponent(mockDocument, [exemptedSuggestion]);
             openCardExemptionMenu('accepted (1)', 'John Doe');
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+            cy.contains('[role="menuitem"]', 'S.31 - Law Enforcement').click();
 
             cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {
                 expect(body.ids).to.deep.equal(['s1']);
                 expect(body).to.include({ is_accepted: true, exemption: 1 });
             });
-            cy.contains('li', 'John Doe').contains('Exemption: S.40 - Personal Information').should('be.visible');
+            cy.contains('li', 'John Doe').contains('Exemption: S.31 - Law Enforcement').should('be.visible');
 
             cy.get('button[aria-label="Undo"]').click();
             cy.wait('@bulkUpdateRedaction').its('request.body').should((body) => {

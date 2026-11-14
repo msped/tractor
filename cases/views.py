@@ -106,7 +106,8 @@ class ReviewWorkflowSettingsView(APIView):
 
 class ExemptionTemplateListView(ListCreateAPIView):
     """
-    GET: Returns all active exemption templates for use in the rejection dialog.
+    GET: Returns all active exemption templates, the reviewer's choices for
+    withholding Operational Data.
     POST: Creates a new exemption template (admin only).
     """
 

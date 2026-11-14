@@ -1322,7 +1322,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
         self.admin_client.force_authenticate(user=admin)
 
         self.active = ExemptionTemplate.objects.create(
-            name="S.40 - Personal Information", is_active=True
+            name="S.31 - Law Enforcement", is_active=True
         )
         self.inactive = ExemptionTemplate.objects.create(
             name="S.41 - Deprecated", is_active=False
@@ -1335,7 +1335,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         names = [t["name"] for t in response.data]
-        self.assertIn("S.40 - Personal Information", names)
+        self.assertIn("S.31 - Law Enforcement", names)
         self.assertNotIn("S.41 - Deprecated", names)
 
     def test_list_returns_expected_fields(self):
@@ -1372,7 +1372,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_new_template_is_not_trainable(self):
         url = reverse("exemption-template-list")
         response = self.admin_client.post(
-            url, {"name": "S.31 - Law Enforcement"}
+            url, {"name": "S.43 - Commercial Interests"}
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -1417,7 +1417,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_duplicate_name_fails(self):
         """POST with a duplicate name returns 400."""
         url = reverse("exemption-template-list")
-        data = {"name": "S.40 - Personal Information"}
+        data = {"name": "S.31 - Law Enforcement"}
         response = self.admin_client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

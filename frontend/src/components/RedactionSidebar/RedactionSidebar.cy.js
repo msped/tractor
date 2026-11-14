@@ -32,7 +32,7 @@ describe('<RedactionSidebar />', () => {
     };
 
     const mockExemptionTemplates = [
-        { id: 1, name: 'S.40 - Personal Information', description: '' },
+        { id: 1, name: 'S.31 - Law Enforcement', description: '' },
         { id: 2, name: 'S.42 - Legal Privilege', description: '' },
     ];
 
@@ -281,7 +281,7 @@ describe('<RedactionSidebar />', () => {
                 cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
                 cy.get('input[placeholder="Search exemptions..."]').type('Legal');
                 cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').should('be.visible');
-                cy.contains('[role="menuitem"]', 'S.40 - Personal Information').should('not.exist');
+                cy.contains('[role="menuitem"]', 'S.31 - Law Enforcement').should('not.exist');
             });
 
             it('shows "No exemptions found" when search matches nothing', () => {
@@ -428,7 +428,7 @@ describe('<RedactionSidebar />', () => {
             cy.fullMount(<RedactionSidebar {...baseProps} redactions={withAccepted([exempted])} />);
             cy.contains('accepted (1)').click();
             cy.contains('li', 'privileged advice').find('button[aria-label="change exemption"]').should('have.text', 'Exemption: S.42 - Legal Privilege').click();
-            cy.contains('[role="menuitem"]', 'S.40 - Personal Information').click();
+            cy.contains('[role="menuitem"]', 'S.31 - Law Enforcement').click();
             cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a3'], 1);
             cy.get('[role="menu"]').should('not.exist');
         });
