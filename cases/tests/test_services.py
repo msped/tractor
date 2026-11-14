@@ -2060,7 +2060,8 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(r_new.auto_accepted)
         self.assertNotIn(r_new, Redaction.objects.trainable())
 
-    def test_propagates_unanimous_reject_to_new_document(self):
+    def test_propagates_unanimous_reject_as_a_plain_reject(self):
+        """Rejects carry no reason now, so an old one is not copied either."""
         r_old = self._pending(
             self.old_doc, "PC Smith", Redaction.RedactionType.OPERATIONAL_DATA
         )
@@ -2077,10 +2078,76 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertEqual(r_new.justification, "Not relevant")
+        self.assertFalse(r_new.justification)
+        self.assertIsNone(r_new.exemption)
         self.assertEqual(
             r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
         )
+
+    def _accepted_elsewhere(self, exemptions, text="ref 42/12345/24"):
+        """Accept the text once per exemption, each in its own document."""
+        for i, exemption in enumerate(exemptions):
+            doc = Document.objects.create(
+                case=self.case,
+                original_file=SimpleUploadedFile(
+                    f"prior{i}.pdf", b"x", "application/pdf"
+                ),
+            )
+            prior = self._pending(
+                doc, text, Redaction.RedactionType.OPERATIONAL_DATA
+            )
+            Redaction.objects.filter(pk=prior.pk).accept(
+                by=Redaction.DecidedBy.HUMAN, exemption=exemption
+            )
+        return self._pending(
+            self.new_doc, text, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+
+    def test_copies_an_exemption_every_prior_accept_shares(self):
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        r_new = self._accepted_elsewhere([privilege, privilege])
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+        self.assertEqual(
+            r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
+        )
+        self.assertEqual(r_new.exemption, privilege)
+
+    def test_differing_exemptions_give_an_accept_with_none(self):
+        r_new = self._accepted_elsewhere(
+            [
+                ExemptionTemplate.objects.create(
+                    name="S.42 - Legal Privilege"
+                ),
+                ExemptionTemplate.objects.create(
+                    name="S.31 - Law Enforcement"
+                ),
+            ]
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+        self.assertIsNone(r_new.exemption)
+
+    def test_an_exemption_mixed_with_none_gives_none(self):
+        """No exemption is a choice too, so it breaks the agreement."""
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        r_new = self._accepted_elsewhere([privilege, None])
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+        self.assertIsNone(r_new.exemption)
 
     def test_mixed_decisions_leave_new_redaction_pending(self):
         r1 = self._pending(
@@ -2095,7 +2162,6 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         r2 = self._pending(
             mid_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
         )
-        r2.justification = "Rejected for different reason"
         r2.decided_by = Redaction.DecidedBy.HUMAN
         r2.save()
 
