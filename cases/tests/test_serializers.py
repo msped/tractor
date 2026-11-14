@@ -261,7 +261,6 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
             "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
             "is_suggestion": False,
             "is_accepted": True,
-            "justification": "Manual redaction.",
         }
         serializer = RedactionSerializer(data=data)
         self.assertTrue(serializer.is_valid(raise_exception=True))
@@ -272,27 +271,24 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(instance.text, "This")
         self.assertFalse(instance.is_suggestion)
         self.assertTrue(instance.is_accepted)
-        self.assertEqual(instance.justification, "Manual redaction.")
         # Manual redactions are born human-decided.
         self.assertEqual(instance.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_redaction_serializer_update(self):
         """Test updating a Redaction instance."""
-        data = {
-            "is_accepted": True,
-            "justification": "User accepted this suggestion.",
-        }
         serializer = RedactionSerializer(
-            instance=self.redaction, data=data, partial=True
+            instance=self.redaction, data={"is_accepted": True}, partial=True
         )
         self.assertTrue(serializer.is_valid(raise_exception=True))
         instance = serializer.save()
 
         self.assertTrue(instance.is_accepted)
-        self.assertEqual(
-            instance.justification, "User accepted this suggestion."
-        )
         self.assertEqual(instance.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_redaction_serializer_has_no_justification(self):
+        self.assertNotIn(
+            "justification", RedactionSerializer(instance=self.redaction).data
+        )
 
     def test_redaction_serializer_human_accept_overrides_machine(self):
         """A human re-confirming an auto-accepted redaction makes it trainable."""
@@ -322,7 +318,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
     def test_redaction_serializer_reject_records_human_provenance(self):
         serializer = RedactionSerializer(
             instance=self.redaction,
-            data={"is_accepted": False, "justification": "S.40"},
+            data={"is_accepted": False, "rejected": True},
             partial=True,
         )
         self.assertTrue(serializer.is_valid(raise_exception=True))
@@ -341,7 +337,7 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
 
         serializer = RedactionSerializer(
             instance=self.redaction,
-            data={"is_accepted": False, "justification": None},
+            data={"is_accepted": False},
             partial=True,
         )
         self.assertTrue(serializer.is_valid(raise_exception=True))
@@ -378,7 +374,6 @@ class SerializerTests(NetworkBlockerMixin, TestCase):
     ):
         """A rejection with no reason is still a decision, not pending."""
         self.redaction.is_accepted = False
-        self.redaction.justification = ""
         self.redaction.decided_by = Redaction.DecidedBy.HUMAN
         self.redaction.save()
 
@@ -748,20 +743,14 @@ class BulkByTextSerializerTests(TestCase):
         serializer = BulkByTextSerializer(data=self._valid_data())
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_valid_reject_payload_with_reason(self):
+    def test_valid_reject_payload_takes_no_reason(self):
         serializer = BulkByTextSerializer(
             data=self._valid_data(
                 status="REJECTED", rejection_reason="Not relevant"
             )
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
-
-    def test_valid_reject_payload_without_reason(self):
-        serializer = BulkByTextSerializer(
-            data=self._valid_data(status="REJECTED")
-        )
-        self.assertTrue(serializer.is_valid(), serializer.errors)
-        self.assertEqual(serializer.validated_data["rejection_reason"], "")
+        self.assertNotIn("rejection_reason", serializer.validated_data)
 
     def test_missing_text_is_invalid(self):
         data = self._valid_data()

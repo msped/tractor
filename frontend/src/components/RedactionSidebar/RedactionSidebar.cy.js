@@ -20,7 +20,7 @@ describe('<RedactionSidebar />', () => {
         rejected: {
             total: 1,
             items: [
-                { id: 'r1', ids: ['r1'], isMerged: false, isGroup: false, text: 'rejected text', redaction_type: 'PII', is_suggestion: true, justification: 'Not relevant' },
+                { id: 'r1', ids: ['r1'], isMerged: false, isGroup: false, text: 'rejected text', redaction_type: 'PII', is_suggestion: true, decided_by: 'HUMAN' },
             ],
         },
         manual: {
@@ -99,7 +99,8 @@ describe('<RedactionSidebar />', () => {
 
             cy.contains('rejected (1)').click();
             cy.contains('li', 'rejected text').within(() => {
-                cy.contains('Reason for rejection: Not relevant').should('be.visible');
+                cy.contains('"rejected text"').should('be.visible');
+                cy.contains('Reason for rejection').should('not.exist');
             });
         });
 
@@ -877,22 +878,22 @@ describe('<RedactionSidebar />', () => {
             });
         });
 
-        it('shows the rationale alongside a human rejection reason, not instead of it', () => {
-            const rejectedWithBoth = {
+        it('keeps the rationale on a rejected card, which carries no reason of its own', () => {
+            const rejectedWithRationale = {
                 ...withRationale,
                 pending: { total: 0, items: [] },
                 rejected: {
                     total: 1,
                     items: [
-                        { id: 'd3', ids: ['d3'], isMerged: false, isGroup: false, text: '07700 900000', redaction_type: 'DS_INFO', is_suggestion: true, rationale: INFERRED, justification: 'Belongs to the witness' },
+                        { id: 'd3', ids: ['d3'], isMerged: false, isGroup: false, text: '07700 900000', redaction_type: 'DS_INFO', is_suggestion: true, decided_by: 'HUMAN', rationale: INFERRED },
                     ],
                 },
             };
-            cy.fullMount(<RedactionSidebar {...baseProps} redactions={rejectedWithBoth} />);
+            cy.fullMount(<RedactionSidebar {...baseProps} redactions={rejectedWithRationale} />);
             cy.contains('rejected (1)').click();
             cy.contains('li', '07700 900000').within(() => {
                 cy.contains(INFERRED).should('be.visible');
-                cy.contains('Reason for rejection: Belongs to the witness').should('be.visible');
+                cy.contains('Reason for rejection').should('not.exist');
             });
         });
 

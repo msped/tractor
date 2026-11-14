@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { updateRedaction, bulkUpdateRedactions } from '@/services/redactionService';
 import toast from 'react-hot-toast';
 import { toastError } from '@/api/toastError';
+import { decisionWriteFor } from '@/utils/redactionDecision';
 
 export function useRedactionActions({
     documentId,
@@ -33,7 +34,7 @@ export function useRedactionActions({
             );
             applySingle(updatedRedaction);
             pushHistory(
-                async () => applySingle(await updateRedaction(redactionId, { is_accepted: false, justification: null })),
+                async () => applySingle(await updateRedaction(redactionId, { is_accepted: false })),
                 async () => applySingle(await updateRedaction(redactionId, { is_accepted: true }))
             );
         } catch (error) {
@@ -44,28 +45,26 @@ export function useRedactionActions({
     const handleBulkAccept = useCallback(async (ids) => {
         setScrollToId(null);
         try {
-            const updatedRedactions = await bulkUpdateRedactions(
-                documentId, ids, true, null
-            );
+            const updatedRedactions = await bulkUpdateRedactions(documentId, ids, true);
             applyUpdates(updatedRedactions);
             pushHistory(
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, true, null))
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false)),
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, true))
             );
         } catch (error) {
             toastError(error, "Failed to accept suggestions. Please try again.");
         }
     }, [documentId, pushHistory, applyUpdates, setScrollToId]);
 
-    // A reject needs no reason, so it carries `rejected: true`; a write with
-    // neither that nor a reason is read by the server as withdrawing the decision.
+    // A reject needs no reason, so it carries `rejected: true`; a non-accept
+    // without it is read by the server as withdrawing the decision.
     const handleReject = useCallback(async (redaction) => {
         setScrollToId(null);
         try {
             const updated = await updateRedaction(redaction.id, { is_accepted: false, rejected: true });
             applySingle(updated);
             pushHistory(
-                async () => applySingle(await updateRedaction(redaction.id, { is_accepted: false, justification: null })),
+                async () => applySingle(await updateRedaction(redaction.id, { is_accepted: false })),
                 async () => applySingle(await updateRedaction(redaction.id, { is_accepted: false, rejected: true }))
             );
         } catch (error) {
@@ -76,11 +75,11 @@ export function useRedactionActions({
     const handleBulkReject = useCallback(async (ids) => {
         setScrollToId(null);
         try {
-            const updatedList = await bulkUpdateRedactions(documentId, ids, false, null, { rejected: true });
+            const updatedList = await bulkUpdateRedactions(documentId, ids, false, { rejected: true });
             applyUpdates(updatedList);
             pushHistory(
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null, { rejected: true }))
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false)),
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, { rejected: true }))
             );
         } catch (error) {
             toastError(error, "Failed to reject suggestions. Please try again.");
@@ -91,11 +90,11 @@ export function useRedactionActions({
     // exemption template in one bulk write; withdrawing the accept clears it.
     const handleAcceptWithExemption = useCallback(async (ids, exemptionId) => {
         setScrollToId(null);
-        const acceptAll = () => bulkUpdateRedactions(documentId, ids, true, null, { exemption: exemptionId });
+        const acceptAll = () => bulkUpdateRedactions(documentId, ids, true, { exemption: exemptionId });
         try {
             applyUpdates(await acceptAll());
             pushHistory(
-                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false, null)),
+                async () => applyUpdates(await bulkUpdateRedactions(documentId, ids, false)),
                 async () => applyUpdates(await acceptAll())
             );
         } catch (error) {
@@ -113,13 +112,13 @@ export function useRedactionActions({
             const previous = r.exemption ?? null;
             idsByPrevious.set(previous, [...(idsByPrevious.get(previous) ?? []), r.id]);
         }
-        const setAll = () => bulkUpdateRedactions(documentId, ids, true, null, { exemption: exemptionId });
+        const setAll = () => bulkUpdateRedactions(documentId, ids, true, { exemption: exemptionId });
         try {
             applyUpdates(await setAll());
             pushHistory(
                 async () => applyUpdates((await Promise.all(
                     [...idsByPrevious].map(([exemption, partIds]) =>
-                        bulkUpdateRedactions(documentId, partIds, true, null, { exemption }))
+                        bulkUpdateRedactions(documentId, partIds, true, { exemption }))
                 )).flat()),
                 async () => applyUpdates(await setAll())
             );
@@ -132,10 +131,7 @@ export function useRedactionActions({
         setScrollToId(null);
         const prev = redactions.find(r => r.id === redactionId);
         if (!prev) return;
-        const originalType = prev.redaction_type;
-        const originalIsAccepted = prev.is_accepted;
-        const originalIsSuggestion = prev.is_suggestion;
-        const originalExemption = prev.exemption ?? null;
+        const original = { redaction_type: prev.redaction_type, is_suggestion: prev.is_suggestion, ...decisionWriteFor(prev) };
         try {
             const updatedRedaction = await updateRedaction(
                 redactionId,
@@ -144,7 +140,7 @@ export function useRedactionActions({
             applySingle(updatedRedaction);
             toast.success("Suggestion type changed and accepted.");
             pushHistory(
-                async () => applySingle(await updateRedaction(redactionId, { redaction_type: originalType, is_accepted: originalIsAccepted, is_suggestion: originalIsSuggestion, exemption: originalExemption })),
+                async () => applySingle(await updateRedaction(redactionId, original)),
                 async () => applySingle(await updateRedaction(redactionId, { redaction_type: newType, is_accepted: true, is_suggestion: false }))
             );
         } catch (error) {
@@ -163,7 +159,7 @@ export function useRedactionActions({
             toast.success("Suggestions type changed and accepted.");
             pushHistory(
                 async () => applyUpdates(await Promise.all(
-                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_accepted: o.is_accepted, is_suggestion: o.is_suggestion, exemption: o.exemption ?? null }))
+                    originals.map(o => updateRedaction(o.id, { redaction_type: o.redaction_type, is_suggestion: o.is_suggestion, ...decisionWriteFor(o) }))
                 )),
                 async () => applyUpdates(await Promise.all(
                     ids.map(id => updateRedaction(id, { redaction_type: newType, is_accepted: true, is_suggestion: false }))

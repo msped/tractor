@@ -11,6 +11,7 @@ from ..diff import diff_disclosure, diff_export
 from ..models import (
     Case,
     Document,
+    ExemptionTemplate,
     Export,
     InternalReview,
     Redaction,
@@ -113,7 +114,7 @@ class DiffDisclosureTests(NetworkBlockerMixin, TestCase):
         redaction = self._make_redaction(is_accepted=True)
         snapshot_redactions(self.case)
         Redaction.objects.filter(pk=redaction.pk).reject(
-            "not needed", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
         )
 
         diff = diff_disclosure(self.case)
@@ -121,12 +122,67 @@ class DiffDisclosureTests(NetworkBlockerMixin, TestCase):
         entry = diff["modified"][0]
         self.assertEqual(entry["id"], str(redaction.id))
         self.assertEqual(
-            entry["changes"]["is_accepted"], {"from": True, "to": False}
+            entry["changes"], {"is_accepted": {"from": True, "to": False}}
         )
+
+    def test_changed_exemption_is_a_modification_shown_by_name(self):
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        redaction = self._make_redaction(
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            exemption=privilege,
+        )
+        snapshot_redactions(self.case)
+        Redaction.objects.filter(pk=redaction.pk).accept(
+            by=Redaction.DecidedBy.HUMAN,
+            exemption=ExemptionTemplate.objects.create(
+                name="S.31 - Law Enforcement"
+            ),
+        )
+
+        diff = diff_disclosure(self.case)
+        self.assertEqual(diff["counts"]["modified"], 1)
+        entry = diff["modified"][0]
         self.assertEqual(
-            entry["changes"]["justification"],
-            {"from": None, "to": "not needed"},
+            entry["changes"],
+            {
+                "exemption": {
+                    "from": "S.42 - Legal Privilege",
+                    "to": "S.31 - Law Enforcement",
+                }
+            },
         )
+        self.assertEqual(entry["exemption"], "S.31 - Law Enforcement")
+
+    def test_renaming_a_template_is_not_a_modification(self):
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        self._make_redaction(
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            exemption=privilege,
+        )
+        snapshot_redactions(self.case)
+        privilege.name = "S.42 - Legal Professional Privilege"
+        privilege.save()
+
+        diff = diff_disclosure(self.case)
+        self.assertEqual(diff["counts"]["modified"], 0)
+
+    def test_legacy_snapshot_justification_is_not_a_modification(self):
+        """A pre-exemption snapshot's free text is ignored, not diffed."""
+        redaction = self._make_redaction()
+        snapshot = snapshot_redactions(self.case)
+        for row in snapshot.payload:
+            row.pop("exemption_id")
+            row["justification"] = "an old free-text reason"
+        snapshot.save()
+
+        diff = diff_disclosure(self.case)
+        self.assertEqual(diff["counts"]["modified"], 0)
+        self.assertEqual(diff["removed"], [])
+        self.assertNotIn(str(redaction.id), [e["id"] for e in diff["added"]])
 
     def test_modified_rebound_and_retype(self):
         redaction = self._make_redaction(start_char=0, end_char=5)
@@ -322,7 +378,7 @@ class DiffExportTests(NetworkBlockerMixin, TestCase):
             redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
         )
         Redaction.objects.filter(pk=original.pk).reject(
-            "not needed", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
         )
         second = self._disclose(2, "Disclosure 2")
 

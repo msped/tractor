@@ -252,23 +252,6 @@ class RedactionModelTests(NetworkBlockerMixin, TestCase):
         )
         self.assertIn("Sensitive Data", str(redaction))
 
-    def test_redaction_with_justification(self):
-        justification_text = (
-            "This is a manual redaction for a specific reason."
-        )
-        redaction = Redaction.objects.create(
-            document=self.document,
-            start_char=0,
-            end_char=10,
-            text="Secret Info",
-            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
-            is_suggestion=False,
-            is_accepted=True,
-            justification=justification_text,
-            decided_by=Redaction.DecidedBy.HUMAN,
-        )
-        self.assertEqual(redaction.justification, justification_text)
-
     def test_redaction_defaults(self):
         redaction = Redaction.objects.create(
             document=self.document,
@@ -357,52 +340,34 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
     def test_reject_without_by_raises_type_error(self):
         r = self._make_redaction()
         with self.assertRaises(TypeError):
-            Redaction.objects.filter(pk=r.pk).reject("reason")
+            Redaction.objects.filter(pk=r.pk).reject()
 
-    def test_accept_clears_stale_rejection_justification(self):
-        r = self._make_redaction(
-            justification="old rejection reason",
-            decided_by=Redaction.DecidedBy.HUMAN,
-        )
-        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
-        r.refresh_from_db()
-        self.assertTrue(r.is_accepted)
-        self.assertIsNone(r.justification)
+    def test_reject_takes_no_reason(self):
+        r = self._make_redaction()
+        with self.assertRaises(TypeError):
+            Redaction.objects.filter(pk=r.pk).reject(
+                "reason", by=Redaction.DecidedBy.HUMAN
+            )
 
-    def test_reject_sets_is_accepted_false_and_justification(self):
+    def test_reject_sets_is_accepted_false_and_provenance(self):
+        """Provenance alone makes a rejection a decision."""
         r = self._make_redaction(
             is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
         )
-        Redaction.objects.filter(pk=r.pk).reject(
-            "S.40 - Personal Information", by=Redaction.DecidedBy.HUMAN
-        )
+        Redaction.objects.filter(pk=r.pk).reject(by=Redaction.DecidedBy.HUMAN)
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
-        self.assertEqual(r.justification, "S.40 - Personal Information")
         self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
-
-    def test_reject_with_blank_justification_still_counts_as_decided(self):
-        """Provenance makes an unjustified rejection representable."""
-        r = self._make_redaction()
-        Redaction.objects.filter(pk=r.pk).reject(
-            "", by=Redaction.DecidedBy.CASE_PROPAGATION
-        )
-        r.refresh_from_db()
-        self.assertFalse(r.is_accepted)
-        self.assertEqual(r.justification, "")
         self.assertNotIn(r, Redaction.objects.pending())
         self.assertIn(r, Redaction.objects.decided())
 
     def test_reset_returns_to_pending_and_clears_provenance(self):
         r = self._make_redaction(
-            is_accepted=True,
-            justification="old reason",
-            decided_by=Redaction.DecidedBy.HUMAN,
+            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
         )
         Redaction.objects.filter(pk=r.pk).reset()
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
-        self.assertIsNone(r.justification)
         self.assertIsNone(r.decided_by)
         self.assertIn(r, Redaction.objects.pending())
 
@@ -421,16 +386,13 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
 
     def test_reject_returns_count(self):
         self._make_redaction()
-        count = Redaction.objects.all().reject(
-            "reason", by=Redaction.DecidedBy.HUMAN
-        )
+        count = Redaction.objects.all().reject(by=Redaction.DecidedBy.HUMAN)
         self.assertEqual(count, 1)
 
     def test_update_of_decision_fields_raises_provenance_error(self):
         self._make_redaction()
         for kwargs in (
             {"is_accepted": True},
-            {"justification": "reason"},
             {"decided_by": Redaction.DecidedBy.HUMAN},
         ):
             with self.subTest(kwargs=kwargs):
@@ -495,9 +457,7 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
             decided_by=Redaction.DecidedBy.HUMAN,
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
         )
-        rejected = self._make_redaction(
-            justification="reason", decided_by=Redaction.DecidedBy.HUMAN
-        )
+        rejected = self._make_redaction(decided_by=Redaction.DecidedBy.HUMAN)
         pending = self._make_redaction()
 
         trainable = Redaction.objects.trainable()
@@ -678,7 +638,7 @@ class DisclosureLockTests(NetworkBlockerMixin, TestCase):
     def test_human_reject_refused_when_disclosed_and_no_review(self):
         self._disclose()
         with self.assertRaises(DisclosureLockError):
-            self._qs().reject("reason", by=Redaction.DecidedBy.HUMAN)
+            self._qs().reject(by=Redaction.DecidedBy.HUMAN)
 
     def test_reset_refused_when_disclosed_and_no_review(self):
         self._disclose()
@@ -702,10 +662,10 @@ class DisclosureLockTests(NetworkBlockerMixin, TestCase):
     def test_human_reject_allowed_while_review_open(self):
         self._disclose()
         self._open_review()
-        self._qs().reject("reason", by=Redaction.DecidedBy.HUMAN)
+        self._qs().reject(by=Redaction.DecidedBy.HUMAN)
         self.redaction.refresh_from_db()
         self.assertFalse(self.redaction.is_accepted)
-        self.assertEqual(self.redaction.justification, "reason")
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_reset_allowed_while_review_open(self):
         self._disclose()

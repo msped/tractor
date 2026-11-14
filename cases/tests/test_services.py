@@ -2061,12 +2061,11 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         self.assertNotIn(r_new, Redaction.objects.trainable())
 
     def test_propagates_unanimous_reject_as_a_plain_reject(self):
-        """Rejects carry no reason now, so an old one is not copied either."""
+        """Rejects carry no reason, so there is nothing to copy."""
         r_old = self._pending(
             self.old_doc, "PC Smith", Redaction.RedactionType.OPERATIONAL_DATA
         )
         r_old.is_accepted = False
-        r_old.justification = "Not relevant"
         r_old.decided_by = Redaction.DecidedBy.HUMAN
         r_old.save()
 
@@ -2078,7 +2077,6 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertFalse(r_new.justification)
         self.assertIsNone(r_new.exemption)
         self.assertEqual(
             r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
@@ -2173,7 +2171,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertFalse(r_new.justification)
+        self.assertIsNone(r_new.decided_by)
 
     def test_no_existing_decisions_leaves_pending(self):
         r_new = self._pending(
@@ -2184,7 +2182,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertIsNone(r_new.justification)
+        self.assertIsNone(r_new.decided_by)
 
     def test_decisions_from_other_cases_do_not_propagate(self):
         other_case = Case.objects.create(
@@ -2395,9 +2393,6 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
         self.assertFalse(phone.is_accepted)
         self.assertIsNone(phone.decided_by)
         self.assertIn("Joe Bloggs", phone.rationale)
-        # The reviewer's own reason field is untouched — the UI reads a value
-        # there as "rejected".
-        self.assertIsNone(phone.justification)
 
     def test_proposing_ds_info_does_not_propagate_across_the_case(self):
         """

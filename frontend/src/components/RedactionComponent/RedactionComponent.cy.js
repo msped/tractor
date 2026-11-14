@@ -19,7 +19,6 @@ const mockRedactions = [
         redaction_type: 'PII',
         is_suggestion: true,
         is_accepted: false,
-        justification: null,
         decided_by: null,
         start_char: 61,
         end_char: 68,
@@ -30,7 +29,6 @@ const mockRedactions = [
         redaction_type: 'PII',
         is_suggestion: true,
         is_accepted: true,
-        justification: null,
         decided_by: 'HUMAN',
         start_char: 74,
         end_char: 90,
@@ -41,7 +39,6 @@ const mockRedactions = [
         redaction_type: 'OP_DATA',
         is_suggestion: true,
         is_accepted: false,
-        justification: 'Not actually sensitive',
         decided_by: 'HUMAN',
         start_char: 34,
         end_char: 54,
@@ -52,7 +49,6 @@ const mockRedactions = [
         redaction_type: 'DS_INFO',
         is_suggestion: false,
         is_accepted: true,
-        justification: null,
         decided_by: 'HUMAN',
         start_char: 10,
         end_char: 22,
@@ -67,7 +63,6 @@ const mockRedactionsWithAdjacent = [
         redaction_type: 'PII',
         is_suggestion: true,
         is_accepted: false,
-        justification: null,
         decided_by: null,
         start_char: 62,
         end_char: 66,
@@ -78,7 +73,6 @@ const mockRedactionsWithAdjacent = [
         redaction_type: 'PII',
         is_suggestion: true,
         is_accepted: false,
-        justification: null,
         decided_by: null,
         start_char: 67,
         end_char: 70,
@@ -93,7 +87,6 @@ const mockRedactionsWithDuplicates = [
         redaction_type: 'OP_DATA',
         is_suggestion: true,
         is_accepted: false,
-        justification: null,
         decided_by: null,
         start_char: 25,
         end_char: 36,
@@ -104,7 +97,6 @@ const mockRedactionsWithDuplicates = [
         redaction_type: 'OP_DATA',
         is_suggestion: true,
         is_accepted: false,
-        justification: null,
         decided_by: null,
         start_char: 60,
         end_char: 71,
@@ -121,14 +113,14 @@ const mergePairsFor = (redactions) => {
     return [];
 };
 
-// Mirrors RedactionSerializer: any accept or justified rejection written by
-// the reviewer is a human decision; an unjustified non-accept withdraws it.
-const decidedByFor = ({ is_accepted, justification, rejected }) => (is_accepted || rejected || justification ? 'HUMAN' : null);
+// Mirrors RedactionSerializer: any accept or flagged rejection written by the
+// reviewer is a human decision; a non-accept without the flag withdraws it.
+const decidedByFor = ({ is_accepted, rejected }) => (is_accepted || rejected ? 'HUMAN' : null);
 
 // Echoes a decision write the way the server does, recording provenance.
 // `rejected` is write-only on the server, so it is not echoed back.
 const withDecision = (existing, { rejected, ...body }) => (
-    'is_accepted' in body || 'justification' in body || rejected
+    'is_accepted' in body || rejected
         ? { ...existing, ...body, decided_by: decidedByFor({ ...existing, ...body, rejected }) }
         : { ...existing, ...body }
 );
@@ -185,7 +177,6 @@ describe('<RedactionComponent />', () => {
             const updated = req.body.ids.map(id => ({
                 id,
                 is_accepted: req.body.is_accepted,
-                justification: req.body.justification,
                 decided_by: decidedByFor(req.body),
                 is_suggestion: true,
                 text: 'bulk item',
@@ -232,7 +223,6 @@ describe('<RedactionComponent />', () => {
                 redaction_type: 'PII',
                 is_suggestion: true,
                 is_accepted: false,
-                justification: '',
                 decided_by: 'HUMAN',
                 start_char: 61,
                 end_char: 68,
@@ -343,7 +333,7 @@ describe('<RedactionComponent />', () => {
         it('reverts accepted suggestion to pending when removed', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r2', {
                 statusCode: 200,
-                body: withDecision(mockRedactions[1], { is_accepted: false, justification: null }),
+                body: withDecision(mockRedactions[1], { is_accepted: false }),
             }).as('revertRedaction');
 
             cy.contains('accepted (1)').click();
@@ -387,14 +377,27 @@ describe('<RedactionComponent />', () => {
         it('reverts rejected suggestion to pending when Re-evaluate is clicked', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r3', {
                 statusCode: 200,
-                body: withDecision(mockRedactions[2], { is_accepted: false, justification: null }),
+                body: withDecision(mockRedactions[2], { is_accepted: false }),
             }).as('revertRejected');
 
             cy.contains('rejected (1)').click();
             cy.contains('li', 'sensitive information').contains('button', 'Re-evaluate').click();
 
-            cy.wait('@revertRejected');
+            cy.wait('@revertRejected').its('request.body').should('deep.equal', { is_accepted: false });
             cy.contains('Suggestion reverted to pending.').should('be.visible');
+        });
+
+        it('undo of Re-evaluate rejects the suggestion again rather than leaving it pending', () => {
+            cy.contains('rejected (1)').click();
+            cy.contains('li', 'sensitive information').contains('button', 'Re-evaluate').click();
+            cy.wait('@updateRedaction');
+            cy.contains('pending (2)').should('be.visible');
+
+            cy.get('button[aria-label="Undo"]').click();
+
+            cy.wait('@updateRedaction').its('request.body').should('include', { is_accepted: false, rejected: true });
+            cy.contains('rejected (1)').should('be.visible');
+            cy.contains('pending (1)').should('be.visible');
         });
     });
 
@@ -512,7 +515,7 @@ describe('<RedactionComponent />', () => {
 
             cy.wait('@markAllInCase').its('request.body').then((body) => {
                 expect(body.status).to.equal('REJECTED');
-                expect(body.rejection_reason ?? '').to.equal('');
+                expect(body).not.to.have.property('rejection_reason');
             });
             cy.contains('rejected (2)').should('be.visible');
             cy.contains('pending').should('not.exist');
@@ -677,7 +680,6 @@ describe('<RedactionComponent />', () => {
             redaction_type: 'OP_DATA',
             is_suggestion: true,
             is_accepted: false,
-            justification: null,
             exemption: null,
             exemption_name: null,
             decided_by: null,
@@ -691,7 +693,6 @@ describe('<RedactionComponent />', () => {
             redaction_type: 'OP_DATA',
             is_suggestion: false,
             is_accepted: true,
-            justification: null,
             exemption: 2,
             exemption_name: 'S.42 - Legal Privilege',
             decided_by: 'HUMAN',
@@ -1045,7 +1046,7 @@ describe('<RedactionComponent />', () => {
             cy.wait('@patchR1');
 
             cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false }) });
             }).as('undoPatchR1');
 
             cy.get('button[aria-label="Undo"]').click();
@@ -1061,7 +1062,7 @@ describe('<RedactionComponent />', () => {
             cy.wait('@patchR1');
 
             cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false }) });
             }).as('undoPatch');
             cy.get('button[aria-label="Undo"]').click();
             cy.wait('@undoPatch');
@@ -1081,7 +1082,7 @@ describe('<RedactionComponent />', () => {
             cy.wait('@patchR1');
 
             cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false }) });
             }).as('undoViaKeyboard');
 
             cy.get('body').trigger('keydown', { key: 'z', ctrlKey: true });
@@ -1111,7 +1112,7 @@ describe('<RedactionComponent />', () => {
             cy.wait('@patchR1');
 
             cy.intercept('PATCH', '**/cases/document/redaction/r1', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[0], { is_accepted: false }) });
             }).as('undoPatch');
             cy.get('button[aria-label="Undo"]').click();
             cy.wait('@undoPatch');
@@ -1362,7 +1363,7 @@ describe('<RedactionComponent />', () => {
 
         it('clicking a suggestion highlight with REMOVE active reverts it to pending', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false }) });
             }).as('revertR2');
 
             mountRedactionComponent();
@@ -1384,7 +1385,7 @@ describe('<RedactionComponent />', () => {
 
         it('REMOVE tool stays active after clicking a highlight', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false }) });
             }).as('revert');
 
             mountRedactionComponent();
@@ -1397,7 +1398,7 @@ describe('<RedactionComponent />', () => {
 
         it('unhighlight action is undoable', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false }) });
             }).as('revert');
 
             mountRedactionComponent();
@@ -1540,7 +1541,7 @@ describe('<RedactionComponent />', () => {
 
         it('reverts an accepted suggestion when fully selected in REMOVE mode', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false }) });
             }).as('revertR2');
             mountRedactionComponent();
             cy.contains('button', 'Remove').click();
@@ -1551,7 +1552,7 @@ describe('<RedactionComponent />', () => {
 
         it('undo of text-selection revert restores the accepted suggestion', () => {
             cy.intercept('PATCH', '**/cases/document/redaction/r2', (req) => {
-                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false, justification: null }) });
+                req.reply({ statusCode: 200, body: withDecision(mockRedactions[1], { is_accepted: false }) });
             }).as('revertR2');
             mountRedactionComponent();
             cy.contains('button', 'Remove').click();

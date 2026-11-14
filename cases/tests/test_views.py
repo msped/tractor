@@ -384,18 +384,27 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     def test_update_redaction(self):
         """Test updating a redaction (e.g., accepting a suggestion)."""
         url = reverse("redaction-detail", kwargs={"pk": self.redaction.id})
-        data = {
-            "is_accepted": True,
-            "justification": "User accepted this suggestion.",
-        }
-        response = self.client.patch(url, data)
+        response = self.client.patch(url, {"is_accepted": True})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.redaction.refresh_from_db()
         self.assertTrue(self.redaction.is_accepted)
-        self.assertEqual(
-            self.redaction.justification, "User accepted this suggestion."
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertNotIn("justification", response.data)
+
+    def test_withdrawing_a_decision_returns_to_pending(self):
+        """A non-accept without the reject flag withdraws the decision."""
+        Redaction.objects.filter(pk=self.redaction.pk).reject(
+            by=Redaction.DecidedBy.HUMAN
         )
+        url = reverse("redaction-detail", kwargs={"pk": self.redaction.id})
+        response = self.client.patch(
+            url, {"is_accepted": False}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.redaction.refresh_from_db()
+        self.assertIsNone(self.redaction.decided_by)
 
     def test_reject_without_reason_records_a_human_rejection(self):
         """A one-click reject is a decision, not a withdrawal to pending."""
@@ -408,7 +417,6 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.redaction.refresh_from_db()
         self.assertFalse(self.redaction.is_accepted)
         self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
-        self.assertFalse(self.redaction.justification)
 
     def test_delete_redaction(self):
         """Test deleting a redaction."""
@@ -779,8 +787,8 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertTrue(self.r1.is_accepted)
         self.assertTrue(self.r2.is_accepted)
 
-    def test_bulk_reject_with_justification(self):
-        """Test rejecting multiple redactions with a shared justification."""
+    def test_a_reason_no_longer_makes_a_bulk_reject(self):
+        """Only the reject flag rejects; a stray reason is ignored."""
         url = reverse(
             "bulk-redaction-update", kwargs={"document_id": self.document.id}
         )
@@ -792,11 +800,9 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         response = self.client.patch(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-        self.r1.refresh_from_db()
-        self.r2.refresh_from_db()
-        self.assertEqual(self.r1.justification, "Bulk rejection reason")
-        self.assertEqual(self.r2.justification, "Bulk rejection reason")
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertIsNone(r.decided_by)
 
     def test_bulk_reject_without_reason_records_a_human_rejection(self):
         """A one-click bulk reject is a decision, not a withdrawal to pending."""
@@ -815,12 +821,11 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
             r.refresh_from_db()
             self.assertFalse(r.is_accepted)
             self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
-            self.assertFalse(r.justification)
 
-    def test_bulk_update_without_reason_or_flag_withdraws_to_pending(self):
-        """With neither a reason nor the reject flag, the decision is withdrawn."""
+    def test_bulk_update_without_reject_flag_withdraws_to_pending(self):
+        """Without the reject flag, a non-accept withdraws the decision."""
         Redaction.objects.filter(id__in=[self.r1.id, self.r2.id]).reject(
-            "", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
         )
         url = reverse(
             "bulk-redaction-update", kwargs={"document_id": self.document.id}
@@ -1623,7 +1628,6 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
             end_char=28,
             text="John Doe",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
-            justification="Previously reviewed",
             decided_by=Redaction.DecidedBy.HUMAN,
         )
 
@@ -1654,25 +1658,22 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
         self.assertTrue(self.r1.is_accepted)
         self.assertTrue(self.r2.is_accepted)
 
-    def test_reject_updates_all_pending_with_reason(self):
+    def test_reject_updates_all_pending_with_no_reason(self):
         response = self.client.post(
             self._url(),
             {
                 "text": "John Doe",
                 "redaction_type": "PII",
                 "status": "REJECTED",
-                "rejection_reason": "Not relevant",
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["updated"], 2)
-        self.r1.refresh_from_db()
-        self.r2.refresh_from_db()
-        self.assertFalse(self.r1.is_accepted)
-        self.assertEqual(self.r1.justification, "Not relevant")
-        self.assertFalse(self.r2.is_accepted)
-        self.assertEqual(self.r2.justification, "Not relevant")
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertFalse(r.is_accepted)
+            self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_already_accepted_redactions_not_modified(self):
         self.client.post(
@@ -1689,7 +1690,6 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
         self.assertTrue(self.r_accepted.is_accepted)
 
     def test_already_rejected_redactions_not_modified(self):
-        original_justification = self.r_rejected.justification
         self.client.post(
             self._url(),
             {
@@ -1701,7 +1701,7 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
         )
         self.r_rejected.refresh_from_db()
         self.assertFalse(self.r_rejected.is_accepted)
-        self.assertEqual(self.r_rejected.justification, original_justification)
+        self.assertEqual(self.r_rejected.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_redactions_in_other_case_not_affected(self):
         other_case = Case.objects.create(
@@ -2158,7 +2158,7 @@ class CaseDisclosureDiffViewTests(NetworkBlockerMixin, APITestCase):
         self._snapshot()
         # Modify the disclosed redaction and add a brand new one.
         Redaction.objects.filter(pk=redaction.pk).reject(
-            "not needed", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
         )
         Redaction.objects.create(
             document=self.document,

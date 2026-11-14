@@ -270,11 +270,6 @@ const RedactionSidebarComponent = ({
                                 {item.exemption_name ? `Exemption: ${item.exemption_name}` : 'Add exemption'}
                             </Button>
                         )}
-                        {sectionKey === 'rejected' && item.justification && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                Reason for rejection: {item.justification}
-                            </Typography>
-                        )}
                     </CardContent>
                     <CardActions sx={{ justifyContent: (sectionKey === 'accepted' || sectionKey === 'manual') ? 'space-between' : 'flex-end' }}>
                         {(sectionKey === 'accepted' || sectionKey === 'manual') &&

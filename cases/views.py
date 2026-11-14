@@ -604,7 +604,6 @@ class BulkRedactionUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
         ids = serializer.validated_data["ids"]
         is_accepted = serializer.validated_data["is_accepted"]
-        justification = serializer.validated_data["justification"]
         rejected = serializer.validated_data["rejected"]
         exemption = serializer.validated_data["exemption"]
 
@@ -624,11 +623,10 @@ class BulkRedactionUpdateView(APIView):
             )
         if is_accepted:
             target_qs.accept(by=Redaction.DecidedBy.HUMAN, exemption=exemption)
-        elif rejected or justification:
-            target_qs.reject(justification or "", by=Redaction.DecidedBy.HUMAN)
+        elif rejected:
+            target_qs.reject(by=Redaction.DecidedBy.HUMAN)
         else:
-            # Neither the reject flag nor a justification means the decision
-            # is being withdrawn, not a blank rejection.
+            # A non-accept without the reject flag withdraws the decision.
             target_qs.reset()
 
         updated = Redaction.objects.filter(
@@ -698,10 +696,7 @@ class BulkByTextRedactionView(APIView):
             if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:
                 count = pending_qs.accept(by=Redaction.DecidedBy.HUMAN)
             else:
-                count = pending_qs.reject(
-                    data.get("rejection_reason", ""),
-                    by=Redaction.DecidedBy.HUMAN,
-                )
+                count = pending_qs.reject(by=Redaction.DecidedBy.HUMAN)
 
         return Response({"updated": count}, status=status.HTTP_200_OK)
 

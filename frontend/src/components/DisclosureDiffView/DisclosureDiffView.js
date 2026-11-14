@@ -24,7 +24,7 @@ const FIELD_LABELS = {
     redaction_type: 'Type',
     is_accepted: 'Decision',
     decided_by: 'Decided by',
-    justification: 'Justification',
+    exemption: 'Exemption',
     context: 'Context',
 };
 

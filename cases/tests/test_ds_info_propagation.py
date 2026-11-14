@@ -235,7 +235,6 @@ class ApplyPlanTests(PlanApplyTestCase):
 
         to_accept.refresh_from_db()
         self.assertTrue(to_accept.is_accepted)
-        self.assertIsNone(to_accept.justification)
 
         to_upgrade.refresh_from_db()
         self.assertEqual(

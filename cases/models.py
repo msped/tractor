@@ -261,9 +261,7 @@ class DisclosureLockError(ProvenanceError):
 
 # Fields that together encode an accept/reject decision.  They may only be
 # written through the decision methods below, never via a generic update().
-_DECISION_FIELDS = frozenset(
-    {"is_accepted", "justification", "exemption", "decided_by"}
-)
+_DECISION_FIELDS = frozenset({"is_accepted", "exemption", "decided_by"})
 
 
 class RedactionQuerySet(models.QuerySet):
@@ -274,29 +272,23 @@ class RedactionQuerySet(models.QuerySet):
         `exemption` if one is given.
 
         Overwrites prior provenance — a HUMAN accept over a machine-accepted
-        row flips it to human-decided — and clears any stale rejection
-        justification.  A plain accept clears any earlier exemption.  Only
-        Operational Data may carry one; the check constraint refuses the
-        UPDATE otherwise.  Scope with .pending() first if prior decisions
-        must be preserved.  Single UPDATE.
+        row flips it to human-decided.  A plain accept clears any earlier
+        exemption.  Only Operational Data may carry one; the check
+        constraint refuses the UPDATE otherwise.  Scope with .pending() first
+        if prior decisions must be preserved.  Single UPDATE.
         """
         self.assert_disclosure_unlocked(by)
         return super().update(
-            is_accepted=True,
-            justification=None,
-            exemption=exemption,
-            decided_by=by,
+            is_accepted=True, exemption=exemption, decided_by=by
         )
 
-    def reject(self, justification="", *, by):
-        """Reject everything in the queryset as decided by `by`."""
+    def reject(self, *, by):
+        """
+        Reject everything in the queryset as decided by `by`.  A reject
+        needs no reason: disclosing text is the default.
+        """
         self.assert_disclosure_unlocked(by)
-        return super().update(
-            is_accepted=False,
-            justification=justification,
-            exemption=None,
-            decided_by=by,
-        )
+        return super().update(is_accepted=False, exemption=None, decided_by=by)
 
     def reset(self):
         """Return all redactions in the queryset to pending (no decision)."""
@@ -304,10 +296,7 @@ class RedactionQuerySet(models.QuerySet):
         # a decision, so it is always subject to the post-disclosure lock.
         self.assert_disclosure_unlocked(None)
         return super().update(
-            is_accepted=False,
-            justification=None,
-            exemption=None,
-            decided_by=None,
+            is_accepted=False, exemption=None, decided_by=None
         )
 
     # ---- post-disclosure lock ----
@@ -426,21 +415,14 @@ class Redaction(models.Model):
     start_char = models.IntegerField()
     end_char = models.IntegerField()
     text = models.TextField(help_text="The actual text that was redacted.")
-    justification = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Reason for a manual redaction or for rejecting a suggestion.",
-    )
     rationale = models.TextField(
         blank=True,
         null=True,
         help_text=(
             "Why the system classified this span as it did, written once at "
             "creation so a reviewer can judge an inferred suggestion rather "
-            "than take it on trust. Distinct from justification, which is a "
-            "human's reason for their own decision: that one is cleared on "
-            "accept and overwritten on reject, and the review UI reads its "
-            "presence as 'rejected'."
+            "than take it on trust. Never a human's reason: a reviewer's "
+            "basis for withholding is the exemption."
         ),
     )
     exemption = models.ForeignKey(

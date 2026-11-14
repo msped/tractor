@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { createRedaction, updateRedaction, deleteRedaction } from '@/services/redactionService';
+import { decisionWriteFor } from '@/utils/redactionDecision';
 import toast from 'react-hot-toast';
 import { toastError } from '@/api/toastError';
 
@@ -24,7 +25,7 @@ export function useRemoveRedaction({
         } else {
             applySingle(await updateRedaction(
                 redactionToRemove.id,
-                { is_accepted: false, justification: null }
+                { is_accepted: false }
             ));
             toast.success("Suggestion reverted to pending.");
         }
@@ -61,8 +62,8 @@ export function useRemoveRedaction({
             } else {
                 // AI suggestion reverted to pending — undo restores prior state
                 pushHistory(
-                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification, exemption: snap.exemption ?? null })),
-                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }))
+                    async () => applySingle(await updateRedaction(snap.id, decisionWriteFor(snap))),
+                    async () => applySingle(await updateRedaction(snap.id, { is_accepted: false }))
                 );
             }
         } catch (error) {
@@ -100,7 +101,7 @@ export function useRemoveRedaction({
                         await deleteRedaction(r.id);
                         setRedactions(prev => prev.filter(x => x.id !== r.id));
                     } else {
-                        applySingle(await updateRedaction(r.id, { is_accepted: false, justification: null }));
+                        applySingle(await updateRedaction(r.id, { is_accepted: false }));
                     }
                 } else if (trimEnd) {
                     applySingle(await updateRedaction(r.id, {
@@ -125,7 +126,6 @@ export function useRemoveRedaction({
                         redaction_type: r.redaction_type,
                         is_suggestion: r.is_suggestion,
                         is_accepted: r.is_accepted,
-                        justification: r.justification,
                         exemption: r.exemption ?? null,
                     });
                     setRedactions(prev => [...prev, createdSecond]);
@@ -153,7 +153,7 @@ export function useRemoveRedaction({
                             });
                             setRedactions(prev => [...prev, created]);
                         } else {
-                            applySingle(await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification, exemption: snap.exemption ?? null }));
+                            applySingle(await updateRedaction(snap.id, decisionWriteFor(snap)));
                         }
                     } else {
                         applySingle(await updateRedaction(snap.id, {
@@ -180,7 +180,7 @@ export function useRemoveRedaction({
                             await deleteRedaction(snap.id);
                             setRedactions(prev => prev.filter(r => r.id !== snap.id));
                         } else {
-                            applySingle(await updateRedaction(snap.id, { is_accepted: false, justification: null }));
+                            applySingle(await updateRedaction(snap.id, { is_accepted: false }));
                         }
                     } else if (trimEnd) {
                         applySingle(await updateRedaction(snap.id, {
@@ -199,7 +199,7 @@ export function useRemoveRedaction({
                             start_char: selEnd, end_char: snap.end_char,
                             document: documentId, redaction_type: snap.redaction_type,
                             is_suggestion: snap.is_suggestion, is_accepted: snap.is_accepted,
-                            justification: snap.justification, exemption: snap.exemption ?? null,
+                            exemption: snap.exemption ?? null,
                         });
                         setRedactions(prev => [...prev, created]);
                         splitCreatedId = created.id;
@@ -251,7 +251,7 @@ export function useRemoveRedaction({
                         });
                         setRedactions(prev => [...prev, created]);
                     } else {
-                        const restored = await updateRedaction(snap.id, { is_accepted: snap.is_accepted, justification: snap.justification, exemption: snap.exemption ?? null });
+                        const restored = await updateRedaction(snap.id, decisionWriteFor(snap));
                         setRedactions(prev => prev.map(r => r.id === snap.id ? restored : r));
                     }
                 }
