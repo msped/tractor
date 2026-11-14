@@ -295,6 +295,23 @@ describe('<RedactionSidebar />', () => {
                 cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
                 cy.contains('[role="menuitem"]', 'No exemptions found').should('be.visible');
             });
+
+            it('shows an exemption\'s full name and description on hover, since long names are cut off', () => {
+                const longName = 'S.22 - Information intended for future publication by the organisation';
+                const templates = [
+                    ...mockExemptionTemplates,
+                    { id: 3, name: longName, description: 'Withhold until the planned publication date.' },
+                ];
+                cy.fullMount(<RedactionSidebar {...baseProps} exemptionTemplates={templates} redactions={opDataPending} />);
+                cy.contains('li', 'ref 1234').find('button[aria-label="change redaction type and accept"]').click();
+
+                cy.contains('[role="menuitem"]', 'S.22 - Information').trigger('mouseover');
+
+                cy.get('[role="tooltip"]').should('be.visible').within(() => {
+                    cy.contains(longName).should('be.visible');
+                    cy.contains('Withhold until the planned publication date.').should('be.visible');
+                });
+            });
         });
 
         it('calls onCardClick with the item id when card content is clicked', () => {
@@ -474,6 +491,18 @@ describe('<RedactionSidebar />', () => {
             cy.contains('li', 'ref 1234').find('button[aria-label="change exemption"]').click();
             cy.contains('[role="menuitem"]', 'S.42 - Legal Privilege').click();
             cy.get('@onSetExemption').should('have.been.calledOnceWith', ['a4', 'a5'], 2);
+        });
+
+        it('shows an exemption\'s full name on hover in the card menu too', () => {
+            const longName = 'S.22 - Information intended for future publication by the organisation';
+            const templates = [...mockExemptionTemplates, { id: 3, name: longName, description: '' }];
+            cy.fullMount(<RedactionSidebar {...baseProps} exemptionTemplates={templates} redactions={withAccepted([unexempted])} />);
+            cy.contains('accepted (1)').click();
+            cy.contains('li', 'ref 1234').find('button[aria-label="change exemption"]').click();
+
+            cy.contains('[role="menuitem"]', 'S.22 - Information').trigger('mouseover');
+
+            cy.get('[role="tooltip"]').should('be.visible').and('contain', longName);
         });
 
         it('still names a deactivated exemption on its card, though the menu no longer lists it', () => {

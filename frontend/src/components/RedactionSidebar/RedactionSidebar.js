@@ -146,10 +146,24 @@ const RedactionSidebarComponent = ({
                 fullWidth
             />
         </Box>,
+        // A menu item is one ellipsised line, so a long name is cut off; the
+        // tooltip shows it whole, with the template's description.
         ...filteredExemptions.map(t => (
-            <MenuItem key={t.id} selected={t.id === currentId} onClick={() => onPick(t.id)}>
-                {t.name}
-            </MenuItem>
+            <Tooltip
+                key={t.id}
+                placement="right"
+                enterDelay={400}
+                title={
+                    <>
+                        <Typography variant="body2">{t.name}</Typography>
+                        {t.description && <Typography variant="caption">{t.description}</Typography>}
+                    </>
+                }
+            >
+                <MenuItem selected={t.id === currentId} onClick={() => onPick(t.id)}>
+                    {t.name}
+                </MenuItem>
+            </Tooltip>
         )),
         filteredExemptions.length === 0 && (
             <MenuItem key="exemptions-none" disabled>No exemptions found</MenuItem>
