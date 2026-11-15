@@ -138,21 +138,22 @@ Changes to custom recognizers take effect on the next document processed — doc
 
 ## Exemption Templates
 
-Exemption templates are pre-configured rejection reasons that reviewers can select when rejecting a redaction suggestion. Rather than typing a reason from scratch each time, reviewers can pick from a searchable list of standard exemptions (e.g. "S.40 - Personal Information", "S.42 - Legal Privilege").
+Exemption templates are the bases your organisation withholds **Operational Data** under (e.g. "S.31 - Law Enforcement", "S.42 - Legal Privilege"). Reviewers pick one from a searchable list when they accept Operational Data. Third-Party PII and Data Subject Information never take an exemption.
 
 ### Managing Templates
 
-Navigate to **Settings** and find the **Exemption Templates** card.
+Navigate to **Settings**, find the **Exemption Templates** card and click **Manage**.
 
-- **Adding a template** — Click **Add**, enter a name (required) and an optional description, then click **Save**.
-- **Deleting a template** — Click the delete icon next to a template and confirm the prompt.
+- **Adding a template** — Click **Add**, enter a name (required) and an optional description, then click **Save**. Renaming a template in the Django Admin renames it on every redaction that uses it.
+- **Trains model** — Each template has a switch that decides whether Operational Data withheld under it teaches the SpanCat model. It is off for every template until you turn it on. Leave it off for exemptions that cover people's details, so the model does not learn that names are operational. A change applies to past redactions as well, from the next training run.
+- **Deleting a template** — Click the delete icon next to a template and confirm the prompt. A template that redactions are withheld under cannot be deleted, so they keep their basis: Tractor says how many use it and offers **Deactivate** instead.
 
 !!! note
-    Only active templates appear in the rejection dropdown. Templates can also be managed directly through the Django Admin at `/admin/cases/exemptiontemplate/`, where they can be marked as inactive to hide them from reviewers without deleting them.
+    A deactivated template drops out of Settings and out of every reviewer's list, but redactions that already use it still show it by name. To reactivate one, use the Django Admin at `/admin/cases/exemptiontemplate/`.
 
 ### How Reviewers Use Exemptions
 
-When reviewing a document, the dropdown arrow on the **Reject** button opens a searchable list of configured exemptions. Reviewers can type to filter the list and click an exemption to reject the suggestion immediately with that reason recorded. The same dropdown also offers **Reject as Data Subject**, which is not an exemption; see [Redacting Documents](redaction.md).
+Reviewers choose an exemption from the Accept dropdown on an Operational Data suggestion, and set, change or clear it on any accepted Operational Data card, including manual redactions. See [Exemptions](redaction.md#exemptions) in Redacting Documents.
 
 ---
 

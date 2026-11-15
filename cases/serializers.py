@@ -262,37 +262,86 @@ class RedactionSerializer(serializers.ModelSerializer):
     # A reject needs no reason, so it has to say it is one; without this flag
     # an unjustified non-accept is read as withdrawing the decision.
     rejected = serializers.BooleanField(write_only=True, required=False)
+    exemption = serializers.PrimaryKeyRelatedField(
+        queryset=ExemptionTemplate.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    exemption_name = serializers.CharField(
+        source="exemption.name", read_only=True, allow_null=True
+    )
+
+    def validate(self, attrs):
+        """
+        Only accepted Operational Data carries an exemption. Naming one on
+        anything else is refused. Like the queryset decision methods, a
+        decision write without one clears it, and so does a write that moves
+        a row off Operational Data.
+        """
+        instance = self.instance
+
+        def resulting(field):
+            return attrs.get(field, getattr(instance, field, None))
+
+        is_op_data = (
+            resulting("redaction_type")
+            == Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        withholds = bool(resulting("is_accepted")) and not attrs.get(
+            "rejected"
+        )
+        decision_write = bool({"is_accepted", "rejected"} & attrs.keys())
+        if attrs.get("exemption") is not None:
+            if not is_op_data:
+                raise serializers.ValidationError(
+                    {"exemption": "Only Operational Data can be exempted."}
+                )
+            if not withholds:
+                raise serializers.ValidationError(
+                    {
+                        "exemption": "Only an accepted redaction can be exempted."
+                    }
+                )
+        elif decision_write or not (is_op_data and withholds):
+            attrs["exemption"] = None
+        return attrs
 
     @staticmethod
-    def _decided_by_for(is_accepted, justification, rejected=False):
+    def _decided_by_for(is_accepted, rejected=False):
         """
         Provenance implied by a decision write through this (human-facing)
-        serializer: any accept, explicit rejection or justified rejection is a
-        human decision; an unjustified non-accept means the decision is
-        withdrawn (pending).
+        serializer: any accept or explicit rejection is a human decision; a
+        non-accept without the reject flag means the decision is withdrawn
+        (pending).
         """
-        if is_accepted or rejected or justification:
+        if is_accepted or rejected:
             return Redaction.DecidedBy.HUMAN
         return None
 
     def create(self, validated_data):
         rejected = validated_data.pop("rejected", False)
         validated_data["decided_by"] = self._decided_by_for(
-            validated_data.get("is_accepted", False),
-            validated_data.get("justification"),
-            rejected,
+            validated_data.get("is_accepted", False), rejected
         )
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
         rejected = validated_data.pop("rejected", False)
-        if (
-            rejected
-            or {"is_accepted", "justification"} & validated_data.keys()
-        ):
+        # Setting, changing or clearing the basis for withholding is a
+        # decision too, even when it is the only field written.
+        exemption_changed = (
+            "exemption" in validated_data
+            and getattr(validated_data["exemption"], "pk", None)
+            != instance.exemption_id
+        )
+        if rejected or exemption_changed or "is_accepted" in validated_data:
+            # Saving the instance skips the queryset decision methods, so
+            # the post-disclosure lock is checked here instead.
+            Redaction.objects.filter(
+                pk=instance.pk
+            ).assert_disclosure_unlocked(Redaction.DecidedBy.HUMAN)
             validated_data["decided_by"] = self._decided_by_for(
                 validated_data.get("is_accepted", instance.is_accepted),
-                validated_data.get("justification", instance.justification),
                 rejected,
             )
         return super().update(instance, validated_data)
@@ -306,7 +355,8 @@ class RedactionSerializer(serializers.ModelSerializer):
             "end_char",
             "text",
             "redaction_type",
-            "justification",
+            "exemption",
+            "exemption_name",
             "rationale",
             "is_suggestion",
             "is_accepted",
@@ -332,10 +382,20 @@ class RedactionSerializer(serializers.ModelSerializer):
 class BulkRedactionUpdateSerializer(serializers.Serializer):
     ids = serializers.ListField(child=serializers.UUIDField(), default=list)
     is_accepted = serializers.BooleanField()
-    justification = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True, default=None
-    )
     rejected = serializers.BooleanField(required=False, default=False)
+    exemption = serializers.PrimaryKeyRelatedField(
+        queryset=ExemptionTemplate.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+
+    def validate(self, attrs):
+        if attrs["exemption"] is not None and not attrs["is_accepted"]:
+            raise serializers.ValidationError(
+                {"exemption": "Only an accepted redaction can be exempted."}
+            )
+        return attrs
 
 
 class BulkByTextSerializer(serializers.Serializer):
@@ -349,9 +409,6 @@ class BulkByTextSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
         choices=[(STATUS_ACCEPTED, "Accepted"), (STATUS_REJECTED, "Rejected")]
     )
-    rejection_reason = serializers.CharField(
-        required=False, allow_blank=True, default=""
-    )
 
 
 class ReviewWorkflowSettingsSerializer(serializers.ModelSerializer):
@@ -363,7 +420,7 @@ class ReviewWorkflowSettingsSerializer(serializers.ModelSerializer):
 class ExemptionTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExemptionTemplate
-        fields = ["id", "name", "description"]
+        fields = ["id", "name", "description", "trainable", "is_active"]
 
 
 class DocumentExportSettingsSerializer(serializers.ModelSerializer):

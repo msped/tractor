@@ -10,9 +10,9 @@ describe('<DocumentViewer />', () => {
         // Accepted OP_DATA redaction
         { id: 'redaction-2', start_char: 29, end_char: 45, text: 'operational data', redaction_type: 'OP_DATA', is_accepted: true, is_suggestion: true },
         // Pending suggestion (DS_INFO)
-        { id: 'redaction-3', start_char: 73, end_char: 85, text: 'data subject', redaction_type: 'DS_INFO', is_accepted: false, is_suggestion: true, justification: null },
+        { id: 'redaction-3', start_char: 73, end_char: 85, text: 'data subject', redaction_type: 'DS_INFO', is_accepted: false, is_suggestion: true },
         // Rejected suggestion
-        { id: 'redaction-4', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, justification: 'Not relevant', decided_by: 'HUMAN' },
+        { id: 'redaction-4', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, decided_by: 'HUMAN' },
     ];
 
     beforeEach(() => {
@@ -599,7 +599,7 @@ describe('<DocumentViewer />', () => {
 
     context('Decision provenance', () => {
         const rejectedWithoutReason = [
-            { id: 'redaction-nr', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, justification: '', decided_by: 'HUMAN' },
+            { id: 'redaction-nr', start_char: 101, end_char: 120, text: 'rejected suggestion', redaction_type: 'PII', is_accepted: false, is_suggestion: true, decided_by: 'HUMAN' },
         ];
 
         it('draws a suggestion rejected without a reason as rejected, not pending', () => {

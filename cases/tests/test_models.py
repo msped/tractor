@@ -8,7 +8,8 @@ from unittest.mock import patch
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
@@ -17,6 +18,7 @@ from cases.models import (
     DisclosureLockError,
     Document,
     DocumentExportSettings,
+    ExemptionTemplate,
     Export,
     InternalReview,
     ProvenanceError,
@@ -250,23 +252,6 @@ class RedactionModelTests(NetworkBlockerMixin, TestCase):
         )
         self.assertIn("Sensitive Data", str(redaction))
 
-    def test_redaction_with_justification(self):
-        justification_text = (
-            "This is a manual redaction for a specific reason."
-        )
-        redaction = Redaction.objects.create(
-            document=self.document,
-            start_char=0,
-            end_char=10,
-            text="Secret Info",
-            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
-            is_suggestion=False,
-            is_accepted=True,
-            justification=justification_text,
-            decided_by=Redaction.DecidedBy.HUMAN,
-        )
-        self.assertEqual(redaction.justification, justification_text)
-
     def test_redaction_defaults(self):
         redaction = Redaction.objects.create(
             document=self.document,
@@ -355,52 +340,34 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
     def test_reject_without_by_raises_type_error(self):
         r = self._make_redaction()
         with self.assertRaises(TypeError):
-            Redaction.objects.filter(pk=r.pk).reject("reason")
+            Redaction.objects.filter(pk=r.pk).reject()
 
-    def test_accept_clears_stale_rejection_justification(self):
-        r = self._make_redaction(
-            justification="old rejection reason",
-            decided_by=Redaction.DecidedBy.HUMAN,
-        )
-        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
-        r.refresh_from_db()
-        self.assertTrue(r.is_accepted)
-        self.assertIsNone(r.justification)
+    def test_reject_takes_no_reason(self):
+        r = self._make_redaction()
+        with self.assertRaises(TypeError):
+            Redaction.objects.filter(pk=r.pk).reject(
+                "reason", by=Redaction.DecidedBy.HUMAN
+            )
 
-    def test_reject_sets_is_accepted_false_and_justification(self):
+    def test_reject_sets_is_accepted_false_and_provenance(self):
+        """Provenance alone makes a rejection a decision."""
         r = self._make_redaction(
             is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
         )
-        Redaction.objects.filter(pk=r.pk).reject(
-            "S.40 - Personal Information", by=Redaction.DecidedBy.HUMAN
-        )
+        Redaction.objects.filter(pk=r.pk).reject(by=Redaction.DecidedBy.HUMAN)
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
-        self.assertEqual(r.justification, "S.40 - Personal Information")
         self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
-
-    def test_reject_with_blank_justification_still_counts_as_decided(self):
-        """Provenance makes an unjustified rejection representable."""
-        r = self._make_redaction()
-        Redaction.objects.filter(pk=r.pk).reject(
-            "", by=Redaction.DecidedBy.CASE_PROPAGATION
-        )
-        r.refresh_from_db()
-        self.assertFalse(r.is_accepted)
-        self.assertEqual(r.justification, "")
         self.assertNotIn(r, Redaction.objects.pending())
         self.assertIn(r, Redaction.objects.decided())
 
     def test_reset_returns_to_pending_and_clears_provenance(self):
         r = self._make_redaction(
-            is_accepted=True,
-            justification="old reason",
-            decided_by=Redaction.DecidedBy.HUMAN,
+            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
         )
         Redaction.objects.filter(pk=r.pk).reset()
         r.refresh_from_db()
         self.assertFalse(r.is_accepted)
-        self.assertIsNone(r.justification)
         self.assertIsNone(r.decided_by)
         self.assertIn(r, Redaction.objects.pending())
 
@@ -419,16 +386,13 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
 
     def test_reject_returns_count(self):
         self._make_redaction()
-        count = Redaction.objects.all().reject(
-            "reason", by=Redaction.DecidedBy.HUMAN
-        )
+        count = Redaction.objects.all().reject(by=Redaction.DecidedBy.HUMAN)
         self.assertEqual(count, 1)
 
     def test_update_of_decision_fields_raises_provenance_error(self):
         self._make_redaction()
         for kwargs in (
             {"is_accepted": True},
-            {"justification": "reason"},
             {"decided_by": Redaction.DecidedBy.HUMAN},
         ):
             with self.subTest(kwargs=kwargs):
@@ -493,9 +457,7 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
             decided_by=Redaction.DecidedBy.HUMAN,
             redaction_type=Redaction.RedactionType.DS_INFORMATION,
         )
-        rejected = self._make_redaction(
-            justification="reason", decided_by=Redaction.DecidedBy.HUMAN
-        )
+        rejected = self._make_redaction(decided_by=Redaction.DecidedBy.HUMAN)
         pending = self._make_redaction()
 
         trainable = Redaction.objects.trainable()
@@ -504,6 +466,117 @@ class RedactionQuerySetDecisionTests(NetworkBlockerMixin, TestCase):
         self.assertNotIn(ds_info, trainable)
         self.assertNotIn(rejected, trainable)
         self.assertNotIn(pending, trainable)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionExemptionTests(NetworkBlockerMixin, TestCase):
+    """An exemption is part of the decision to withhold Operational Data."""
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="202541", data_subject_name="Exemption Test"
+        )
+        file = SimpleUploadedFile("ex.txt", b"content")
+        self.document = Document.objects.create(
+            case=self.case, original_file=file
+        )
+        self.template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **kwargs):
+        defaults = {
+            "document": self.document,
+            "start_char": 0,
+            "end_char": 4,
+            "text": "test",
+            "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
+        }
+        defaults.update(kwargs)
+        return Redaction.objects.create(**defaults)
+
+    def _make_exempted(self):
+        return self._make_redaction(
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+            exemption=self.template,
+        )
+
+    def test_accept_with_exemption_links_the_template(self):
+        r = self._make_redaction()
+        Redaction.objects.filter(pk=r.pk).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        r.refresh_from_db()
+        self.assertTrue(r.is_accepted)
+        self.assertEqual(r.exemption, self.template)
+
+    def test_plain_accept_clears_the_exemption(self):
+        r = self._make_exempted()
+        Redaction.objects.filter(pk=r.pk).accept(by=Redaction.DecidedBy.HUMAN)
+        r.refresh_from_db()
+        self.assertTrue(r.is_accepted)
+        self.assertIsNone(r.exemption)
+
+    def test_reject_clears_the_exemption(self):
+        r = self._make_exempted()
+        Redaction.objects.filter(pk=r.pk).reject(by=Redaction.DecidedBy.HUMAN)
+        r.refresh_from_db()
+        self.assertFalse(r.is_accepted)
+        self.assertIsNone(r.exemption)
+
+    def test_reset_clears_the_exemption(self):
+        r = self._make_exempted()
+        Redaction.objects.filter(pk=r.pk).reset()
+        r.refresh_from_db()
+        self.assertIsNone(r.decided_by)
+        self.assertIsNone(r.exemption)
+
+    def test_update_of_exemption_raises_provenance_error(self):
+        self._make_redaction()
+        with self.assertRaises(ProvenanceError):
+            Redaction.objects.all().update(exemption=self.template)
+
+    def test_constraint_refuses_an_exemption_off_operational_data(self):
+        for redaction_type in (
+            Redaction.RedactionType.THIRD_PARTY_PII,
+            Redaction.RedactionType.DS_INFORMATION,
+        ):
+            with self.subTest(redaction_type=redaction_type):
+                with self.assertRaises(IntegrityError), transaction.atomic():
+                    self._make_redaction(
+                        redaction_type=redaction_type,
+                        is_accepted=True,
+                        decided_by=Redaction.DecidedBy.HUMAN,
+                        exemption=self.template,
+                    )
+
+    def test_templates_start_not_trainable(self):
+        self.assertFalse(self.template.trainable)
+
+    def test_trainable_reads_the_exemption_flag(self):
+        exempted = self._make_exempted()
+        plain = self._make_redaction(
+            start_char=5,
+            end_char=9,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+        self.assertNotIn(exempted, Redaction.objects.trainable())
+        self.assertIn(plain, Redaction.objects.trainable())
+
+        self.template.trainable = True
+        self.template.save()
+
+        self.assertIn(exempted, Redaction.objects.trainable())
+
+    def test_template_in_use_cannot_be_deleted(self):
+        self._make_exempted()
+        with self.assertRaises(ProtectedError):
+            self.template.delete()
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
@@ -565,7 +638,7 @@ class DisclosureLockTests(NetworkBlockerMixin, TestCase):
     def test_human_reject_refused_when_disclosed_and_no_review(self):
         self._disclose()
         with self.assertRaises(DisclosureLockError):
-            self._qs().reject("reason", by=Redaction.DecidedBy.HUMAN)
+            self._qs().reject(by=Redaction.DecidedBy.HUMAN)
 
     def test_reset_refused_when_disclosed_and_no_review(self):
         self._disclose()
@@ -589,10 +662,10 @@ class DisclosureLockTests(NetworkBlockerMixin, TestCase):
     def test_human_reject_allowed_while_review_open(self):
         self._disclose()
         self._open_review()
-        self._qs().reject("reason", by=Redaction.DecidedBy.HUMAN)
+        self._qs().reject(by=Redaction.DecidedBy.HUMAN)
         self.redaction.refresh_from_db()
         self.assertFalse(self.redaction.is_accepted)
-        self.assertEqual(self.redaction.justification, "reason")
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_reset_allowed_while_review_open(self):
         self._disclose()

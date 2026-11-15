@@ -14,7 +14,7 @@ const diffWithChanges = {
             redaction_type: 'OP_DATA',
             is_accepted: false,
             decided_by: null,
-            justification: null,
+            exemption: null,
             context: null,
         },
     ],
@@ -28,7 +28,7 @@ const diffWithChanges = {
             redaction_type: 'PII',
             is_accepted: true,
             decided_by: 'HUMAN',
-            justification: null,
+            exemption: null,
             context: null,
         },
     ],
@@ -41,12 +41,12 @@ const diffWithChanges = {
             redaction_type: 'OP_DATA',
             is_accepted: false,
             decided_by: 'HUMAN',
-            justification: 'not needed',
+            exemption: null,
             context: 'a witness',
             changes: {
                 is_accepted: { from: true, to: false },
                 redaction_type: { from: 'PII', to: 'OP_DATA' },
-                justification: { from: null, to: 'not needed' },
+                exemption: { from: 'S.42 - Legal Privilege', to: null },
                 context: { from: null, to: 'a witness' },
             },
         },
@@ -67,7 +67,7 @@ describe('<DisclosureDiffView />', () => {
         cy.contains('Alice').should('be.visible');
         cy.contains('Decision: Accepted → Not accepted').should('be.visible');
         cy.contains('Type: Third-party PII → Operational').should('be.visible');
-        cy.contains('Justification: — → not needed').should('be.visible');
+        cy.contains('Exemption: S.42 - Legal Privilege → —').should('be.visible');
         cy.contains('Context: — → a witness').should('be.visible');
         // Long added text is truncated with an ellipsis.
         cy.contains('…').should('be.visible');

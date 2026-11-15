@@ -1,0 +1,9 @@
+# Exemptions link to their templates, on Operational Data only
+
+[ADR-0003](0003-exemptions-on-accept.md) stored an exemption as the template's name copied into the redaction's free-text `justification`. That left nothing tying a redaction to its basis: renaming a template stranded the old name, deleting one left orphaned text, and nothing could ask which redactions rely on an exemption. A redaction now links to one exemption template, and a template that is in use cannot be deleted, only deactivated. One exemption per redaction is enough, because nothing reads exemptions in aggregate yet; a many-to-many link can follow if an exemption schedule ever needs one.
+
+Exemptions apply to Operational Data only. Third-Party PII is withheld by default and needs no basis, and Data Subject Information is disclosed, so an exemption on it would record a reason for withholding text the export then releases. The database refuses an exemption on any other type, and any change that moves a redaction off Operational Data clears its exemption. A suggestion of another type that is really operational is accepted as Operational Data first.
+
+Operational Data is the only type that trains SpanCat, and a name can still reach it through a type change or a manual redaction. Withheld under a personal-information style exemption, it would teach the model that names are operational. Each template therefore has a trainable setting, off by default for new and existing templates, so nothing leaks before an admin has chosen. It is read live when training data is collected, so changing it also applies to past redactions. A span excluded this way stays in its document as unlabelled text rather than taking the whole document out, because the case corpus is small.
+
+Free-text justification is retired. The existing text was test data and is discarded rather than converted.

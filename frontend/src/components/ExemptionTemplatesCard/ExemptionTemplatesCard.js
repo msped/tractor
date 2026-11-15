@@ -13,7 +13,9 @@ import {
     DialogContent,
     DialogTitle,
     Divider,
+    FormControlLabel,
     IconButton,
+    Switch,
     TextField,
     Typography,
 } from '@mui/material';
@@ -25,6 +27,7 @@ import {
     createExemptionTemplate,
     deleteExemptionTemplate,
     getExemptionTemplates,
+    updateExemptionTemplate,
 } from '@/services/redactionService';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import toast from 'react-hot-toast';
@@ -42,6 +45,9 @@ export const ExemptionTemplatesCard = () => {
     const [isAdding, setIsAdding] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(null);
+    // A template redactions are withheld under can't be deleted; the server
+    // says why, and the admin can deactivate it instead.
+    const [inUse, setInUse] = useState(null);
     const [manageOpen, setManageOpen] = useState(false);
 
     const handleAdd = async () => {
@@ -64,15 +70,46 @@ export const ExemptionTemplatesCard = () => {
     };
 
     const handleDeleteConfirm = async () => {
-        const id = confirmDelete.id;
+        const template = confirmDelete;
         setConfirmDelete(null);
         setIsSubmitting(true);
         try {
-            await deleteExemptionTemplate(id);
+            await deleteExemptionTemplate(template.id);
             toast.success('Exemption template deleted.');
             await mutate();
         } catch (e) {
-            toastError(e, 'Failed to delete template.');
+            if (e.status === 409) {
+                setInUse({ template, message: e.message });
+            } else {
+                toastError(e, 'Failed to delete template.');
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeactivateConfirm = async () => {
+        const { template } = inUse;
+        setInUse(null);
+        setIsSubmitting(true);
+        try {
+            await updateExemptionTemplate(template.id, { is_active: false });
+            toast.success('Exemption template deactivated.');
+            await mutate();
+        } catch (e) {
+            toastError(e, 'Failed to deactivate template.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleTrainableChange = async (template, trainable) => {
+        setIsSubmitting(true);
+        try {
+            await updateExemptionTemplate(template.id, { trainable });
+            await mutate();
+        } catch (e) {
+            toastError(e, 'Failed to update template.');
         } finally {
             setIsSubmitting(false);
         }
@@ -90,6 +127,15 @@ export const ExemptionTemplatesCard = () => {
                 description={`Are you sure you want to delete "${confirmDelete?.name}"? This cannot be undone.`}
                 confirmLabel="Delete"
                 confirmColor="error"
+            />
+
+            <ConfirmationDialog
+                open={!!inUse}
+                onClose={() => setInUse(null)}
+                onConfirm={handleDeactivateConfirm}
+                title="Template in use"
+                description={inUse?.message}
+                confirmLabel="Deactivate"
             />
 
             <Dialog open={manageOpen} onClose={() => setManageOpen(false)} maxWidth="sm" fullWidth>
@@ -159,6 +205,10 @@ export const ExemptionTemplatesCard = () => {
                     {templates && (
                         templates.length > 0 ? (
                             <Box>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                    Operational Data withheld under an exemption only teaches the model when that
+                                    exemption trains it. Leave it off for exemptions that cover people&apos;s details.
+                                </Typography>
                                 {templates.map((template, index) => (
                                     <Box key={template.id}>
                                         {index > 0 && <Divider />}
@@ -171,15 +221,30 @@ export const ExemptionTemplatesCard = () => {
                                                     </Typography>
                                                 )}
                                             </Box>
-                                            <IconButton
-                                                aria-label={`delete ${template.name}`}
-                                                color="error"
-                                                size="small"
-                                                onClick={() => setConfirmDelete(template)}
-                                                disabled={isSubmitting}
-                                            >
-                                                <DeleteIcon />
-                                            </IconButton>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                                                <FormControlLabel
+                                                    label="Trains model"
+                                                    slotProps={{ typography: { variant: 'caption' } }}
+                                                    control={
+                                                        <Switch
+                                                            size="small"
+                                                            checked={template.trainable}
+                                                            onChange={(e) => handleTrainableChange(template, e.target.checked)}
+                                                            disabled={isSubmitting}
+                                                            slotProps={{ input: { 'aria-label': `${template.name} trains the model` } }}
+                                                        />
+                                                    }
+                                                />
+                                                <IconButton
+                                                    aria-label={`delete ${template.name}`}
+                                                    color="error"
+                                                    size="small"
+                                                    onClick={() => setConfirmDelete(template)}
+                                                    disabled={isSubmitting}
+                                                >
+                                                    <DeleteIcon />
+                                                </IconButton>
+                                            </Box>
                                         </Box>
                                     </Box>
                                 ))}
@@ -199,7 +264,7 @@ export const ExemptionTemplatesCard = () => {
                         Exemption Templates
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Configurable rejection reasons shown to reviewers.
+                        Bases reviewers can withhold Operational Data under.
                     </Typography>
                     {templates && (
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

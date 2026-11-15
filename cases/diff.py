@@ -15,13 +15,17 @@ matched on id, so it reflects every edit type a review can make — flip, add,
 delete, re-bound and re-type.
 """
 
-from .models import Redaction, RedactionSnapshot
+from .models import ExemptionTemplate, Redaction, RedactionSnapshot
 
 # The fields whose value, if it differs between the disclosed snapshot and the
 # live redaction, constitutes a modification. Deliberately the human-meaningful
-# edit surface: bounds (re-bound), text, type (re-type), the decision (flip)
-# and any attached context. is_suggestion/source/created_at never change under
-# review, so they are excluded from the comparison.
+# edit surface: bounds (re-bound), text, type (re-type), the decision (flip),
+# the basis for withholding and any attached context.
+# is_suggestion/source/created_at never change under review, so they are
+# excluded from the comparison.
+#
+# `exemption` is the template's current name. Names are unique, so comparing
+# them compares templates, and a rename alone is not a modification.
 _DIFF_FIELDS = (
     "start_char",
     "end_char",
@@ -29,21 +33,32 @@ _DIFF_FIELDS = (
     "redaction_type",
     "is_accepted",
     "decided_by",
-    "justification",
+    "exemption",
     "context",
 )
 
 
-def _snapshot_entry(row, filenames):
-    """Project a frozen snapshot row into a diff entry."""
-    entry = {field: row.get(field) for field in _DIFF_FIELDS}
+def _exemption_names():
+    return dict(ExemptionTemplate.objects.values_list("id", "name"))
+
+
+def _snapshot_entry(row, filenames, exemption_names):
+    """
+    Project a frozen snapshot row into a diff entry. A legacy row has no
+    ``exemption_id``, so it reads as none; its free-text ``justification`` is
+    not compared.
+    """
+    entry = {
+        field: row.get(field) for field in _DIFF_FIELDS if field != "exemption"
+    }
+    entry["exemption"] = exemption_names.get(row.get("exemption_id"))
     entry["id"] = row["id"]
     entry["document_id"] = row["document_id"]
     entry["filename"] = filenames.get(row["document_id"])
     return entry
 
 
-def _live_entry(redaction, filenames):
+def _live_entry(redaction, filenames, exemption_names):
     """Project a live Redaction into a diff entry with the same shape."""
     context = getattr(redaction, "context", None)
     document_id = str(redaction.document_id)
@@ -54,7 +69,7 @@ def _live_entry(redaction, filenames):
         "redaction_type": redaction.redaction_type,
         "is_accepted": redaction.is_accepted,
         "decided_by": redaction.decided_by,
-        "justification": redaction.justification,
+        "exemption": exemption_names.get(redaction.exemption_id),
         "context": context.text if context is not None else None,
     }
     entry["id"] = str(redaction.id)
@@ -143,8 +158,10 @@ def diff_disclosure(case):
         return None
 
     filenames = _filenames_for(case)
+    exemption_names = _exemption_names()
     before_by_id = {
-        row["id"]: _snapshot_entry(row, filenames) for row in snapshot.payload
+        row["id"]: _snapshot_entry(row, filenames, exemption_names)
+        for row in snapshot.payload
     }
 
     live = (
@@ -153,7 +170,7 @@ def diff_disclosure(case):
         .order_by("document_id", "start_char", "id")
     )
     after_by_id = {
-        str(redaction.id): _live_entry(redaction, filenames)
+        str(redaction.id): _live_entry(redaction, filenames, exemption_names)
         for redaction in live
     }
 
@@ -214,12 +231,13 @@ def diff_export(export):
         }
 
     filenames = _filenames_for(case)
+    exemption_names = _exemption_names()
     before_by_id = {
-        row["id"]: _snapshot_entry(row, filenames)
+        row["id"]: _snapshot_entry(row, filenames, exemption_names)
         for row in previous_snapshot.payload
     }
     after_by_id = {
-        row["id"]: _snapshot_entry(row, filenames)
+        row["id"]: _snapshot_entry(row, filenames, exemption_names)
         for row in target_snapshot.payload
     }
 

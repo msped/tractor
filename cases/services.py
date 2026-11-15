@@ -30,6 +30,7 @@ from .models import (
     Case,
     Document,
     DocumentExportSettings,
+    ExemptionTemplate,
     Export,
     InternalReview,
     Redaction,
@@ -186,6 +187,11 @@ def _apply_existing_case_decisions(document):
     documents) with the same text and type was resolved the same way (all
     accepted, or all rejected), apply that decision to the new pending
     redactions.  Mixed decisions are left as pending.
+
+    An accept carries the exemption forward only when every prior accept
+    agrees on it; no exemption counts as a choice, so a mix gives none.
+    Matching on type keeps a copied exemption on Operational Data.  A reject
+    is plain: rejects carry no reason.
     """
     case = document.case
 
@@ -220,18 +226,22 @@ def _apply_existing_case_decisions(document):
         )
 
         if accepted_count == total:
-            target_qs.accept(by=Redaction.DecidedBy.CASE_PROPAGATION)
-        elif rejected_count == total:
-            top = (
-                existing_decided.values("justification")
-                .annotate(n=Count("justification"))
-                .order_by("-n")
-                .first()
+            exemption_ids = set(
+                existing_decided.values_list("exemption", flat=True)
             )
-            target_qs.reject(
-                top["justification"] if top else "",
+            shared_id = (
+                exemption_ids.pop() if len(exemption_ids) == 1 else None
+            )
+            target_qs.accept(
                 by=Redaction.DecidedBy.CASE_PROPAGATION,
+                exemption=(
+                    ExemptionTemplate.objects.get(pk=shared_id)
+                    if shared_id is not None
+                    else None
+                ),
             )
+        elif rejected_count == total:
+            target_qs.reject(by=Redaction.DecidedBy.CASE_PROPAGATION)
 
 
 def reclaim_data_subject_spans(document):

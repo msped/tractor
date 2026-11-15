@@ -123,13 +123,13 @@ class SuperuserDeleteMixinTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(admin.has_delete_permission(request, redaction))
 
     def test_staff_cannot_delete_exemption_template(self):
-        template = ExemptionTemplate.objects.create(name="S.40")
+        template = ExemptionTemplate.objects.create(name="S.31")
         admin = ExemptionTemplateAdmin(ExemptionTemplate, self.site)
         request = self._make_request(self.staff_user)
         self.assertFalse(admin.has_delete_permission(request, template))
 
     def test_superuser_can_delete_exemption_template(self):
-        template = ExemptionTemplate.objects.create(name="S.40")
+        template = ExemptionTemplate.objects.create(name="S.31")
         admin = ExemptionTemplateAdmin(ExemptionTemplate, self.site)
         request = self._make_request(self.superuser)
         self.assertTrue(admin.has_delete_permission(request, template))

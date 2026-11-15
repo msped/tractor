@@ -73,7 +73,7 @@ const changeDiff = {
             redaction_type: 'OP_DATA',
             is_accepted: false,
             decided_by: null,
-            justification: null,
+            exemption: null,
             context: null,
         },
     ],

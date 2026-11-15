@@ -13,17 +13,25 @@ recreates them from the frozen payload, so it does not travel through the
 from django.db import transaction
 from django.utils.dateparse import parse_datetime
 
-from .models import Redaction, RedactionContext, RedactionSnapshot
+from .models import (
+    ExemptionTemplate,
+    Redaction,
+    RedactionContext,
+    RedactionSnapshot,
+)
 
 # Every field of a Redaction that is captured, in the order they are
 # reconstructed. `id`/`document_id` preserve identity across a round trip.
+# Payloads frozen before exemptions linked to templates have no
+# `exemption_id` and a free-text `justification`; restore reads the first as
+# None and ignores the second.
 _SNAPSHOT_FIELDS = (
     "id",
     "document_id",
     "start_char",
     "end_char",
     "text",
-    "justification",
+    "exemption_id",
     "redaction_type",
     "is_suggestion",
     "is_accepted",
@@ -71,15 +79,23 @@ def restore_redactions(case, snapshot):
     # Cascades RedactionContext away with each redaction.
     Redaction.objects.filter(document__case=case).delete()
 
+    # A template no live redaction used could have been deleted since the
+    # snapshot was taken; its redactions come back without a basis.
+    surviving_templates = set(
+        ExemptionTemplate.objects.filter(
+            pk__in={row.get("exemption_id") for row in snapshot.payload}
+        ).values_list("pk", flat=True)
+    )
+
     redactions = []
     created_ats = []
     contexts = []
     for row in snapshot.payload:
         created_at = parse_datetime(row["created_at"])
-        redaction = Redaction(
-            created_at=created_at,
-            **{field: row[field] for field in _SNAPSHOT_FIELDS},
-        )
+        fields = {field: row.get(field) for field in _SNAPSHOT_FIELDS}
+        if fields["exemption_id"] not in surviving_templates:
+            fields["exemption_id"] = None
+        redaction = Redaction(created_at=created_at, **fields)
         redactions.append(redaction)
         created_ats.append(created_at)
         if row["context"] is not None:

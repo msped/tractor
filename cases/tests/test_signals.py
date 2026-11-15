@@ -110,7 +110,6 @@ class RedactionSignalTests(NetworkBlockerMixin, TestCase):
         mock_async_task.reset_mock()
 
         redaction.decided_by = Redaction.DecidedBy.HUMAN
-        redaction.justification = "A different person"
         redaction.save()
 
         mock_async_task.assert_not_called()

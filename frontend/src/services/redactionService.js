@@ -46,13 +46,11 @@ export const deleteRedaction = async (redactionId) => {
     }
 };
 
-export const bulkMarkByText = async (caseId, text, redactionType, markStatus, rejectionReason) => {
+export const bulkMarkByText = async (caseId, text, redactionType, markStatus) => {
     try {
-        const body = { text, redaction_type: redactionType, status: markStatus };
-        if (rejectionReason) body.rejection_reason = rejectionReason;
         const response = await apiClient.post(
-            `cases/${caseId}/redactions/bulk-by-text/`,
-            body,
+            `cases/${caseId}/redactions/bulk-by-text`,
+            { text, redaction_type: redactionType, status: markStatus },
         );
         return response.data;
     } catch (error) {
@@ -60,11 +58,11 @@ export const bulkMarkByText = async (caseId, text, redactionType, markStatus, re
     }
 };
 
-export const bulkUpdateRedactions = async (documentId, ids, isAccepted, justification, { rejected = false } = {}) => {
+export const bulkUpdateRedactions = async (documentId, ids, isAccepted, { rejected = false, exemption = null } = {}) => {
     try {
         const response = await apiClient.patch(
-            `cases/document/${documentId}/redactions/bulk/`,
-            { ids, is_accepted: isAccepted, justification: justification ?? null, rejected },
+            `cases/document/${documentId}/redactions/bulk`,
+            { ids, is_accepted: isAccepted, rejected, exemption },
         );
         return response.data;
     } catch (error) {
@@ -121,6 +119,15 @@ export const createExemptionTemplate = async (data) => {
         return response.data;
     } catch (error) {
         throwApiError(error, 'Failed to create exemption template. Please try again.');
+    }
+};
+
+export const updateExemptionTemplate = async (templateId, data) => {
+    try {
+        const response = await apiClient.patch(`cases/exemptions/${templateId}`, data);
+        return response.data;
+    } catch (error) {
+        throwApiError(error, 'Failed to update exemption template. Please try again.');
     }
 };
 

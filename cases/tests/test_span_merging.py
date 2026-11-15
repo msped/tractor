@@ -117,14 +117,14 @@ class ComputeReviewMergePairsTests(SimpleTestCase):
         ]
         decisions = [
             (False, None),
-            (True, None),
-            (False, "disclosable"),
+            (True, "HUMAN"),
+            (False, "HUMAN"),
         ]
         baseline = None
         for combo in itertools.product(decisions, repeat=len(base)):
-            for s, (accepted, justification) in zip(base, combo, strict=True):
+            for s, (accepted, decided_by) in zip(base, combo, strict=True):
                 s.is_accepted = accepted
-                s.justification = justification
+                s.decided_by = decided_by
             pairs = compute_review_merge_pairs(base)
             if baseline is None:
                 baseline = pairs

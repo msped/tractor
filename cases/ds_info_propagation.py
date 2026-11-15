@@ -197,14 +197,16 @@ def apply_plan(plan):
             Redaction.objects.filter(id__in=plan.ids_to_delete).delete()
         if plan.to_create:
             Redaction.objects.bulk_create(plan.to_create)
-        if plan.to_upgrade:
-            Redaction.objects.bulk_update(
-                plan.to_upgrade, ["redaction_type", "is_suggestion"]
-            )
+        # Accept before re-typing: the plain accept clears any exemption an
+        # upgraded Operational Data row carried, which DS_INFO may not hold.
         ids_to_accept = [r.id for r in plan.to_accept + plan.to_upgrade]
         if ids_to_accept:
             Redaction.objects.filter(id__in=ids_to_accept).accept(
                 by=Redaction.DecidedBy.DS_INFO_PROPAGATION
+            )
+        if plan.to_upgrade:
+            Redaction.objects.bulk_update(
+                plan.to_upgrade, ["redaction_type", "is_suggestion"]
             )
 
 

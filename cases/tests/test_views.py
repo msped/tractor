@@ -384,18 +384,27 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
     def test_update_redaction(self):
         """Test updating a redaction (e.g., accepting a suggestion)."""
         url = reverse("redaction-detail", kwargs={"pk": self.redaction.id})
-        data = {
-            "is_accepted": True,
-            "justification": "User accepted this suggestion.",
-        }
-        response = self.client.patch(url, data)
+        response = self.client.patch(url, {"is_accepted": True})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.redaction.refresh_from_db()
         self.assertTrue(self.redaction.is_accepted)
-        self.assertEqual(
-            self.redaction.justification, "User accepted this suggestion."
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertNotIn("justification", response.data)
+
+    def test_withdrawing_a_decision_returns_to_pending(self):
+        """A non-accept without the reject flag withdraws the decision."""
+        Redaction.objects.filter(pk=self.redaction.pk).reject(
+            by=Redaction.DecidedBy.HUMAN
         )
+        url = reverse("redaction-detail", kwargs={"pk": self.redaction.id})
+        response = self.client.patch(
+            url, {"is_accepted": False}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.redaction.refresh_from_db()
+        self.assertIsNone(self.redaction.decided_by)
 
     def test_reject_without_reason_records_a_human_rejection(self):
         """A one-click reject is a decision, not a withdrawal to pending."""
@@ -408,7 +417,6 @@ class ViewTests(NetworkBlockerMixin, APITestCase):
         self.redaction.refresh_from_db()
         self.assertFalse(self.redaction.is_accepted)
         self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
-        self.assertFalse(self.redaction.justification)
 
     def test_delete_redaction(self):
         """Test deleting a redaction."""
@@ -779,8 +787,8 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertTrue(self.r1.is_accepted)
         self.assertTrue(self.r2.is_accepted)
 
-    def test_bulk_reject_with_justification(self):
-        """Test rejecting multiple redactions with a shared justification."""
+    def test_a_reason_no_longer_makes_a_bulk_reject(self):
+        """Only the reject flag rejects; a stray reason is ignored."""
         url = reverse(
             "bulk-redaction-update", kwargs={"document_id": self.document.id}
         )
@@ -792,11 +800,9 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         response = self.client.patch(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
-        self.r1.refresh_from_db()
-        self.r2.refresh_from_db()
-        self.assertEqual(self.r1.justification, "Bulk rejection reason")
-        self.assertEqual(self.r2.justification, "Bulk rejection reason")
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertIsNone(r.decided_by)
 
     def test_bulk_reject_without_reason_records_a_human_rejection(self):
         """A one-click bulk reject is a decision, not a withdrawal to pending."""
@@ -815,12 +821,11 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
             r.refresh_from_db()
             self.assertFalse(r.is_accepted)
             self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
-            self.assertFalse(r.justification)
 
-    def test_bulk_update_without_reason_or_flag_withdraws_to_pending(self):
-        """With neither a reason nor the reject flag, the decision is withdrawn."""
+    def test_bulk_update_without_reject_flag_withdraws_to_pending(self):
+        """Without the reject flag, a non-accept withdraws the decision."""
         Redaction.objects.filter(id__in=[self.r1.id, self.r2.id]).reject(
-            "", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
         )
         url = reverse(
             "bulk-redaction-update", kwargs={"document_id": self.document.id}
@@ -908,6 +913,401 @@ class BulkRedactionUpdateViewTests(NetworkBlockerMixin, APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionExemptionViewTests(NetworkBlockerMixin, APITestCase):
+    """Accepting Operational Data under an exemption, single and bulk."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="exemptuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="EXMT01",
+            data_subject_name="Exempt Test",
+            created_by=self.user,
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "exempt.pdf", b"content", "application/pdf"
+            ),
+        )
+        self.template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        self.r1 = self._make_redaction(start_char=0, end_char=4, text="1234")
+        self.r2 = self._make_redaction(start_char=5, end_char=9, text="5678")
+        self.bulk_url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _make_redaction(self, **kwargs):
+        defaults = {
+            "document": self.document,
+            "redaction_type": Redaction.RedactionType.OPERATIONAL_DATA,
+        }
+        defaults.update(kwargs)
+        return Redaction.objects.create(**defaults)
+
+    def test_bulk_accept_with_exemption_applies_it_to_every_id(self):
+        response = self.client.patch(
+            self.bulk_url,
+            {
+                "ids": [str(self.r1.id), str(self.r2.id)],
+                "is_accepted": True,
+                "exemption": self.template.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for item in response.data:
+            self.assertEqual(item["exemption"], self.template.pk)
+            self.assertEqual(item["exemption_name"], "S.42 - Legal Privilege")
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertTrue(r.is_accepted)
+            self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
+            self.assertEqual(r.exemption, self.template)
+
+    def test_bulk_accept_with_exemption_refuses_a_non_operational_row(self):
+        pii = self._make_redaction(
+            start_char=10,
+            end_char=14,
+            text="Jane",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        response = self.client.patch(
+            self.bulk_url,
+            {
+                "ids": [str(self.r1.id), str(pii.id)],
+                "is_accepted": True,
+                "exemption": self.template.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        for r in (self.r1, pii):
+            r.refresh_from_db()
+            self.assertIsNone(r.decided_by)
+
+    def test_bulk_exemption_without_accept_is_refused(self):
+        response = self.client.patch(
+            self.bulk_url,
+            {
+                "ids": [str(self.r1.id)],
+                "is_accepted": False,
+                "rejected": True,
+                "exemption": self.template.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.r1.refresh_from_db()
+        self.assertIsNone(self.r1.decided_by)
+
+    def test_bulk_withdraw_clears_the_exemption(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        response = self.client.patch(
+            self.bulk_url,
+            {"ids": [str(self.r1.id)], "is_accepted": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.r1.refresh_from_db()
+        self.assertIsNone(self.r1.decided_by)
+        self.assertIsNone(self.r1.exemption)
+
+    def test_single_accept_with_exemption_returns_its_name(self):
+        url = reverse("redaction-detail", kwargs={"pk": self.r1.id})
+        response = self.client.patch(
+            url,
+            {"is_accepted": True, "exemption": self.template.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["exemption"], self.template.pk)
+        self.assertEqual(
+            response.data["exemption_name"], "S.42 - Legal Privilege"
+        )
+
+    def test_single_exemption_on_pii_returns_400(self):
+        pii = self._make_redaction(
+            start_char=10,
+            end_char=14,
+            text="Jane",
+            redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
+        )
+        url = reverse("redaction-detail", kwargs={"pk": pii.id})
+        response = self.client.patch(
+            url,
+            {"is_accepted": True, "exemption": self.template.pk},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        pii.refresh_from_db()
+        self.assertIsNone(pii.exemption)
+
+    def test_document_redaction_list_carries_the_exemption_name(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        url = reverse(
+            "redaction-list-create", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {r["id"]: r["exemption_name"] for r in response.data}
+        self.assertEqual(names[str(self.r1.id)], "S.42 - Legal Privilege")
+        self.assertIsNone(names[str(self.r2.id)])
+
+    def _patch_exemption(self, redaction, exemption):
+        url = reverse("redaction-detail", kwargs={"pk": redaction.id})
+        return self.client.patch(url, {"exemption": exemption}, format="json")
+
+    def test_changing_the_exemption_on_an_accepted_card(self):
+        other = ExemptionTemplate.objects.create(name="S.31 - Law Enforcement")
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        response = self._patch_exemption(self.r1, other.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["exemption_name"], other.name)
+        self.r1.refresh_from_db()
+        self.assertTrue(self.r1.is_accepted)
+        self.assertEqual(self.r1.exemption, other)
+
+    def test_clearing_the_exemption_keeps_the_redaction_accepted(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        response = self._patch_exemption(self.r1, None)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.r1.refresh_from_db()
+        self.assertTrue(self.r1.is_accepted)
+        self.assertIsNone(self.r1.exemption)
+
+    def test_setting_an_exemption_is_a_human_decision(self):
+        """A machine-accepted row becomes human-decided once its basis is set."""
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.CASE_PROPAGATION
+        )
+
+        self._patch_exemption(self.r1, self.template.pk)
+
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.exemption, self.template)
+        self.assertEqual(self.r1.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_a_manual_redaction_takes_an_exemption(self):
+        manual = self._make_redaction(
+            start_char=10,
+            end_char=14,
+            text="9999",
+            is_suggestion=False,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+        )
+
+        response = self._patch_exemption(manual, self.template.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        manual.refresh_from_db()
+        self.assertEqual(manual.exemption, self.template)
+
+    def test_a_pending_suggestion_cannot_be_given_an_exemption(self):
+        response = self._patch_exemption(self.r1, self.template.pk)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.r1.refresh_from_db()
+        self.assertIsNone(self.r1.exemption)
+
+    def _exemption_name_of(self, redaction):
+        url = reverse("redaction-detail", kwargs={"pk": redaction.id})
+        return self.client.get(url).data["exemption_name"]
+
+    def test_a_renamed_template_renames_every_redaction_using_it(self):
+        Redaction.objects.filter(id__in=[self.r1.id, self.r2.id]).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        self.template.name = "S.42 - Legal Professional Privilege"
+        self.template.save()
+
+        for r in (self.r1, self.r2):
+            self.assertEqual(
+                self._exemption_name_of(r),
+                "S.42 - Legal Professional Privilege",
+            )
+
+    def test_a_deactivated_template_still_names_its_redactions(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+
+        self.template.is_active = False
+        self.template.save()
+
+        self.assertEqual(
+            self._exemption_name_of(self.r1), "S.42 - Legal Privilege"
+        )
+
+    def test_trimming_an_exempted_span_keeps_its_exemption(self):
+        Redaction.objects.filter(id=self.r1.id).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=self.template
+        )
+        url = reverse("redaction-detail", kwargs={"pk": self.r1.id})
+
+        response = self.client.patch(
+            url, {"end_char": 3, "text": "123"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.exemption, self.template)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class RedactionDisclosureLockViewTests(NetworkBlockerMixin, APITestCase):
+    """
+    The post-disclosure lock holds for every decision write through the API,
+    single or bulk, and is refused with a 403 that says why.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="lockuser", password="password"
+        )
+        self.client.force_authenticate(user=self.user)
+        self.case = Case.objects.create(
+            case_reference="LOCK01",
+            data_subject_name="Lock Test",
+            created_by=self.user,
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile(
+                "lock.pdf", b"content", "application/pdf"
+            ),
+        )
+        self.redaction = Redaction.objects.create(
+            document=self.document,
+            start_char=0,
+            end_char=4,
+            text="1234",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+        )
+        self.url = reverse(
+            "redaction-detail", kwargs={"pk": self.redaction.id}
+        )
+        Export.objects.create(
+            case=self.case,
+            export_file=SimpleUploadedFile("d.zip", b"zip"),
+            sequence=1,
+            label="Original disclosure",
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def test_single_decision_writes_are_refused_while_locked(self):
+        for body in (
+            {"is_accepted": True},
+            {"is_accepted": False, "rejected": True},
+        ):
+            with self.subTest(body=body):
+                response = self.client.patch(self.url, body, format="json")
+
+                self.assertEqual(
+                    response.status_code, status.HTTP_403_FORBIDDEN
+                )
+                self.assertIn("Internal Review", response.data["detail"])
+                self.redaction.refresh_from_db()
+                self.assertIsNone(self.redaction.decided_by)
+
+    def test_bulk_decision_write_is_refused_with_403_not_500(self):
+        url = reverse(
+            "bulk-redaction-update", kwargs={"document_id": self.document.id}
+        )
+        response = self.client.patch(
+            url,
+            {"ids": [str(self.redaction.id)], "is_accepted": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("Internal Review", response.data["detail"])
+
+    def test_single_decision_write_is_allowed_while_a_review_is_open(self):
+        InternalReview.objects.create(
+            case=self.case, status=InternalReview.Status.OPEN
+        )
+        response = self.client.patch(
+            self.url, {"is_accepted": True}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.redaction.refresh_from_db()
+        self.assertEqual(self.redaction.decided_by, Redaction.DecidedBy.HUMAN)
+
+    def test_an_exemption_change_is_refused_while_locked(self):
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        exempted = Redaction.objects.create(
+            document=self.document,
+            start_char=5,
+            end_char=9,
+            text="5678",
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            is_accepted=True,
+            decided_by=Redaction.DecidedBy.HUMAN,
+            exemption=template,
+        )
+        url = reverse("redaction-detail", kwargs={"pk": exempted.id})
+
+        for exemption in (
+            None,
+            ExemptionTemplate.objects.create(name="S.31").pk,
+        ):
+            with self.subTest(exemption=exemption):
+                response = self.client.patch(
+                    url, {"exemption": exemption}, format="json"
+                )
+
+                self.assertEqual(
+                    response.status_code, status.HTTP_403_FORBIDDEN
+                )
+                exempted.refresh_from_db()
+                self.assertEqual(exempted.exemption, template)
+
+    def test_a_write_that_is_not_a_decision_is_not_locked(self):
+        """The lock guards decisions; span geometry is not one."""
+        response = self.client.patch(
+            self.url, {"end_char": 3, "text": "123"}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
 class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def setUp(self):
         self.client = APIClient()
@@ -922,7 +1322,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
         self.admin_client.force_authenticate(user=admin)
 
         self.active = ExemptionTemplate.objects.create(
-            name="S.40 - Personal Information", is_active=True
+            name="S.31 - Law Enforcement", is_active=True
         )
         self.inactive = ExemptionTemplate.objects.create(
             name="S.41 - Deprecated", is_active=False
@@ -935,7 +1335,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         names = [t["name"] for t in response.data]
-        self.assertIn("S.40 - Personal Information", names)
+        self.assertIn("S.31 - Law Enforcement", names)
         self.assertNotIn("S.41 - Deprecated", names)
 
     def test_list_returns_expected_fields(self):
@@ -969,6 +1369,44 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
             ).exists()
         )
 
+    def test_new_template_is_not_trainable(self):
+        url = reverse("exemption-template-list")
+        response = self.admin_client.post(
+            url, {"name": "S.43 - Commercial Interests"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIs(response.data["trainable"], False)
+
+    def test_list_returns_trainable(self):
+        url = reverse("exemption-template-list")
+        response = self.client.get(url)
+
+        self.assertIs(response.data[0]["trainable"], False)
+
+    def test_admin_sets_trainable(self):
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.admin_client.patch(
+            url, {"trainable": True}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIs(response.data["trainable"], True)
+        self.active.refresh_from_db()
+        self.assertTrue(self.active.trainable)
+
+    def test_trainable_change_forbidden_for_non_admin(self):
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.client.patch(url, {"trainable": True}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.active.refresh_from_db()
+        self.assertFalse(self.active.trainable)
+
     def test_create_forbidden_for_non_admin(self):
         """POST by a regular user is rejected with 403."""
         url = reverse("exemption-template-list")
@@ -979,7 +1417,7 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
     def test_create_duplicate_name_fails(self):
         """POST with a duplicate name returns 400."""
         url = reverse("exemption-template-list")
-        data = {"name": "S.40 - Personal Information"}
+        data = {"name": "S.31 - Law Enforcement"}
         response = self.admin_client.post(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1001,6 +1439,53 @@ class ExemptionTemplateViewTests(NetworkBlockerMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(
+            ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
+        )
+
+    def _use(self, template):
+        document = Document.objects.create(
+            case=Case.objects.create(case_reference="TPL01"),
+            original_file=SimpleUploadedFile("t.pdf", b"x", "application/pdf"),
+        )
+        for start in (0, 5):
+            Redaction.objects.create(
+                document=document,
+                start_char=start,
+                end_char=start + 4,
+                text="1234",
+                redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.HUMAN,
+                exemption=template,
+            )
+
+    def test_deleting_a_template_in_use_is_refused_with_a_reason(self):
+        self._use(self.active)
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.admin_client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("2 redactions", response.data["detail"])
+        self.assertIn("Deactivate", response.data["detail"])
+        self.assertTrue(
+            ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
+        )
+
+    def test_admin_deactivates_a_template(self):
+        """Deactivated, it leaves the picker list but is not deleted."""
+        url = reverse(
+            "exemption-template-detail", kwargs={"pk": self.active.pk}
+        )
+        response = self.admin_client.patch(
+            url, {"is_active": False}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        listed = self.client.get(reverse("exemption-template-list")).data
+        self.assertNotIn(self.active.pk, [t["id"] for t in listed])
+        self.assertTrue(
             ExemptionTemplate.objects.filter(pk=self.active.pk).exists()
         )
 
@@ -1143,7 +1628,6 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
             end_char=28,
             text="John Doe",
             redaction_type=Redaction.RedactionType.THIRD_PARTY_PII,
-            justification="Previously reviewed",
             decided_by=Redaction.DecidedBy.HUMAN,
         )
 
@@ -1174,25 +1658,22 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
         self.assertTrue(self.r1.is_accepted)
         self.assertTrue(self.r2.is_accepted)
 
-    def test_reject_updates_all_pending_with_reason(self):
+    def test_reject_updates_all_pending_with_no_reason(self):
         response = self.client.post(
             self._url(),
             {
                 "text": "John Doe",
                 "redaction_type": "PII",
                 "status": "REJECTED",
-                "rejection_reason": "Not relevant",
             },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["updated"], 2)
-        self.r1.refresh_from_db()
-        self.r2.refresh_from_db()
-        self.assertFalse(self.r1.is_accepted)
-        self.assertEqual(self.r1.justification, "Not relevant")
-        self.assertFalse(self.r2.is_accepted)
-        self.assertEqual(self.r2.justification, "Not relevant")
+        for r in (self.r1, self.r2):
+            r.refresh_from_db()
+            self.assertFalse(r.is_accepted)
+            self.assertEqual(r.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_already_accepted_redactions_not_modified(self):
         self.client.post(
@@ -1209,7 +1690,6 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
         self.assertTrue(self.r_accepted.is_accepted)
 
     def test_already_rejected_redactions_not_modified(self):
-        original_justification = self.r_rejected.justification
         self.client.post(
             self._url(),
             {
@@ -1221,7 +1701,7 @@ class BulkByTextRedactionViewTests(NetworkBlockerMixin, APITestCase):
         )
         self.r_rejected.refresh_from_db()
         self.assertFalse(self.r_rejected.is_accepted)
-        self.assertEqual(self.r_rejected.justification, original_justification)
+        self.assertEqual(self.r_rejected.decided_by, Redaction.DecidedBy.HUMAN)
 
     def test_redactions_in_other_case_not_affected(self):
         other_case = Case.objects.create(
@@ -1678,7 +2158,7 @@ class CaseDisclosureDiffViewTests(NetworkBlockerMixin, APITestCase):
         self._snapshot()
         # Modify the disclosed redaction and add a brand new one.
         Redaction.objects.filter(pk=redaction.pk).reject(
-            "not needed", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
         )
         Redaction.objects.create(
             document=self.document,

@@ -11,7 +11,7 @@ from django.utils import timezone
 from docx import Document as DocxDocument
 from docx.enum.text import WD_COLOR_INDEX
 
-from cases.models import Case, Redaction
+from cases.models import Case, ExemptionTemplate, Redaction
 from cases.models import Document as CaseDocument
 
 from ..models import (
@@ -207,6 +207,66 @@ class CollectTrainingDataDetailedTests(NetworkBlockerMixin, TestCase):
         )
         doc_texts = [text for text, _ in train_data]
         self.assertNotIn(pii_doc.extracted_text, doc_texts)
+
+    def _exempted_doc(self, template):
+        """A document with one exempted span and one plain operational span."""
+        doc = CaseDocument.objects.create(
+            case=self.case,
+            extracted_text="Advice from Jane Smith on ref 42/12345/24.",
+            status=CaseDocument.Status.COMPLETED,
+        )
+        for start, end, exemption in (
+            (12, 22, template),
+            (30, 41, None),
+        ):
+            Redaction.objects.create(
+                document=doc,
+                start_char=start,
+                end_char=end,
+                text=doc.extracted_text[start:end],
+                is_accepted=True,
+                decided_by=Redaction.DecidedBy.HUMAN,
+                redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+                exemption=exemption,
+            )
+        return doc
+
+    def _entities_for(self, doc):
+        train_data, _, _ = collect_training_data_detailed(source="redactions")
+        return next(
+            [(s, e) for s, e, _ in annotations["entities"]]
+            for text, annotations in train_data
+            if text == doc.extracted_text
+        )
+
+    def test_span_under_a_trainable_exemption_is_collected(self):
+        template = ExemptionTemplate.objects.create(
+            name="S.31 - Law Enforcement", trainable=True
+        )
+        doc = self._exempted_doc(template)
+
+        self.assertEqual(self._entities_for(doc), [(12, 22), (30, 41)])
+
+    def test_span_under_a_non_trainable_exemption_is_left_out(self):
+        """Its text stays in the document, so SpanCat sees it as a negative."""
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        doc = self._exempted_doc(template)
+
+        self.assertEqual(self._entities_for(doc), [(30, 41)])
+
+    def test_flipping_the_flag_changes_the_next_collection(self):
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        doc = self._exempted_doc(template)
+        self.assertEqual(self._entities_for(doc), [(30, 41)])
+
+        template.trainable = True
+        template.save()
+
+        self.assertEqual(self._entities_for(doc), [(12, 22), (30, 41)])
 
     def test_collect_from_both(self):
         """Test collecting data from both sources."""

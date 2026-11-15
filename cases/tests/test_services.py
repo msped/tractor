@@ -22,6 +22,7 @@ from ..models import (
     Case,
     Document,
     DocumentExportSettings,
+    ExemptionTemplate,
     InternalReview,
     Redaction,
     RedactionContext,
@@ -2059,12 +2060,12 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(r_new.auto_accepted)
         self.assertNotIn(r_new, Redaction.objects.trainable())
 
-    def test_propagates_unanimous_reject_to_new_document(self):
+    def test_propagates_unanimous_reject_as_a_plain_reject(self):
+        """Rejects carry no reason, so there is nothing to copy."""
         r_old = self._pending(
             self.old_doc, "PC Smith", Redaction.RedactionType.OPERATIONAL_DATA
         )
         r_old.is_accepted = False
-        r_old.justification = "Not relevant"
         r_old.decided_by = Redaction.DecidedBy.HUMAN
         r_old.save()
 
@@ -2076,10 +2077,75 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertEqual(r_new.justification, "Not relevant")
+        self.assertIsNone(r_new.exemption)
         self.assertEqual(
             r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
         )
+
+    def _accepted_elsewhere(self, exemptions, text="ref 42/12345/24"):
+        """Accept the text once per exemption, each in its own document."""
+        for i, exemption in enumerate(exemptions):
+            doc = Document.objects.create(
+                case=self.case,
+                original_file=SimpleUploadedFile(
+                    f"prior{i}.pdf", b"x", "application/pdf"
+                ),
+            )
+            prior = self._pending(
+                doc, text, Redaction.RedactionType.OPERATIONAL_DATA
+            )
+            Redaction.objects.filter(pk=prior.pk).accept(
+                by=Redaction.DecidedBy.HUMAN, exemption=exemption
+            )
+        return self._pending(
+            self.new_doc, text, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+
+    def test_copies_an_exemption_every_prior_accept_shares(self):
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        r_new = self._accepted_elsewhere([privilege, privilege])
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+        self.assertEqual(
+            r_new.decided_by, Redaction.DecidedBy.CASE_PROPAGATION
+        )
+        self.assertEqual(r_new.exemption, privilege)
+
+    def test_differing_exemptions_give_an_accept_with_none(self):
+        r_new = self._accepted_elsewhere(
+            [
+                ExemptionTemplate.objects.create(
+                    name="S.42 - Legal Privilege"
+                ),
+                ExemptionTemplate.objects.create(
+                    name="S.31 - Law Enforcement"
+                ),
+            ]
+        )
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+        self.assertIsNone(r_new.exemption)
+
+    def test_an_exemption_mixed_with_none_gives_none(self):
+        """No exemption is a choice too, so it breaks the agreement."""
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        r_new = self._accepted_elsewhere([privilege, None])
+
+        _apply_existing_case_decisions(self.new_doc)
+
+        r_new.refresh_from_db()
+        self.assertTrue(r_new.is_accepted)
+        self.assertIsNone(r_new.exemption)
 
     def test_mixed_decisions_leave_new_redaction_pending(self):
         r1 = self._pending(
@@ -2094,7 +2160,6 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
         r2 = self._pending(
             mid_doc, "Jane Doe", Redaction.RedactionType.THIRD_PARTY_PII
         )
-        r2.justification = "Rejected for different reason"
         r2.decided_by = Redaction.DecidedBy.HUMAN
         r2.save()
 
@@ -2106,7 +2171,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertFalse(r_new.justification)
+        self.assertIsNone(r_new.decided_by)
 
     def test_no_existing_decisions_leaves_pending(self):
         r_new = self._pending(
@@ -2117,7 +2182,7 @@ class ApplyExistingCaseDecisionsTests(NetworkBlockerMixin, TestCase):
 
         r_new.refresh_from_db()
         self.assertFalse(r_new.is_accepted)
-        self.assertIsNone(r_new.justification)
+        self.assertIsNone(r_new.decided_by)
 
     def test_decisions_from_other_cases_do_not_propagate(self):
         other_case = Case.objects.create(
@@ -2328,9 +2393,6 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
         self.assertFalse(phone.is_accepted)
         self.assertIsNone(phone.decided_by)
         self.assertIn("Joe Bloggs", phone.rationale)
-        # The reviewer's own reason field is untouched — the UI reads a value
-        # there as "rejected".
-        self.assertIsNone(phone.justification)
 
     def test_proposing_ds_info_does_not_propagate_across_the_case(self):
         """
@@ -2359,6 +2421,8 @@ class DataSubjectResolutionProcessingTests(NetworkBlockerMixin, TestCase):
         )
         self.assertTrue(name.is_accepted)
         self.assertEqual(name.decided_by, Redaction.DecidedBy.DS_RECORD_MATCH)
+        # Resolution only creates rows, and a new DS_INFO row has no basis.
+        self.assertIsNone(name.exemption)
 
     def test_a_third_partys_detail_stays_third_party_with_no_rationale(self):
         text = "SMITH, Jane\t07700 900111"
@@ -2735,6 +2799,23 @@ class ReclaimDataSubjectSpansTests(NetworkBlockerMixin, TestCase):
             op.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
         )
         self.assertEqual((op.start_char, op.end_char), (0, 55))
+
+    def test_an_exempted_burying_span_keeps_its_exemption(self):
+        """Record match only creates rows: the carved one carries no basis."""
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        op = self._whole_sentence_operational()
+        Redaction.objects.filter(pk=op.pk).accept(
+            by=Redaction.DecidedBy.HUMAN, exemption=template
+        )
+
+        reclaim_data_subject_spans(self.document)
+
+        op.refresh_from_db()
+        self.assertEqual(op.exemption, template)
+        [row] = self._ds_rows()
+        self.assertIsNone(row.exemption)
 
     def test_the_disclosure_export_now_shows_the_name(self):
         """End to end: the carve-out plus the subtraction rule."""

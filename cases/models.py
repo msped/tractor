@@ -261,46 +261,51 @@ class DisclosureLockError(ProvenanceError):
 
 # Fields that together encode an accept/reject decision.  They may only be
 # written through the decision methods below, never via a generic update().
-_DECISION_FIELDS = frozenset({"is_accepted", "justification", "decided_by"})
+_DECISION_FIELDS = frozenset({"is_accepted", "exemption", "decided_by"})
 
 
 class RedactionQuerySet(models.QuerySet):
     # ---- writes: provenance is keyword-only with no default ----
-    def accept(self, *, by):
+    def accept(self, *, by, exemption=None):
         """
-        Accept everything in the queryset as decided by `by`.
+        Accept everything in the queryset as decided by `by`, withheld under
+        `exemption` if one is given.
 
         Overwrites prior provenance — a HUMAN accept over a machine-accepted
-        row flips it to human-decided — and clears any stale rejection
-        justification.  Scope with .pending() first if prior decisions must
-        be preserved.  Single UPDATE.
+        row flips it to human-decided.  A plain accept clears any earlier
+        exemption.  Only Operational Data may carry one; the check
+        constraint refuses the UPDATE otherwise.  Scope with .pending() first
+        if prior decisions must be preserved.  Single UPDATE.
         """
-        self._assert_disclosure_unlocked(by)
+        self.assert_disclosure_unlocked(by)
         return super().update(
-            is_accepted=True, justification=None, decided_by=by
+            is_accepted=True, exemption=exemption, decided_by=by
         )
 
-    def reject(self, justification="", *, by):
-        """Reject everything in the queryset as decided by `by`."""
-        self._assert_disclosure_unlocked(by)
-        return super().update(
-            is_accepted=False, justification=justification, decided_by=by
-        )
+    def reject(self, *, by):
+        """
+        Reject everything in the queryset as decided by `by`.  A reject
+        needs no reason: disclosing text is the default.
+        """
+        self.assert_disclosure_unlocked(by)
+        return super().update(is_accepted=False, exemption=None, decided_by=by)
 
     def reset(self):
         """Return all redactions in the queryset to pending (no decision)."""
         # No actor is passed to reset(); it is only ever a human withdrawal of
         # a decision, so it is always subject to the post-disclosure lock.
-        self._assert_disclosure_unlocked(None)
+        self.assert_disclosure_unlocked(None)
         return super().update(
-            is_accepted=False, justification=None, decided_by=None
+            is_accepted=False, exemption=None, decided_by=None
         )
 
     # ---- post-disclosure lock ----
-    def _assert_disclosure_unlocked(self, by):
+    def assert_disclosure_unlocked(self, by):
         """
         Refuse a human decision write to a disclosed case unless an Internal
-        Review is open for it.
+        Review is open for it.  The decision methods call this themselves;
+        ``RedactionSerializer`` calls it for decision writes that save the
+        instance directly.
 
         A case is "disclosed" once it has at least one preserved ``Export``.
         System writes — initial processing, case-decision propagation and
@@ -345,11 +350,18 @@ class RedactionQuerySet(models.QuerySet):
     def trainable(self):
         """
         The canonical SpanCat training selection: human-accepted redactions,
-        excluding data-subject information.
+        excluding data-subject information and anything withheld under an
+        exemption template that is not trainable.
+
+        The template's flag is read live, so changing it applies to past
+        redactions at the next run.  An excluded span's text stays in its
+        document, where SpanCat reads it as a negative.
         """
-        return self.filter(
-            is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN
-        ).exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+        return (
+            self.filter(is_accepted=True, decided_by=Redaction.DecidedBy.HUMAN)
+            .exclude(redaction_type=Redaction.RedactionType.DS_INFORMATION)
+            .exclude(exemption__trainable=False)
+        )
 
     # ---- enforcement: no naked writes to decision state ----
     def update(self, **kwargs):
@@ -403,21 +415,26 @@ class Redaction(models.Model):
     start_char = models.IntegerField()
     end_char = models.IntegerField()
     text = models.TextField(help_text="The actual text that was redacted.")
-    justification = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Reason for a manual redaction or for rejecting a suggestion.",
-    )
     rationale = models.TextField(
         blank=True,
         null=True,
         help_text=(
             "Why the system classified this span as it did, written once at "
             "creation so a reviewer can judge an inferred suggestion rather "
-            "than take it on trust. Distinct from justification, which is a "
-            "human's reason for their own decision: that one is cleared on "
-            "accept and overwritten on reject, and the review UI reads its "
-            "presence as 'rejected'."
+            "than take it on trust. Never a human's reason: a reviewer's "
+            "basis for withholding is the exemption."
+        ),
+    )
+    exemption = models.ForeignKey(
+        "ExemptionTemplate",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="redactions",
+        help_text=(
+            "The basis for withholding this Operational Data. Only accepted "
+            "Operational Data carries one; a template in use cannot be "
+            "deleted, only deactivated."
         ),
     )
 
@@ -467,6 +484,12 @@ class Redaction(models.Model):
             models.CheckConstraint(
                 name="redaction_accept_requires_decided_by",
                 check=Q(is_accepted=False) | Q(decided_by__isnull=False),
+            ),
+            # Third-Party PII is withheld by default and Data Subject
+            # Information is disclosed, so neither has a basis to record.
+            models.CheckConstraint(
+                name="redaction_exemption_requires_op_data",
+                check=Q(exemption__isnull=True) | Q(redaction_type="OP_DATA"),
             ),
         ]
         indexes = [
@@ -649,8 +672,9 @@ class RedactionSnapshot(models.Model):
 
 class ExemptionTemplate(models.Model):
     """
-    A reusable rejection reason (e.g. "S.40 - Personal Information") that
-    admins configure and users select when rejecting redaction suggestions.
+    A basis for withholding Operational Data (e.g. "S.42 - Legal Privilege")
+    that admins configure and reviewers choose when accepting it.  See
+    docs/adr/0004-exemptions-link-to-templates.md.
     """
 
     name = models.CharField(
@@ -662,7 +686,19 @@ class ExemptionTemplate(models.Model):
         blank=True, help_text="Optional longer description of this exemption."
     )
     is_active = models.BooleanField(
-        default=True, help_text="Inactive templates are hidden from the UI."
+        default=True,
+        help_text=(
+            "Inactive templates are hidden from reviewers' lists, but "
+            "redactions already withheld under one still show it."
+        ),
+    )
+    trainable = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether Operational Data withheld under this exemption trains "
+            "the model. Off by default, so a personal-information style "
+            "exemption cannot teach it that names are operational."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

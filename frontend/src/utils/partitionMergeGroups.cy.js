@@ -1,4 +1,5 @@
 import { partitionMergeGroups, groupByTextAndType } from './partitionMergeGroups';
+import { isPendingSuggestion, isRejectedSuggestion } from './redactionDecision';
 import golden from '../../cypress/fixtures/span_merging_review_golden.json';
 
 const OPERATIONAL = 'OPERATIONAL';
@@ -259,9 +260,9 @@ describe('groupByTextAndType', () => {
 
 describe('golden shared fixture', () => {
     const sectionFilters = {
-        pending: r => r.is_suggestion && !r.is_accepted && !r.justification,
+        pending: isPendingSuggestion,
         accepted: r => r.is_suggestion && r.is_accepted,
-        rejected: r => r.is_suggestion && !r.is_accepted && !!r.justification,
+        rejected: isRejectedSuggestion,
         manual: r => !r.is_suggestion,
     };
 

@@ -10,6 +10,7 @@ from training.tests.base import NetworkBlockerMixin
 from ..models import (
     Case,
     Document,
+    ExemptionTemplate,
     Redaction,
     RedactionContext,
     RedactionSnapshot,
@@ -71,7 +72,7 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
                     r.start_char,
                     r.end_char,
                     r.text,
-                    r.justification,
+                    r.exemption_id,
                     r.redaction_type,
                     r.is_suggestion,
                     r.is_accepted,
@@ -95,8 +96,11 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(RedactionSnapshot.objects.count(), 1)
 
     def test_snapshot_captures_all_fields_and_context(self):
+        template = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
         redaction = self._make_redaction(
-            justification="manual note",
+            exemption=template,
             redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
             is_suggestion=False,
             source=Redaction.Source.LLM,
@@ -113,7 +117,8 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(row["start_char"], 0)
         self.assertEqual(row["end_char"], 5)
         self.assertEqual(row["text"], "Alice")
-        self.assertEqual(row["justification"], "manual note")
+        self.assertEqual(row["exemption_id"], template.pk)
+        self.assertNotIn("justification", row)
         self.assertEqual(
             row["redaction_type"], Redaction.RedactionType.OPERATIONAL_DATA
         )
@@ -167,6 +172,16 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
         RedactionContext.objects.create(
             redaction=r_rebound, text="the suspect"
         )
+        privilege = ExemptionTemplate.objects.create(
+            name="S.42 - Legal Privilege"
+        )
+        r_exempted = self._make_redaction(
+            text="2020",
+            start_char=27,
+            end_char=31,
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            exemption=privilege,
+        )
 
         deleted_pk = r_deleted.pk
         original = self._live_fingerprint()
@@ -174,7 +189,13 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
 
         # Mutate the live set every which way.
         Redaction.objects.filter(pk=r_flip.pk).reject(
-            "not needed", by=Redaction.DecidedBy.HUMAN
+            by=Redaction.DecidedBy.HUMAN
+        )
+        Redaction.objects.filter(pk=r_exempted.pk).accept(
+            by=Redaction.DecidedBy.HUMAN,
+            exemption=ExemptionTemplate.objects.create(
+                name="S.31 - Law Enforcement"
+            ),
         )
         r_rebound.start_char = 99
         r_rebound.end_char = 102
@@ -203,6 +224,61 @@ class SnapshotTests(NetworkBlockerMixin, TestCase):
             RedactionContext.objects.get(redaction_id=r_rebound.pk).text,
             "the suspect",
         )
+        # So is the exemption the redaction was disclosed under.
+        self.assertEqual(
+            Redaction.objects.get(pk=r_exempted.pk).exemption, privilege
+        )
+
+    def test_restore_reads_a_legacy_payload(self):
+        """Snapshots taken before exemptions linked to templates still restore."""
+        redaction = self._make_redaction()
+        legacy_row = {
+            "id": str(redaction.id),
+            "document_id": str(self.document.id),
+            "start_char": 0,
+            "end_char": 5,
+            "text": "Alice",
+            "justification": "an old free-text reason",
+            "redaction_type": Redaction.RedactionType.THIRD_PARTY_PII,
+            "is_suggestion": True,
+            "is_accepted": False,
+            "decided_by": Redaction.DecidedBy.HUMAN,
+            "source": Redaction.Source.NER,
+            "created_at": redaction.created_at.isoformat(),
+            "context": None,
+        }
+        legacy = RedactionSnapshot.objects.create(
+            case=self.case, payload=[legacy_row]
+        )
+
+        restore_redactions(self.case, legacy)
+
+        restored = Redaction.objects.get(pk=redaction.pk)
+        self.assertFalse(restored.is_accepted)
+        self.assertEqual(restored.decided_by, Redaction.DecidedBy.HUMAN)
+        self.assertIsNone(restored.exemption)
+
+    def test_restore_drops_an_exemption_whose_template_is_gone(self):
+        """
+        A template unused live can be deleted while a snapshot still names
+        it; the redaction comes back without a basis rather than failing.
+        """
+        template = ExemptionTemplate.objects.create(name="S.30 - Retired")
+        redaction = self._make_redaction(
+            redaction_type=Redaction.RedactionType.OPERATIONAL_DATA,
+            exemption=template,
+        )
+        snapshot = snapshot_redactions(self.case)
+        Redaction.objects.filter(pk=redaction.pk).accept(
+            by=Redaction.DecidedBy.HUMAN
+        )
+        template.delete()
+
+        restore_redactions(self.case, snapshot)
+
+        restored = Redaction.objects.get(pk=redaction.pk)
+        self.assertTrue(restored.is_accepted)
+        self.assertIsNone(restored.exemption)
 
     def test_restore_preserves_ids_and_created_at(self):
         redaction = self._make_redaction()

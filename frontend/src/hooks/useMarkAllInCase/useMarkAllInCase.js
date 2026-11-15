@@ -22,7 +22,7 @@ export function useMarkAllInCase({ caseId, setRedactions }) {
         const { text, redactionType } = markAllInCaseTarget;
         setMarkAllInCaseTarget(null);
         try {
-            const { updated } = await bulkMarkByText(caseId, text, redactionType, 'ACCEPTED', null);
+            const { updated } = await bulkMarkByText(caseId, text, redactionType, 'ACCEPTED');
             setRedactions(prev =>
                 prev.map(r =>
                     isPendingSuggestion(r) &&
@@ -41,7 +41,7 @@ export function useMarkAllInCase({ caseId, setRedactions }) {
         const { text, redactionType } = markAllInCaseTarget;
         setMarkAllInCaseTarget(null);
         try {
-            const { updated } = await bulkMarkByText(caseId, text, redactionType, 'REJECTED', null);
+            const { updated } = await bulkMarkByText(caseId, text, redactionType, 'REJECTED');
             setRedactions(prev =>
                 prev.map(r =>
                     isPendingSuggestion(r) &&

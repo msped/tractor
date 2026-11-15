@@ -106,7 +106,8 @@ class ReviewWorkflowSettingsView(APIView):
 
 class ExemptionTemplateListView(ListCreateAPIView):
     """
-    GET: Returns all active exemption templates for use in the rejection dialog.
+    GET: Returns all active exemption templates, the reviewer's choices for
+    withholding Operational Data.
     POST: Creates a new exemption template (admin only).
     """
 
@@ -122,11 +123,32 @@ class ExemptionTemplateListView(ListCreateAPIView):
 class ExemptionTemplateDetailView(RetrieveUpdateDestroyAPIView):
     """
     GET/PATCH/DELETE a single exemption template.
+
+    A template that redactions are withheld under cannot be deleted, so they
+    keep their basis; the refusal points the admin at deactivating it.
     """
 
     permission_classes = [IsAdminUser]
     serializer_class = ExemptionTemplateSerializer
     queryset = ExemptionTemplate.objects.all()
+
+    def destroy(self, request, *args, **kwargs):
+        template = self.get_object()
+        in_use = template.redactions.count()
+        if in_use:
+            noun = "redaction" if in_use == 1 else "redactions"
+            return Response(
+                {
+                    "detail": (
+                        f'"{template.name}" is used by {in_use} {noun}, so '
+                        "it can't be deleted. Deactivate it to hide it from "
+                        "reviewers; existing redactions keep it."
+                    ),
+                    "in_use": in_use,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class CaseExportView(APIView):
@@ -325,7 +347,9 @@ class CaseDetailView(RetrieveUpdateDestroyAPIView):
                 queryset=Document.objects.prefetch_related(
                     Prefetch(
                         "redactions",
-                        queryset=Redaction.objects.select_related("context"),
+                        queryset=Redaction.objects.select_related(
+                            "context", "exemption"
+                        ),
                     )
                 ),
             )
@@ -358,7 +382,9 @@ class DocumentListCreateView(ListCreateAPIView):
         return Document.objects.prefetch_related(
             Prefetch(
                 "redactions",
-                queryset=Redaction.objects.select_related("context"),
+                queryset=Redaction.objects.select_related(
+                    "context", "exemption"
+                ),
             )
         )
 
@@ -472,7 +498,9 @@ class DocumentReviewView(RetrieveAPIView):
         return Document.objects.prefetch_related(
             Prefetch(
                 "redactions",
-                queryset=Redaction.objects.select_related("context"),
+                queryset=Redaction.objects.select_related(
+                    "context", "exemption"
+                ),
             )
         )
 
@@ -495,7 +523,7 @@ class RedactionListCreateView(ListCreateAPIView):
     def get_queryset(self):
         return Redaction.objects.filter(
             document_id=self.kwargs["document_id"]
-        ).select_related("context")
+        ).select_related("context", "exemption")
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
@@ -577,25 +605,34 @@ class BulkRedactionUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
         ids = serializer.validated_data["ids"]
         is_accepted = serializer.validated_data["is_accepted"]
-        justification = serializer.validated_data["justification"]
         rejected = serializer.validated_data["rejected"]
+        exemption = serializer.validated_data["exemption"]
 
         target_qs = Redaction.objects.filter(
             document_id=document_id,
             id__in=ids,
         )
+        if (
+            exemption is not None
+            and target_qs.exclude(
+                redaction_type=Redaction.RedactionType.OPERATIONAL_DATA
+            ).exists()
+        ):
+            return Response(
+                {"exemption": ["Only Operational Data can be exempted."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if is_accepted:
-            target_qs.accept(by=Redaction.DecidedBy.HUMAN)
-        elif rejected or justification:
-            target_qs.reject(justification or "", by=Redaction.DecidedBy.HUMAN)
+            target_qs.accept(by=Redaction.DecidedBy.HUMAN, exemption=exemption)
+        elif rejected:
+            target_qs.reject(by=Redaction.DecidedBy.HUMAN)
         else:
-            # Neither the reject flag nor a justification means the decision
-            # is being withdrawn, not a blank rejection.
+            # A non-accept without the reject flag withdraws the decision.
             target_qs.reset()
 
         updated = Redaction.objects.filter(
             id__in=ids, document_id=document_id
-        ).select_related("context")
+        ).select_related("context", "exemption")
         serializer = RedactionSerializer(updated, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -660,10 +697,7 @@ class BulkByTextRedactionView(APIView):
             if data["status"] == BulkByTextSerializer.STATUS_ACCEPTED:
                 count = pending_qs.accept(by=Redaction.DecidedBy.HUMAN)
             else:
-                count = pending_qs.reject(
-                    data.get("rejection_reason", ""),
-                    by=Redaction.DecidedBy.HUMAN,
-                )
+                count = pending_qs.reject(by=Redaction.DecidedBy.HUMAN)
 
         return Response({"updated": count}, status=status.HTTP_200_OK)
 
