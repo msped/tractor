@@ -371,6 +371,47 @@ class PresidioIntegrationTests(NetworkBlockerMixin, TestCase):
 
         self.assertEqual([r["text"] for r in results], [])
 
+    def _person_names(self, text):
+        return [
+            r["text"]
+            for r in self._snapshot().extract_third_party(text)
+            if r["entity_type"] == "PERSON_NAME"
+        ]
+
+    def test_all_caps_surname_comma_forename_matched_whole(self):
+        """
+        Some record systems print the forename in capitals too. The NER
+        models return the surname alone, leaving ", FORENAME" unredacted.
+        """
+        names = self._person_names(
+            "Driver BLOGGS, JOE was stopped. O'NEILL, SEAN gave a statement.\n"
+            "Witness\nDOE, JANE\nInterviewed / SMITH, ANNA / Victim"
+        )
+
+        self.assertIn("BLOGGS, JOE", names)
+        self.assertIn("O'NEILL, SEAN", names)
+        self.assertIn("DOE, JANE", names)
+        self.assertIn("SMITH, ANNA", names)
+
+    def test_all_caps_places_and_units_are_not_matched_as_names(self):
+        """
+        Addresses and force units use the same "CAPS, CAPS" shape. A name
+        entry stands apart from its neighbours; a place sits inside a
+        longer capitalised run or an address list.
+        """
+        cases = {
+            "after a capitalised word": "Passed to WESTSHIRE POLICE, BCU today.",
+            "after a comma": "Seen in Market Hill, TOWNSVILLE, COUNTYSHIRE.",
+            "into a colon": "Ref STATION, AREA: north sector.",
+            "into a slash": "Sent to DIVISION, LPU/Response team.",
+            "before a capitalised word": "Turn at JUNCTION, NEWTOWN ROAD.",
+            "before a postcode": "Lives in TOWNSVILLE, UK AB1 2CD.",
+            "before another comma entry": "Lives in TOWNSVILLE, COUNTYSHIRE, UK.",
+        }
+        for reason, text in cases.items():
+            with self.subTest(reason):
+                self.assertEqual(self._person_names(text), [])
+
     def test_builtin_operational_patterns_detected(self):
         results = self._snapshot().extract_operational(
             "Crime Ref No: 42/12345/24 attended by PC 1234."

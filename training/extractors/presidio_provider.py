@@ -76,6 +76,21 @@ _BUILTIN_THIRD_PARTY_PATTERNS = (
         r"(?-i:\b[A-Z][A-Z'’-]+,\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]{2,})?\b)",
         0.7,
     ),
+    # The same entry with the forename in capitals too. Addresses and force
+    # units share the "CAPS, CAPS" shape ("HIGH STREET, TOWNSVILLE, UK AB1
+    # 2CD", "POLICE, BCU"), so the entry must stand apart from its
+    # neighbours: not after a capitalised word or a comma, not straight into
+    # ":" or "/", and not before a capitalised word, a postcode or another
+    # ", CAPS". Whitespace in the guards is horizontal only, so a heading on
+    # the line above or below does not block a name.
+    (
+        "PERSON_NAME",
+        "surname_comma_forename_caps",
+        r"(?-i:(?<![A-Z][ \t])(?<!,)(?<!,[ \t])"
+        r"\b[A-Z][A-Z'’-]+,\s+[A-Z][A-Z'’-]+\b"
+        r"(?![:/])(?![ \t]+[A-Z][A-Z\d]+\b)(?!,[ \t]*[A-Z]{2,}\b))",
+        0.7,
+    ),
     (
         "PERSON_NAME",
         "surname_comma_initial",
