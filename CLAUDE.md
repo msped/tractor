@@ -14,14 +14,4 @@ Run backend and frontend commands through the Makefile (`make help` lists every 
 - **Local setup and env vars**: `docs/dev/setup.md`, `.env.example`
 - **Production deployment**: `docs/dev/deployment.md`
 - **Writing or debugging tests**: `docs/dev/testing.md`
-
-## Frontend conventions
-
-- Each component lives in its own directory with an `index.js` re-export:
-  ```
-  components/ComponentName/
-  ├── ComponentName.js
-  ├── ComponentName.cy.js   # Cypress component test (component testing, not E2E)
-  └── index.js              # export * from './ComponentName';
-  ```
-- Import through the directory with the `@/` alias (`@/*` → `src/*`): `import { ComponentName } from "@/components/ComponentName"`
+- **Frontend conventions** (component layout, imports): `frontend/CLAUDE.md`, loaded when working under `frontend/`
