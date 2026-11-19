@@ -1635,11 +1635,15 @@ class ExportPreservationTests(NetworkBlockerMixin, TestCase):
         return_value=b"mock pdf content",
     )
     def test_re_export_preserves_prior_export(self, _mock_pdf):
-        export_case_documents(self.case.id)
+        # django-cleanup deletes replaced files in on_commit callbacks, which
+        # never fire inside TestCase unless captured and executed.
+        with self.captureOnCommitCallbacks(execute=True):
+            export_case_documents(self.case.id)
         first = self.case.exports.get(sequence=1)
         first_file = first.export_file.name
 
-        export_case_documents(self.case.id)
+        with self.captureOnCommitCallbacks(execute=True):
+            export_case_documents(self.case.id)
 
         exports = list(self.case.exports.order_by("sequence"))
         self.assertEqual(len(exports), 2)
@@ -1663,6 +1667,23 @@ class ExportPreservationTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(
             self.case.export_file.name, exports[1].export_file.name
         )
+
+    @patch(
+        "cases.services._generate_pdf_from_document",
+        return_value=b"mock pdf content",
+    )
+    def test_deleting_case_removes_every_export_file(self, _mock_pdf):
+        with self.captureOnCommitCallbacks(execute=True):
+            export_case_documents(self.case.id)
+            export_case_documents(self.case.id)
+        paths = [e.export_file.path for e in self.case.exports.all()]
+        self.assertEqual(len(paths), 2)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.case.delete()
+
+        for path in paths:
+            self.assertFalse(os.path.exists(path))
 
     @patch(
         "cases.services._generate_pdf_from_document",
