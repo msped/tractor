@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from django_cleanup import cleanup
 from django_q.tasks import async_task
 
 from training.models import Model, SingletonModel
@@ -29,6 +30,10 @@ def retention_review_date_default():
     return (timezone.now() + relativedelta(years=retention_years)).date()
 
 
+# Case.export_file only points at the latest Export's stored file; the Export
+# row owns that file. Letting django-cleanup watch Case would delete the
+# previous export's ZIP every time the pointer moves to a re-export.
+@cleanup.ignore
 class Case(models.Model):
     """
     Represents a single case. This is the top-level
