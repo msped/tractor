@@ -40,6 +40,34 @@ class CaseSerializer(serializers.ModelSerializer):
             "retention_review_date",
         ]
 
+    def validate_status(self, value):
+        """
+        Keep the case status in step with its Internal Reviews.
+
+        Status changes are rejected while a review is open: the review must be
+        completed or abandoned first, or it would be left open on a case that
+        has moved on. ``UNDER_REVIEW`` cannot be set here at all; only opening
+        a review moves a case into it. Resending the current status (as the
+        case edit form does) is allowed.
+        """
+        case = self.instance
+        current = case.status if case is not None else None
+        if value == Case.Status.UNDER_REVIEW and value != current:
+            raise serializers.ValidationError(
+                "A case is put under review by opening an Internal Review, "
+                "not by setting its status."
+            )
+        if (
+            case is not None
+            and value != case.status
+            and case.reviews.filter(status=InternalReview.Status.OPEN).exists()
+        ):
+            raise serializers.ValidationError(
+                "The case status cannot be changed while an Internal Review "
+                "is open. Complete or abandon the review first."
+            )
+        return value
+
 
 _ALLOWED_EXTENSIONS = {".docx", ".pdf", ".txt"}
 # DOCX is a ZIP container — filetype identifies it as application/zip

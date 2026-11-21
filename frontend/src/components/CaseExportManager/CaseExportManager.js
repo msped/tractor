@@ -78,6 +78,12 @@ export const CaseExportManager = ({ caseData, onUpdate }) => {
 
 
     const renderContent = () => {
+        // An open Internal Review is closed from CaseReviewBanner (Complete/Abandon
+        // Review); changing the case status here would strand the open review.
+        if (caseData.status === 'UNDER_REVIEW') {
+            return null;
+        }
+
         if (!isFinalStatus) {
             return (
                 <>
