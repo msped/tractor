@@ -29,7 +29,22 @@ describe('<CaseExportManager />', () => {
         },
     };
 
-    context('when case is not locked (OPEN/IN_PROGRESS/UNDER_REVIEW)', () => {
+    context('when case is under an Internal Review', () => {
+        it('hides the Complete Case button and its status menu', () => {
+            const testCaseData = {
+                ...baseCaseData,
+                status: 'UNDER_REVIEW',
+                documents: [{ id: 'doc-1', status: 'Completed' }],
+            };
+            cy.fullMount(<CaseExportManager caseData={testCaseData} onUpdate={() => {}} />, mountOptions);
+
+            cy.contains('button', 'Complete Case').should('not.exist');
+            cy.get('[data-testid="ArrowDropDownIcon"]').should('not.exist');
+            cy.contains('button', 'Generate Disclosure Package').should('not.exist');
+        });
+    });
+
+    context('when case is not locked (OPEN/IN_PROGRESS)', () => {
         it('shows a disabled Complete Case button when documents are incomplete', () => {
             const testCaseData = {
                 ...baseCaseData,
