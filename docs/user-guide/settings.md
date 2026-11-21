@@ -47,7 +47,7 @@ The **Disclosure style** dropdown controls how accepted redactions appear in the
 | Option                  | Effect                                                                       |
 |-------------------------|------------------------------------------------------------------------------|
 | **Black bars**.         | Redacted text is replaced with a solid black rectangle. This is the default. |
-| **Remove text ([...])** | Redacted content is removed entirely. Where text has been removed within a sentence or paragraph, a `[...]` marker is inserted in its place. Isolated or fully-redacted blocks are suppressed without a marker to keep the document readable.         |
+| **Remove text ([...])** | Redacted content is removed entirely. Where text has been removed within a sentence or paragraph, a `[...]` marker is inserted in its place. Isolated or fully-redacted blocks are suppressed without a marker to keep the document readable. In tables, consecutive fully-redacted rows become one row with `[...]` in its first cell, and a table with nothing left to show is left out. |
 
 !!! note
     The in-browser document preview always shows colour-highlighted redactions regardless of which disclosure style is selected. The chosen style only takes effect in the exported PDF — you must generate a disclosure package to see the result.

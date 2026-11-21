@@ -396,6 +396,26 @@ def _cell_fully_redacted(full_text, seg_start, seg_end, sorted_redactions):
     return not full_text[prev:seg_end].strip()
 
 
+def _cells_all_redacted(full_text, cells, sorted_redactions):
+    """Return True if the cells hold content and all of it is redacted.
+
+    Empty cells are ignored, so a redacted label beside a blank value cell
+    still counts as fully redacted.
+    """
+    content_cells = [
+        cell
+        for cell in cells
+        if not cell.get("isMergedContinuation", False)
+        and full_text[cell["start"] : cell["end"]].strip()
+    ]
+    return bool(content_cells) and all(
+        _cell_fully_redacted(
+            full_text, cell["start"], cell["end"], sorted_redactions
+        )
+        for cell in content_cells
+    )
+
+
 def _apply_redactions_to_segment(
     full_text, start, end, sorted_redactions, mode
 ):
@@ -514,16 +534,10 @@ def _render_table_with_redactions(
         num_cols = max((cell["col"] for cell in cells), default=0) + 1
         col_widths = [round(100 / num_cols, 2)] * num_cols
 
-    if mode == "removal":
-        all_redacted = all(
-            _cell_fully_redacted(
-                full_text, cell["start"], cell["end"], sorted_redactions
-            )
-            for cell in cells
-            if not cell.get("isMergedContinuation", False)
-        )
-        if all_redacted:
-            return ""
+    if mode == "removal" and _cells_all_redacted(
+        full_text, cells, sorted_redactions
+    ):
+        return ""
 
     num_cols = max((cell["col"] for cell in cells), default=0) + 1
 
@@ -545,15 +559,10 @@ def _render_table_with_redactions(
                 for cell in row_cells.values()
                 if not cell.get("isMergedContinuation", False)
             ]
-            row_all_redacted = bool(active_cells) and all(
-                _cell_fully_redacted(
-                    full_text, cell["start"], cell["end"], sorted_redactions
-                )
-                for cell in active_cells
-            )
-            if row_all_redacted:
+            if _cells_all_redacted(full_text, active_cells, sorted_redactions):
                 if not prev_row_all_redacted:
-                    # First row in this all-redacted block: [...] in first cell only
+                    # First row in this all-redacted block: [...] in the first
+                    # cell, the rest kept empty so the table edge stays intact.
                     table_html += "<tr>"
                     emit_marker = True
                     for col_idx in sorted(row_cells.keys()):
