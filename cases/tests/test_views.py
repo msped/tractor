@@ -2287,6 +2287,76 @@ class CaseReviewViewTests(NetworkBlockerMixin, APITestCase):
         after = self.client.get(url)
         self.assertEqual(after.data["active_review"]["status"], "OPEN")
 
+    def test_status_change_rejected_while_review_open(self):
+        self._disclose()
+        self.client.post(
+            reverse("case-review-open", kwargs={"case_id": self.case.id})
+        )
+        url = reverse("case-detail", kwargs={"case_id": self.case.id})
+
+        for new_status in (
+            Case.Status.COMPLETED,
+            Case.Status.CLOSED,
+            Case.Status.WITHDRAWN,
+        ):
+            with self.subTest(new_status=new_status):
+                response = self.client.patch(url, {"status": new_status})
+                self.assertEqual(
+                    response.status_code, status.HTTP_400_BAD_REQUEST
+                )
+                self.assertIn("status", response.data)
+
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, Case.Status.UNDER_REVIEW)
+
+    def test_setting_under_review_status_directly_is_rejected(self):
+        self._disclose()
+        self.case.status = Case.Status.COMPLETED
+        self.case.save()
+        url = reverse("case-detail", kwargs={"case_id": self.case.id})
+
+        response = self.client.patch(url, {"status": Case.Status.UNDER_REVIEW})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, Case.Status.COMPLETED)
+        self.assertFalse(self.case.reviews.exists())
+
+    def test_creating_case_under_review_is_rejected(self):
+        response = self.client.post(
+            reverse("case-list-create"),
+            {
+                "case_reference": "250089",
+                "data_subject_name": "New Case",
+                "status": Case.Status.UNDER_REVIEW,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+        self.assertFalse(Case.objects.filter(case_reference="250089").exists())
+
+    def test_edit_resending_current_status_allowed_while_review_open(self):
+        self._disclose()
+        self.client.post(
+            reverse("case-review-open", kwargs={"case_id": self.case.id})
+        )
+        url = reverse("case-detail", kwargs={"case_id": self.case.id})
+
+        response = self.client.patch(
+            url,
+            {
+                "status": Case.Status.UNDER_REVIEW,
+                "data_subject_name": "Renamed",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.data_subject_name, "Renamed")
+        self.assertEqual(self.case.status, Case.Status.UNDER_REVIEW)
+
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class CaseReviewCloseViewTests(NetworkBlockerMixin, APITestCase):
