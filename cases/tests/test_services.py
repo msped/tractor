@@ -859,6 +859,108 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         self.assertNotIn("colspan=", result)
         self.assertEqual(result.count("[...]"), 2)
 
+    def test_render_table_removal_collapsed_row_keeps_its_empty_cells(
+        self,
+    ):
+        """A fully-redacted row keeps every cell, [...] in the first and the rest
+        empty, so the table's right edge stays intact."""
+        text = "Name\tNotes\tDate\nJohn\tSmith\t1990\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "Name", "start": 0, "end": 4},
+                {"row": 0, "col": 1, "text": "Notes", "start": 5, "end": 10},
+                {"row": 0, "col": 2, "text": "Date", "start": 11, "end": 15},
+                {"row": 1, "col": 0, "text": "John", "start": 16, "end": 20},
+                {"row": 1, "col": 1, "text": "Smith", "start": 21, "end": 26},
+                {"row": 1, "col": 2, "text": "1990", "start": 27, "end": 31},
+            ],
+        }
+        redactions = [SimpleNamespace(start_char=16, end_char=31)]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        collapsed_row = result.split("<tr>")[2]
+        self.assertEqual(collapsed_row.count("<td"), 3)
+        self.assertEqual(collapsed_row.count("[...]"), 1)
+
+    def test_render_table_removal_empty_cells_do_not_stop_a_row_collapsing(
+        self,
+    ):
+        """A redacted label beside an empty value cell collapses with its
+        neighbouring redacted rows into one [...]."""
+        text = (
+            "Concluded:\tNo\nConcluded date:\t\nSummary:\tText\nRemarks:\t\n"
+        )
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {
+                    "row": 0,
+                    "col": 0,
+                    "text": "Concluded:",
+                    "start": 0,
+                    "end": 10,
+                },
+                {"row": 0, "col": 1, "text": "No", "start": 11, "end": 13},
+                {
+                    "row": 1,
+                    "col": 0,
+                    "text": "Concluded date:",
+                    "start": 14,
+                    "end": 29,
+                },
+                {"row": 1, "col": 1, "text": "", "start": 30, "end": 30},
+                {
+                    "row": 2,
+                    "col": 0,
+                    "text": "Summary:",
+                    "start": 31,
+                    "end": 39,
+                },
+                {"row": 2, "col": 1, "text": "Text", "start": 40, "end": 44},
+                {
+                    "row": 3,
+                    "col": 0,
+                    "text": "Remarks:",
+                    "start": 45,
+                    "end": 53,
+                },
+                {"row": 3, "col": 1, "text": "", "start": 54, "end": 54},
+            ],
+        }
+        redactions = [
+            SimpleNamespace(start_char=14, end_char=29),
+            SimpleNamespace(start_char=31, end_char=44),
+            SimpleNamespace(start_char=45, end_char=53),
+        ]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertEqual(result.count("<tr>"), 2)
+        self.assertEqual(result.count("[...]"), 1)
+
+    def test_render_table_removal_redacted_labels_with_empty_values_suppress_table(
+        self,
+    ):
+        """A table whose only content is redacted is dropped even if some cells are empty."""
+        text = "Remarks:\t\n"
+        table_data = {
+            "ner_start": 0,
+            "ner_end": len(text),
+            "cells": [
+                {"row": 0, "col": 0, "text": "Remarks:", "start": 0, "end": 8},
+                {"row": 0, "col": 1, "text": "", "start": 9, "end": 9},
+            ],
+        }
+        redactions = [SimpleNamespace(start_char=0, end_char=8)]
+        result = _render_table_with_redactions(
+            table_data, text, redactions, "removal"
+        )
+        self.assertEqual(result, "")
+
     def test_render_table_removal_cell_run_first_gets_marker_rest_empty(self):
         """In a row with consecutive redacted cells, only the first gets [...]; the rest are empty."""
         text = "John\tSmith\tDOB\n"
