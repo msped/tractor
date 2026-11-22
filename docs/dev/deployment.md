@@ -50,6 +50,7 @@ cp frontend/.env.example frontend/.env
 | `OLLAMA_MODEL`           | Ollama model name                             | `gemma3:1b`                |
 | `OLLAMA_CHUNK_SIZE`      | Characters per chunk sent to Ollama (optional) | `4000`                   |
 | `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
+| `OLLAMA_NUM_CTX`         | Context window per Ollama request, in tokens (optional, default `16384`). Too small and a thinking model's reply is cut off; the worker logs `Gemma reply cut off` | `16384` |
 
 ### Frontend (`frontend/.env`)
 
