@@ -151,6 +151,79 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
         )
         self.assertEqual(system_message["content"], "custom instructions")
 
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_context_length_is_sent_to_ollama(self, mock_post):
+        # Without it Ollama falls back to its own default (often 4096), which
+        # a thinking model's reasoning alone can exhaust.
+        mock_post.return_value.json.return_value = {
+            "message": {"content": {"redactions": []}}
+        }
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+            OLLAMA_NUM_CTX=12345,
+        ):
+            extract_with_gemma("Some text.", "Jane Doe")
+
+        call_body = mock_post.call_args[1]["json"]
+        self.assertEqual(call_body["options"]["num_ctx"], 12345)
+
+    def _cut_off_reply(self, mock_post, content):
+        mock_post.return_value.json.return_value = {
+            "message": {"content": content},
+            "done_reason": "length",
+        }
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+        ):
+            with self.assertLogs(
+                "training.extractors.gemma_extractor", level="ERROR"
+            ) as cm:
+                result = extract_with_gemma("Some text.", "Jane Doe")
+        return result, cm.output
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_reply_cut_off_while_thinking_is_reported(self, mock_post):
+        result, logs = self._cut_off_reply(mock_post, "")
+
+        self.assertEqual(result, [])
+        self.assertTrue(any("OLLAMA_NUM_CTX" in line for line in logs))
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_reply_cut_off_mid_json_is_reported_as_context_limit(
+        self, mock_post
+    ):
+        result, logs = self._cut_off_reply(
+            mock_post, '{"redactions": [{"text": "PC Sm'
+        )
+
+        self.assertEqual(result, [])
+        self.assertTrue(any("OLLAMA_NUM_CTX" in line for line in logs))
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_empty_reply_is_logged_not_treated_as_no_findings(self, mock_post):
+        # With a JSON schema, "nothing to redact" is {"redactions": []};
+        # empty content means the model produced no answer at all.
+        mock_post.return_value.json.return_value = {
+            "message": {"content": ""},
+            "done_reason": "stop",
+        }
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+        ):
+            with self.assertLogs(
+                "training.extractors.gemma_extractor", level="WARNING"
+            ) as cm:
+                result = extract_with_gemma("Some text.", "Jane Doe")
+
+        self.assertEqual(result, [])
+        self.assertTrue(any("empty reply" in line for line in cm.output))
+
 
 class ChunkTextTests(TestCase):
     def test_short_text_returned_as_single_chunk(self):

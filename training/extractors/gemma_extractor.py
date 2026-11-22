@@ -147,6 +147,10 @@ def _call_ollama(
                 "model": settings.OLLAMA_MODEL,
                 "stream": False,
                 "format": REDACTION_SCHEMA,
+                # Ollama's own default context is small (often 4096). A model
+                # that reasons before answering can spend all of it thinking
+                # and stop with no answer, so set it explicitly.
+                "options": {"num_ctx": settings.OLLAMA_NUM_CTX},
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message},
@@ -155,9 +159,20 @@ def _call_ollama(
             timeout=(10, 120),  # (connect, read)
         )
         response.raise_for_status()
-        content = response.json()["message"]["content"]
+        body = response.json()
+        if body.get("done_reason") == "length":
+            logger.error(
+                "Gemma reply cut off at the %s-token context limit; this "
+                "chunk's suggestions are lost. Raise OLLAMA_NUM_CTX.",
+                settings.OLLAMA_NUM_CTX,
+            )
+            return []
+        content = body["message"]["content"]
         if isinstance(content, str):
             if not content.strip():
+                # Under a JSON schema "nothing to redact" is an empty list,
+                # so empty content means no answer was produced at all.
+                logger.warning("Gemma returned an empty reply for a chunk")
                 return []
             content = json.loads(content)
         redactions_raw = content["redactions"]

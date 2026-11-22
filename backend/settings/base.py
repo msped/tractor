@@ -233,6 +233,11 @@ OLLAMA_ENABLED = os.environ.get("OLLAMA_ENABLED", "False").lower() in (
 )
 OLLAMA_CHUNK_SIZE = int(os.environ.get("OLLAMA_CHUNK_SIZE", 4000))
 OLLAMA_CHUNK_OVERLAP = int(os.environ.get("OLLAMA_CHUNK_OVERLAP", 200))
+# Context window per request, in tokens: prompt + chunk + the model's reasoning
+# + its answer. gemma4:e4b on a 4000-char chunk used ~1.9k prompt and up to
+# ~5k output tokens, so Ollama's usual 4096 default cuts it off. Lower it only
+# with a smaller OLLAMA_CHUNK_SIZE; it costs VRAM on the Ollama host.
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", 16384))
 
 _retention_schedule = {}
 if AUTO_CASE_DELETION_ENABLED:
