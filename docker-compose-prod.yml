@@ -3,7 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: gunicorn backend.wsgi:application --bind 0.0.0.0:8000
+    # More than one worker so a single slow or stuck request can't block the
+    # whole API, and an explicit timeout rather than gunicorn's 30s default.
+    # Document processing and exports run in the worker service, not here.
+    command: >-
+      gunicorn backend.wsgi:application --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-3} --timeout ${GUNICORN_TIMEOUT:-120}
     restart: unless-stopped
     volumes:
       - static_volume:/app/staticfiles
