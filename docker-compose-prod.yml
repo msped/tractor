@@ -11,6 +11,14 @@ services:
     expose:
       - 8000
     env_file: .env
+    # Healthy once the entrypoint has migrated, collected static files and
+    # fetched GLiNER. start_period covers the first-run model download.
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/setup-complete"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 15m
 
   worker:
     build:
@@ -22,6 +30,13 @@ services:
       - media_volume:/app/mediafiles
       - nlp_models_volume:/app/nlp_models
     env_file: .env
+    # Setup (migrate, collectstatic, GLiNER download) is the backend's job;
+    # running it here too races the backend's migrations on a fresh database.
+    environment:
+      - RUN_SETUP=false
+    depends_on:
+      backend:
+        condition: service_healthy
     # Uncomment the section below to enable NVIDIA GPU passthrough for SpanCat training.
     # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
     # deploy:
