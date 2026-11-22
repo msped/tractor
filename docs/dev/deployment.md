@@ -50,6 +50,8 @@ cp frontend/.env.example frontend/.env
 | `OLLAMA_MODEL`           | Ollama model name                             | `gemma3:1b`                |
 | `OLLAMA_CHUNK_SIZE`      | Characters per chunk sent to Ollama (optional) | `4000`                   |
 | `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
+| `GUNICORN_WORKERS`       | Gunicorn worker processes for the backend (optional, read by Compose) | `3` |
+| `GUNICORN_TIMEOUT`       | Seconds before Gunicorn restarts a stuck worker (optional, read by Compose) | `120` |
 | `OLLAMA_NUM_CTX`         | Context window per Ollama request, in tokens (optional, default `16384`). Too small and a thinking model's reply is cut off; the worker logs `Gemma reply cut off` | `16384` |
 
 ### Frontend (`frontend/.env`)
@@ -137,6 +139,10 @@ Ollama auto-detects and uses the Metal GPU on Apple Silicon hosts — no extra c
     The `worker` service is **required** for document export and model training. Without it, these operations will queue but never complete. Always ensure the worker is running in production.
 
 The `worker` service runs `python manage.py qcluster`, which is required for all asynchronous tasks — document export (PDF generation) and model training. It shares the same Docker image as the backend and reads the same `.env` file.
+
+Only the `backend` container runs startup setup (database migrations, `collectstatic` and the first-run GLiNER download). The `worker` starts once the backend reports healthy, so on a fresh deployment it waits until that setup has finished, which can take several minutes while GLiNER downloads. If setup fails, the backend never becomes healthy and the worker does not start. Check `docker compose -f docker-compose-prod.yml logs backend`.
+
+All services except `nginx` use `restart: unless-stopped`, and `nginx` uses `restart: always`, so the stack comes back after a host reboot.
 
 ### Database
 
@@ -253,7 +259,7 @@ Static files are collected into the `static_volume` Docker volume during contain
 
 ### GLiNER
 
-The GLiNER model (`urchade/gliner_medium-v2.1`) is downloaded from HuggingFace on first startup and saved to `nlp_models/` inside the container. This is handled automatically by the entrypoint — no manual steps are required.
+The GLiNER model (`urchade/gliner_medium-v2.1`) is downloaded from HuggingFace on first startup and saved to `nlp_models/` inside the container. The `backend` container's entrypoint handles this automatically, so no manual steps are required.
 
 The `nlp_models_volume` Docker volume persists the model across container rebuilds so it is only downloaded once. The download is skipped on subsequent starts if the model directory already exists.
 
