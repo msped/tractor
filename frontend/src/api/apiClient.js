@@ -1,5 +1,6 @@
 import axios from "axios";
 import { authClient } from "@/lib/auth-client.base";
+import { internalApiHeaders } from "@/utils/internalApi";
 
 let isRefreshing = false;
 let refreshSubscribers = [];
@@ -30,7 +31,8 @@ const apiClient = () => {
     // relative URL so the request goes to whatever origin served the app
     // (nginx path-routes /api to the backend). This keeps the browser bundle
     // origin-agnostic — no NEXT_PUBLIC_API_HOST baked in at build time.
-    const host = typeof window === 'undefined'
+    const isServer = typeof window === 'undefined';
+    const host = isServer
         ? (process.env.INTERNAL_API_HOST || 'http://localhost:8000')
         : '';
     const defaultOptions = {
@@ -38,6 +40,8 @@ const apiClient = () => {
         headers: {
             "Content-Type": "application/json",
             accept: "application/json",
+            // Server-side calls bypass nginx; see utils/internalApi.js.
+            ...(isServer ? internalApiHeaders() : {}),
         },
     }
 

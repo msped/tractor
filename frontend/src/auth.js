@@ -5,6 +5,7 @@ import { symmetricDecodeJWT } from "better-auth/crypto";
 import { customSession, genericOAuth } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import * as z from "zod";
+import { internalApiHeaders } from "@/utils/internalApi";
 
 export const getSession = async () => {
     const { headers } = await import("next/headers");
@@ -68,7 +69,10 @@ async function callDjango(path, body) {
     try {
         res = await fetch(url, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                ...internalApiHeaders(),
+            },
             body: JSON.stringify(body),
         });
     } catch (cause) {
