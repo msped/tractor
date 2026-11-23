@@ -156,7 +156,7 @@ def _call_ollama(
                     {"role": "user", "content": user_message},
                 ],
             },
-            timeout=(10, 120),  # (connect, read)
+            timeout=(10, settings.OLLAMA_TIMEOUT),  # (connect, read)
         )
         response.raise_for_status()
         body = response.json()
@@ -176,6 +176,13 @@ def _call_ollama(
                 return []
             content = json.loads(content)
         redactions_raw = content["redactions"]
+    except requests.exceptions.ReadTimeout:
+        logger.error(
+            "Gemma took longer than %ss on a chunk; this chunk's suggestions "
+            "are lost. Raise OLLAMA_TIMEOUT on a slow Ollama host.",
+            settings.OLLAMA_TIMEOUT,
+        )
+        return []
     except Exception as exc:
         logger.error("Gemma extractor failed: %s", exc)
         return []
