@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import requests
 from django.test import TestCase, override_settings
 
 from training.extractors.gemma_extractor import (
@@ -168,6 +169,40 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
 
         call_body = mock_post.call_args[1]["json"]
         self.assertEqual(call_body["options"]["num_ctx"], 12345)
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_read_timeout_comes_from_settings(self, mock_post):
+        mock_post.return_value.json.return_value = {
+            "message": {"content": {"redactions": []}}
+        }
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+            OLLAMA_TIMEOUT=321,
+        ):
+            extract_with_gemma("Some text.", "Jane Doe")
+
+        connect, read = mock_post.call_args[1]["timeout"]
+        self.assertEqual(read, 321)
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_read_timeout_is_reported_with_the_setting_to_raise(
+        self, mock_post
+    ):
+        mock_post.side_effect = requests.exceptions.ReadTimeout("slow")
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+        ):
+            with self.assertLogs(
+                "training.extractors.gemma_extractor", level="ERROR"
+            ) as cm:
+                result = extract_with_gemma("Some text.", "Jane Doe")
+
+        self.assertEqual(result, [])
+        self.assertTrue(any("OLLAMA_TIMEOUT" in line for line in cm.output))
 
     def _cut_off_reply(self, mock_post, content):
         mock_post.return_value.json.return_value = {

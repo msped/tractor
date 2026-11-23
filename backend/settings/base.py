@@ -238,6 +238,12 @@ OLLAMA_CHUNK_OVERLAP = int(os.environ.get("OLLAMA_CHUNK_OVERLAP", 200))
 # ~5k output tokens, so Ollama's usual 4096 default cuts it off. Lower it only
 # with a smaller OLLAMA_CHUNK_SIZE; it costs VRAM on the Ollama host.
 OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", 16384))
+# Seconds to wait for Gemma's reply to one chunk before giving up on it. A GPU
+# answers a 4000-char chunk in well under a minute; CPU and Apple Metal hosts
+# can take several. Every chunk of a document runs inside one processing task,
+# which django-q stops after Q_CLUSTER["timeout"] (1800s), so keep
+# chunks-per-document x OLLAMA_TIMEOUT comfortably below that.
+OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", 120))
 
 _retention_schedule = {}
 if AUTO_CASE_DELETION_ENABLED:
