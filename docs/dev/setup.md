@@ -138,7 +138,10 @@ Large documents are split into overlapping chunks before being sent to Ollama. T
 OLLAMA_CHUNK_SIZE=4000    # characters per chunk (default: 4000)
 OLLAMA_CHUNK_OVERLAP=200  # overlap between chunks (default: 200)
 OLLAMA_NUM_CTX=16384      # context window per request, in tokens (default: 16384)
+OLLAMA_TIMEOUT=120        # seconds to wait for one chunk's reply (default: 120)
 ```
+
+On a CPU-only or Apple Metal host Gemma can take several minutes per chunk. A chunk that runs past `OLLAMA_TIMEOUT` is skipped, and the worker logs `Gemma took longer than …`. Raise the setting if you see that line. All of a document's chunks run inside one background task, which django-q stops after 30 minutes, so keep chunks-per-document × `OLLAMA_TIMEOUT` well below that.
 
 `OLLAMA_NUM_CTX` has to hold the prompt, the chunk, the model's reasoning and its answer. Models that think before answering, such as `gemma4:e4b`, can use most of Ollama's usual 4096-token default on reasoning alone and stop without an answer. When that happens the worker logs `Gemma reply cut off at the … context limit` and that chunk contributes no suggestions. Raise `OLLAMA_NUM_CTX`, or lower `OLLAMA_CHUNK_SIZE` on a host short of memory, since a larger context uses more of it.
 

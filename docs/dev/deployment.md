@@ -52,6 +52,7 @@ cp frontend/.env.example frontend/.env
 | `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
 | `GUNICORN_WORKERS`       | Gunicorn worker processes for the backend (optional, read by Compose) | `3` |
 | `GUNICORN_TIMEOUT`       | Seconds before Gunicorn restarts a stuck worker (optional, read by Compose) | `120` |
+| `OLLAMA_TIMEOUT`         | Seconds to wait for Gemma's reply to one chunk (optional, default `120`). Raise on CPU-only hosts; a chunk that times out is skipped and the worker logs `Gemma took longer than` | `300` |
 | `OLLAMA_NUM_CTX`         | Context window per Ollama request, in tokens (optional, default `16384`). Too small and a thinking model's reply is cut off; the worker logs `Gemma reply cut off` | `16384` |
 
 ### Frontend (`frontend/.env`)
