@@ -45,9 +45,9 @@ cp frontend/.env.example frontend/.env
 | `POSTGRES_HOST`          | Database host (optional, default: `localhost`; use `db` in Docker) | `db` |
 | `POSTGRES_PORT`          | Database port (optional, default: `5432`)     | `5432`                     |
 | `MEDIA_STORAGE`          | Storage backend (`local`, `s3`, `azure`)      | `local`                    |
-| `OLLAMA_ENABLED`         | Enable Gemma contextual AI stage (`True`/`False`) | `True`               |
+| `OLLAMA_ENABLED`         | Enable the Gemma contextual AI stage (`True`/`False`, default `False`) | `True` |
 | `OLLAMA_HOST`            | Ollama API URL — use `http://ollama:11434` in Docker | `http://ollama:11434` |
-| `OLLAMA_MODEL`           | Ollama model name                             | `gemma3:1b`                |
+| `OLLAMA_MODEL`           | Ollama model name (default `gemma4:e4b`)      | `gemma4:e4b`               |
 | `OLLAMA_CHUNK_SIZE`      | Characters per chunk sent to Ollama (optional) | `4000`                   |
 | `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
 | `GUNICORN_WORKERS`       | Gunicorn worker processes for the backend (optional, read by Compose) | `3` |
@@ -95,17 +95,17 @@ The production stack (`docker-compose-prod.yml`) runs the following services:
 
 ### Ollama (Contextual AI)
 
-The `ollama` service runs the locally-hosted LLM used for contextual document analysis. It is included in the production Compose file but is **optional** — set `OLLAMA_ENABLED=False` in `.env` to disable the Gemma stage entirely, and the other three NLP models will continue to operate normally.
+The `ollama` service runs the locally-hosted LLM used for contextual document analysis. The service always starts with the production stack, but the Gemma stage is **off by default**. Set `OLLAMA_ENABLED=True` in `.env` to use it. With it off, the other three NLP models continue to operate normally.
 
-On first startup, pull the model inside the container:
+Once the stack is up (see [Database](#database) for the `up` command), pull the model inside the running container:
 
 ```bash
-docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma3:1b
+docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma4:e4b
 ```
 
-This application is not tied to Gemma — you can use any model available through Ollama depending on your hardware. `gemma3:1b` is a good starting point for most systems; consider `gemma4:e4b` or similar if you have GPU resources available.
+The pulled model must match `OLLAMA_MODEL`, which defaults to `gemma4:e4b`. This application is not tied to Gemma, and you can use any model available through Ollama depending on your hardware. `gemma4:e4b` used about 5GB of VRAM at the default `OLLAMA_NUM_CTX` on an NVIDIA GPU. On a CPU-only host a smaller model such as `gemma3:1b` is far quicker, though less thorough.
 
-The model is persisted in the `ollama_volume` Docker volume, so it only needs to be downloaded once.
+The model is persisted in the `ollama_data` Docker volume, so it only needs to be downloaded once.
 
 The `backend` and `worker` containers reach Ollama at `http://ollama:11434` (the Docker service hostname). Set `OLLAMA_HOST=http://ollama:11434` in `.env`.
 
@@ -272,7 +272,7 @@ The SpanCat model is trained from user-accepted redactions via the training pipe
 
 ### Gemma (Ollama)
 
-The Gemma model is pulled and stored inside the `ollama_volume` volume (see the [Ollama section](#ollama-contextual-ai) above). No backend container configuration is needed beyond the env vars.
+The Gemma model is pulled and stored inside the `ollama_data` volume (see the [Ollama section](#ollama-contextual-ai) above). No backend container configuration is needed beyond the env vars.
 
 ---
 
