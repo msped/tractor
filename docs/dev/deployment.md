@@ -39,9 +39,9 @@ cp frontend/.env.example frontend/.env
 | `ALLOWED_HOSTS`          | Comma-separated allowed hostnames — must include `backend` when running in Docker, as the frontend container calls the backend directly | `localhost,backend,yourdomain.com` |
 | `FRONTEND_ORIGIN`        | Public origin the frontend is served from. Used for the Microsoft OAuth callback and, in production, as the sole allowed CORS origin. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
 | `DATABASE_URL`           | Database URL for connection (optional — takes priority over individual vars) | |
-| `POSTGRES_DB`            | Database name (optional, default: `tractor`)  | `tractor`                  |
-| `POSTGRES_USER`          | Database user (optional, default: `tractor`)  | `tractor`                  |
-| `POSTGRES_PASSWORD`      | Database password (optional)                  |                            |
+| `POSTGRES_DB`            | Database name (required unless `DATABASE_URL` is set) | `tractor`          |
+| `POSTGRES_USER`          | Database user (required unless `DATABASE_URL` is set) | `tractor`          |
+| `POSTGRES_PASSWORD`      | Database password (required unless `DATABASE_URL` is set) |                |
 | `POSTGRES_HOST`          | Database host (optional, default: `localhost`; use `db` in Docker) | `db` |
 | `POSTGRES_PORT`          | Database port (optional, default: `5432`)     | `5432`                     |
 | `MEDIA_STORAGE`          | Storage backend (`local`, `s3`, `azure`)      | `local`                    |
@@ -155,7 +155,15 @@ All services except `nginx` use `restart: unless-stopped`, and `nginx` uses `res
 
 ### Database
 
-The `db` service is optional and uses the Docker Compose `db` profile. Use it if you don't have an external PostgreSQL instance.
+For production, use a managed PostgreSQL service (e.g. RDS, Azure Database for PostgreSQL). It handles backups, upgrades and failover, none of which the bundled container does. The bundled `db` service, behind the Docker Compose `db` profile, is for trying Tractor out or for small deployments where you take on those jobs yourself.
+
+**With a managed database (recommended):**
+
+Set either `DATABASE_URL` or the individual `POSTGRES_*` variables in `.env` pointing at your database host, then run without the `db` profile:
+
+```bash
+docker compose -f docker-compose-prod.yml up --build -d
+```
 
 **With the bundled database:**
 
@@ -163,13 +171,7 @@ The `db` service is optional and uses the Docker Compose `db` profile. Use it if
 docker compose -f docker-compose-prod.yml --profile db up --build -d
 ```
 
-**With an external database** (e.g. RDS, Azure Database, managed PostgreSQL):
-
-Set either `DATABASE_URL` or the individual `POSTGRES_*` variables in `.env` pointing at your external host, then run without the `db` profile:
-
-```bash
-docker compose -f docker-compose-prod.yml up --build -d
-```
+The bundled container creates its database and user from the same `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` that Django connects with. `.env.example` leaves them empty and there is no default, so set all three (for example `tractor` for the first two) before the first `up`. The database is created on the first start only, so changing these afterwards needs the `postgres_data` volume removed.
 
 ### Verify
 
