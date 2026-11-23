@@ -124,6 +124,14 @@ deploy:
           capabilities: [gpu]
 ```
 
+The `worker` service has the same commented-out `deploy` block. Document processing runs in the worker, so uncommenting it there runs GLiNER on the GPU too. SpanCat stays on the CPU either way, for both processing and training, because spaCy's GPU support needs `cupy`, which the image doesn't include.
+
+To check the GPU is visible to Docker before bringing the stack up:
+
+```bash
+docker run --rm --gpus all ubuntu nvidia-smi
+```
+
 Then bring the stack up as normal:
 
 ```bash
