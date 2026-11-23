@@ -166,18 +166,20 @@ docker compose -f docker-compose-prod.yml up --build -d
 ### Verify
 
 ```bash
-# Check all services are running
+# Check all services are running (backend should show "healthy")
 docker compose -f docker-compose-prod.yml ps
 
-# Backend API
-curl http://localhost/api/
+# Backend: the Django admin login page should return 200
+curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-Proto: https" http://localhost/admin/login/
 
-# Frontend
-curl http://localhost/
+# Frontend: should return 200
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost/
 
 # Worker logs (confirm qcluster is running)
 docker compose -f docker-compose-prod.yml logs worker
 ```
+
+In production Django redirects plain-HTTP requests to HTTPS. The `X-Forwarded-Proto` header tells it the request arrived over HTTPS, as your TLS terminator would, so the check gets the page instead of a `301`. `localhost` must be in `ALLOWED_HOSTS` for these checks.
 
 ---
 
