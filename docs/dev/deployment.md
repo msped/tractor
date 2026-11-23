@@ -39,15 +39,15 @@ cp frontend/.env.example frontend/.env
 | `ALLOWED_HOSTS`          | Comma-separated allowed hostnames — must include `backend` when running in Docker, as the frontend container calls the backend directly | `localhost,backend,yourdomain.com` |
 | `FRONTEND_ORIGIN`        | Public origin the frontend is served from. Used for the Microsoft OAuth callback and, in production, as the sole allowed CORS origin. In development, CORS is open (`CORS_ORIGIN_ALLOW_ALL = True`). | `https://yourdomain.com` |
 | `DATABASE_URL`           | Database URL for connection (optional — takes priority over individual vars) | |
-| `POSTGRES_DB`            | Database name (optional, default: `tractor`)  | `tractor`                  |
-| `POSTGRES_USER`          | Database user (optional, default: `tractor`)  | `tractor`                  |
-| `POSTGRES_PASSWORD`      | Database password (optional)                  |                            |
+| `POSTGRES_DB`            | Database name (required unless `DATABASE_URL` is set) | `tractor`          |
+| `POSTGRES_USER`          | Database user (required unless `DATABASE_URL` is set) | `tractor`          |
+| `POSTGRES_PASSWORD`      | Database password (required unless `DATABASE_URL` is set) |                |
 | `POSTGRES_HOST`          | Database host (optional, default: `localhost`; use `db` in Docker) | `db` |
 | `POSTGRES_PORT`          | Database port (optional, default: `5432`)     | `5432`                     |
 | `MEDIA_STORAGE`          | Storage backend (`local`, `s3`, `azure`)      | `local`                    |
-| `OLLAMA_ENABLED`         | Enable Gemma contextual AI stage (`True`/`False`) | `True`               |
+| `OLLAMA_ENABLED`         | Enable the Gemma contextual AI stage (`True`/`False`, default `False`) | `True` |
 | `OLLAMA_HOST`            | Ollama API URL — use `http://ollama:11434` in Docker | `http://ollama:11434` |
-| `OLLAMA_MODEL`           | Ollama model name                             | `gemma3:1b`                |
+| `OLLAMA_MODEL`           | Ollama model name (default `gemma4:e4b`)      | `gemma4:e4b`               |
 | `OLLAMA_CHUNK_SIZE`      | Characters per chunk sent to Ollama (optional) | `4000`                   |
 | `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
 | `GUNICORN_WORKERS`       | Gunicorn worker processes for the backend (optional, read by Compose) | `3` |
@@ -95,17 +95,17 @@ The production stack (`docker-compose-prod.yml`) runs the following services:
 
 ### Ollama (Contextual AI)
 
-The `ollama` service runs the locally-hosted LLM used for contextual document analysis. It is included in the production Compose file but is **optional** — set `OLLAMA_ENABLED=False` in `.env` to disable the Gemma stage entirely, and the other three NLP models will continue to operate normally.
+The `ollama` service runs the locally-hosted LLM used for contextual document analysis. The service always starts with the production stack, but the Gemma stage is **off by default**. Set `OLLAMA_ENABLED=True` in `.env` to use it. With it off, the other three NLP models continue to operate normally.
 
-On first startup, pull the model inside the container:
+Once the stack is up (see [Database](#database) for the `up` command), pull the model inside the running container:
 
 ```bash
-docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma3:1b
+docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma4:e4b
 ```
 
-This application is not tied to Gemma — you can use any model available through Ollama depending on your hardware. `gemma3:1b` is a good starting point for most systems; consider `gemma4:e4b` or similar if you have GPU resources available.
+The pulled model must match `OLLAMA_MODEL`, which defaults to `gemma4:e4b`. This application is not tied to Gemma, and you can use any model available through Ollama depending on your hardware. `gemma4:e4b` used about 5GB of VRAM at the default `OLLAMA_NUM_CTX` on an NVIDIA GPU. On a CPU-only host a smaller model such as `gemma3:1b` is far quicker, though less thorough.
 
-The model is persisted in the `ollama_volume` Docker volume, so it only needs to be downloaded once.
+The model is persisted in the `ollama_data` Docker volume, so it only needs to be downloaded once.
 
 The `backend` and `worker` containers reach Ollama at `http://ollama:11434` (the Docker service hostname). Set `OLLAMA_HOST=http://ollama:11434` in `.env`.
 
@@ -122,6 +122,14 @@ deploy:
         - driver: nvidia
           count: all
           capabilities: [gpu]
+```
+
+The `worker` service has the same commented-out `deploy` block. Document processing runs in the worker, so uncommenting it there runs GLiNER on the GPU too. SpanCat stays on the CPU either way, for both processing and training, because spaCy's GPU support needs `cupy`, which the image doesn't include.
+
+To check the GPU is visible to Docker before bringing the stack up:
+
+```bash
+docker run --rm --gpus all ubuntu nvidia-smi
 ```
 
 Then bring the stack up as normal:
@@ -147,7 +155,15 @@ All services except `nginx` use `restart: unless-stopped`, and `nginx` uses `res
 
 ### Database
 
-The `db` service is optional and uses the Docker Compose `db` profile. Use it if you don't have an external PostgreSQL instance.
+For production, use a managed PostgreSQL service (e.g. RDS, Azure Database for PostgreSQL). It handles backups, upgrades and failover, none of which the bundled container does. The bundled `db` service, behind the Docker Compose `db` profile, is for trying Tractor out or for small deployments where you take on those jobs yourself.
+
+**With a managed database (recommended):**
+
+Set either `DATABASE_URL` or the individual `POSTGRES_*` variables in `.env` pointing at your database host, then run without the `db` profile:
+
+```bash
+docker compose -f docker-compose-prod.yml up --build -d
+```
 
 **With the bundled database:**
 
@@ -155,29 +171,42 @@ The `db` service is optional and uses the Docker Compose `db` profile. Use it if
 docker compose -f docker-compose-prod.yml --profile db up --build -d
 ```
 
-**With an external database** (e.g. RDS, Azure Database, managed PostgreSQL):
-
-Set either `DATABASE_URL` or the individual `POSTGRES_*` variables in `.env` pointing at your external host, then run without the `db` profile:
-
-```bash
-docker compose -f docker-compose-prod.yml up --build -d
-```
+The bundled container creates its database and user from the same `POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` that Django connects with. `.env.example` leaves them empty and there is no default, so set all three (for example `tractor` for the first two) before the first `up`. The database is created on the first start only, so changing these afterwards needs the `postgres_data` volume removed.
 
 ### Verify
 
 ```bash
-# Check all services are running
+# Check all services are running (backend should show "healthy")
 docker compose -f docker-compose-prod.yml ps
 
-# Backend API
-curl http://localhost/api/
+# Backend: the Django admin login page should return 200
+curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-Proto: https" http://localhost/admin/login/
 
-# Frontend
-curl http://localhost/
+# Frontend: should return 200
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost/
 
 # Worker logs (confirm qcluster is running)
 docker compose -f docker-compose-prod.yml logs worker
 ```
+
+In production Django redirects plain-HTTP requests to HTTPS. The `X-Forwarded-Proto` header tells it the request arrived over HTTPS, as your TLS terminator would, so the check gets the page instead of a `301`. `localhost` must be in `ALLOWED_HOSTS` for these checks.
+
+### Create the first administrator
+
+The stack starts with no user accounts. Create the first administrator from the backend container:
+
+```bash
+docker compose -f docker-compose-prod.yml exec backend python manage.py createsuperuser
+```
+
+For a scripted deployment, pass the password through the environment rather than the prompt:
+
+```bash
+docker compose -f docker-compose-prod.yml exec -e DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" backend \
+  python manage.py createsuperuser --noinput --username admin --email admin@example.com
+```
+
+Sign in to Tractor with that username and password. Further accounts are created by an administrator in the Django admin at `/admin/` (**Users → Add user**). Accounts signing in through Microsoft SSO are created on first sign-in.
 
 ---
 
@@ -272,7 +301,7 @@ The SpanCat model is trained from user-accepted redactions via the training pipe
 
 ### Gemma (Ollama)
 
-The Gemma model is pulled and stored inside the `ollama_volume` volume (see the [Ollama section](#ollama-contextual-ai) above). No backend container configuration is needed beyond the env vars.
+The Gemma model is pulled and stored inside the `ollama_data` volume (see the [Ollama section](#ollama-contextual-ai) above). No backend container configuration is needed beyond the env vars.
 
 ---
 

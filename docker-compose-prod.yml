@@ -44,8 +44,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # Uncomment the section below to enable NVIDIA GPU passthrough for SpanCat training.
-    # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
+    # Uncomment the section below to run GLiNER on an NVIDIA GPU during document
+    # processing. SpanCat stays on CPU (spaCy's GPU support needs cupy, which the
+    # image doesn't include). Requires NVIDIA drivers and nvidia-container-toolkit.
     # deploy:
     #   resources:
     #     reservations:
