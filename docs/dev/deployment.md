@@ -181,6 +181,23 @@ docker compose -f docker-compose-prod.yml logs worker
 
 In production Django redirects plain-HTTP requests to HTTPS. The `X-Forwarded-Proto` header tells it the request arrived over HTTPS, as your TLS terminator would, so the check gets the page instead of a `301`. `localhost` must be in `ALLOWED_HOSTS` for these checks.
 
+### Create the first administrator
+
+The stack starts with no user accounts. Create the first administrator from the backend container:
+
+```bash
+docker compose -f docker-compose-prod.yml exec backend python manage.py createsuperuser
+```
+
+For a scripted deployment, pass the password through the environment rather than the prompt:
+
+```bash
+docker compose -f docker-compose-prod.yml exec -e DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" backend \
+  python manage.py createsuperuser --noinput --username admin --email admin@example.com
+```
+
+Sign in to Tractor with that username and password. Further accounts are created by an administrator in the Django admin at `/admin/` (**Users → Add user**). Accounts signing in through Microsoft SSO are created on first sign-in.
+
 ---
 
 ## Media File Storage
