@@ -97,6 +97,40 @@ class ModelViewTests(BaseTrainingAPITestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
+    @patch("training.loader._load_spancat_model")
+    def test_set_active_marks_model_active_without_loading_it(self, mock_load):
+        """Documents are processed in the worker, so the web process has no
+        use for the model; loading it there only costs memory."""
+        model_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, model_dir, ignore_errors=True)
+        current = Model.objects.create(
+            name="current", path="/path/to/current", is_active=True
+        )
+        target = Model.objects.create(name="target", path=model_dir)
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("model-set-active", kwargs={"pk": target.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        target.refresh_from_db()
+        current.refresh_from_db()
+        self.assertTrue(target.is_active)
+        self.assertFalse(current.is_active)
+        mock_load.assert_not_called()
+
+    def test_set_active_rejects_model_whose_files_are_missing(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("model-set-active", kwargs={"pk": self.model.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.model.refresh_from_db()
+        self.assertFalse(self.model.is_active)
+
     def test_list_models_as_admin(self):
         """Admin can list all models."""
         self.client.force_authenticate(user=self.admin_user)
@@ -141,20 +175,6 @@ class ModelViewTests(BaseTrainingAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertIn("Cannot delete", response.data["detail"])
         self.assertEqual(Model.objects.count(), 1)
-
-    @patch("training.views.SpanCatModelManager")
-    def test_set_active_model_as_admin(self, mock_spancat_manager):
-        """Admin can set a model to active; SpanCatModelManager is called."""
-        mock_manager_instance = mock_spancat_manager.get_instance.return_value
-        self.client.force_authenticate(user=self.admin_user)
-        url = reverse("model-set-active", kwargs={"pk": self.model.pk})
-        response = self.client.post(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        mock_spancat_manager.get_instance.assert_called_once()
-        mock_manager_instance.switch_model.assert_called_once_with(
-            self.model.name
-        )
 
     def test_set_active_model_not_found(self):
         """Setting a non-existent model as active returns 404."""

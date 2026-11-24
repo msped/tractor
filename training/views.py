@@ -1,6 +1,7 @@
 import io
 import logging
 import multiprocessing
+import os
 import re
 import zipfile
 
@@ -14,7 +15,6 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .loader import SpanCatModelManager
 from .models import (
     CustomRecognizer,
     LLMPromptSettings,
@@ -176,15 +176,22 @@ class ModelSetActiveView(APIView):
     def post(self, request, pk, *args, **kwargs):
         try:
             model = Model.objects.get(id=pk)
-            SpanCatModelManager.get_instance().switch_model(model.name)
-            return Response(status=status.HTTP_200_OK)
         except Model.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+
+        # Fail here rather than on the next document if the files are gone.
+        if not os.path.isdir(model.path):
             return Response(
-                {"detail": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"detail": "This model's files are missing on the server."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Only the flag changes. Documents are processed in the worker, whose
+        # model manager reads the active model from the database on each use
+        # (training/loader.py), so nothing needs loading in this process.
+        model.is_active = True
+        model.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_200_OK)
 
 
 class TrainingDocumentViewSet(viewsets.ModelViewSet):

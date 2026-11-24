@@ -139,7 +139,7 @@ class SpanCatModelManager(_ModelManagerBase):
     def __init__(self):
         super().__init__()
         try:
-            self._load_active_model()
+            self._sync_with_active_model()
         except Exception:
             logger.warning(
                 "SpanCat model could not be loaded at startup — "
@@ -147,10 +147,20 @@ class SpanCatModelManager(_ModelManagerBase):
                 exc_info=True,
             )
 
-    def _load_active_model(self):
+    def _sync_with_active_model(self):
+        """Hold whichever model the database marks active.
+
+        A model is activated from a web process, but documents are processed
+        in long-lived worker processes that each hold their own manager. Only
+        the database is shared, so it is checked on every use: a manager that
+        loaded a model once and kept it would go on processing with a model
+        the admin had already replaced.
+        """
         active_model = Model.objects.filter(is_active=True).first()
-        if active_model:
-            self.model_entry = active_model
+        if active_model is None:
+            self.model = self.model_name = self.model_entry = None
+            return
+        if self.model is None or self.model_name != active_model.name:
             self.load_model(active_model.path, active_model.name)
 
     def load_model(self, path, name=None):
@@ -158,16 +168,21 @@ class SpanCatModelManager(_ModelManagerBase):
         self.model_name = name or path
         self.model_entry = Model.objects.filter(name=self.model_name).first()
 
+    def _sync_or_keep_current(self):
+        try:
+            self._sync_with_active_model()
+        except Exception:
+            # Keep whatever is already loaded rather than failing the document.
+            logger.warning("SpanCat model reload failed.", exc_info=True)
+
     def get_model(self):
-        """Return the active SpanCat model, or None if none has been trained yet."""
-        if self.model is None:
-            try:
-                self._load_active_model()
-            except Exception:
-                logger.warning("SpanCat model reload failed.", exc_info=True)
+        """Return the active SpanCat model, or None if none is active."""
+        self._sync_or_keep_current()
         return self.model
 
     def get_model_entry(self):
+        """Return the Model row for the model get_model() returns."""
+        self._sync_or_keep_current()
         return self.model_entry
 
     def switch_model(self, model_name):

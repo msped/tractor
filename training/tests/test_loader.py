@@ -167,6 +167,55 @@ class SpanCatModelManagerTests(NetworkBlockerMixin, TestCase):
         self.assertTrue(inactive_model.is_active)
 
     @patch("training.loader._load_spancat_model")
+    def test_get_model_follows_model_activated_in_another_process(
+        self, mock_load
+    ):
+        """Activation happens in a web process; documents are processed in a
+        long-lived worker process with its own manager. The worker must pick
+        up the newly active model rather than keep the one it loaded first."""
+        mock_load.side_effect = lambda path: f"nlp<{path}>"
+        Model.objects.create(name="spancat_v1", path="/m/v1", is_active=True)
+        v2 = Model.objects.create(name="spancat_v2", path="/m/v2")
+
+        worker_manager = SpanCatModelManager.get_instance()
+        self.assertEqual(worker_manager.get_model(), "nlp</m/v1>")
+
+        # What the web process's ModelSetActiveView leaves behind in the DB.
+        v2.is_active = True
+        v2.save()
+
+        self.assertEqual(worker_manager.get_model(), "nlp</m/v2>")
+        self.assertEqual(worker_manager.get_model_entry(), v2)
+
+    @patch("training.loader._load_spancat_model")
+    def test_get_model_returns_none_once_no_model_is_active(self, mock_load):
+        v1 = Model.objects.create(
+            name="spancat_v1", path="/m/v1", is_active=True
+        )
+        manager = SpanCatModelManager.get_instance()
+        self.assertIsNotNone(manager.get_model())
+
+        Model.objects.filter(pk=v1.pk).update(is_active=False)
+
+        self.assertIsNone(manager.get_model())
+        self.assertIsNone(manager.get_model_entry())
+
+    @patch("training.loader._load_spancat_model")
+    def test_failed_reload_keeps_the_model_already_loaded(self, mock_load):
+        mock_load.side_effect = lambda path: f"nlp<{path}>"
+        Model.objects.create(name="spancat_v1", path="/m/v1", is_active=True)
+        v2 = Model.objects.create(name="spancat_v2", path="/m/v2")
+        manager = SpanCatModelManager.get_instance()
+        manager.get_model()
+
+        v2.is_active = True
+        v2.save()
+        mock_load.side_effect = RuntimeError("files missing")
+
+        with self.assertLogs("training.loader", level="WARNING"):
+            self.assertEqual(manager.get_model(), "nlp</m/v1>")
+
+    @patch("training.loader._load_spancat_model")
     def test_no_active_model_on_init(self, mock_load):
         """No model loaded during init if no active SpanCat model."""
         Model.objects.all().delete()
