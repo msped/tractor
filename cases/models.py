@@ -206,6 +206,15 @@ class Document(models.Model):
     processing_task_id = models.CharField(
         max_length=255, null=True, blank=True
     )
+    # When the worker began and finished the latest processing run, kept on
+    # the document because django-q's own task history is trimmed. Time spent
+    # waiting in the queue is not included.
+    processing_started_at = models.DateTimeField(
+        null=True, blank=True, editable=False
+    )
+    processing_finished_at = models.DateTimeField(
+        null=True, blank=True, editable=False
+    )
     spacy_model = models.ForeignKey(
         Model,
         on_delete=models.SET_NULL,  # Important for data retention
@@ -239,6 +248,8 @@ class Document(models.Model):
         Document.objects.filter(pk=self.pk).update(
             status=self.Status.PROCESSING,
             processing_task_id=task_id,
+            processing_started_at=None,
+            processing_finished_at=None,
         )
         return task_id
 

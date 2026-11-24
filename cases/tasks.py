@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 def process_document_and_create_redactions(document_id):
+    from django.utils import timezone
+
     from .models import Document
     from .services import process_document_and_create_redactions as _impl
 
@@ -22,7 +24,8 @@ def process_document_and_create_redactions(document_id):
             document_id,
         )
         Document.objects.filter(pk=document_id).update(
-            status=Document.Status.ERROR
+            status=Document.Status.ERROR,
+            processing_finished_at=timezone.now(),
         )
         raise
 

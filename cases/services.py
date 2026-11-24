@@ -84,6 +84,9 @@ def process_document_and_create_redactions(document_id):
         )
         return
 
+    document.processing_started_at = timezone.now()
+    document.save(update_fields=["processing_started_at"])
+
     gliner_manager = GLiNERModelManager.get_instance()
     spancat_manager = SpanCatModelManager.get_instance()
 
@@ -108,7 +111,8 @@ def process_document_and_create_redactions(document_id):
 
     if not extracted_text:
         document.status = Document.Status.ERROR
-        document.save(update_fields=["status"])
+        document.processing_finished_at = timezone.now()
+        document.save(update_fields=["status", "processing_finished_at"])
         return
 
     document.extracted_text = extracted_text
@@ -170,10 +174,14 @@ def process_document_and_create_redactions(document_id):
     _apply_case_ds_info_to_document(document)
 
     document.status = Document.Status.READY_FOR_REVIEW
-    document.save(update_fields=["status"])
+    document.processing_finished_at = timezone.now()
+    document.save(update_fields=["status", "processing_finished_at"])
     logger.info(
-        "Successfully processed %s. Status: READY_FOR_REVIEW",
+        "Successfully processed %s in %.1fs. Status: READY_FOR_REVIEW",
         document.filename,
+        (
+            document.processing_finished_at - document.processing_started_at
+        ).total_seconds(),
     )
 
 
