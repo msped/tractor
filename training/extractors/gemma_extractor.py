@@ -50,6 +50,13 @@ REDACTION_SCHEMA = {
 }
 
 
+# Gemma is asked for redaction types (the schema's enum, which reads naturally
+# in a prompt); every other detector, the pipeline and resolution use detector
+# labels. Without this, resolution's fallback turned every Gemma operational
+# span into a Third-Party PII suggestion.
+_LABEL_FOR_REDACTION_TYPE = {"OP_DATA": "OPERATIONAL", "PII": "THIRD_PARTY"}
+
+
 def _build_norm_map(text: str) -> tuple[str, list[int]]:
     """
     Return (normalised_text, norm_to_orig) where normalised_text is lowercase
@@ -206,7 +213,9 @@ def _call_ollama(
                     "text": chunk_text[start:end],
                     "start_char": chunk_offset + start,
                     "end_char": chunk_offset + end,
-                    "label": item.get("redaction_type", "PII"),
+                    "label": _LABEL_FOR_REDACTION_TYPE.get(
+                        item.get("redaction_type"), "THIRD_PARTY"
+                    ),
                     "entity_type": None,
                     "source": "LLM",
                 }

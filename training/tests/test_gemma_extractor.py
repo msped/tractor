@@ -47,7 +47,7 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(
             result[0]["end_char"], text.index("PC Smith") + len("PC Smith")
         )
-        self.assertEqual(result[0]["label"], "OP_DATA")
+        self.assertEqual(result[0]["label"], "OPERATIONAL")
         self.assertEqual(result[0]["source"], "LLM")
         # The prompt asks only for a coarse redaction type, so there is no
         # fine-grained label to carry — but the key is present regardless.
@@ -151,6 +151,46 @@ class GemmaExtractorTests(NetworkBlockerMixin, TestCase):
             m for m in call_body["messages"] if m["role"] == "system"
         )
         self.assertEqual(system_message["content"], "custom instructions")
+
+    @patch("training.extractors.gemma_extractor.requests.post")
+    def test_labels_resolve_to_the_redaction_type_gemma_chose(self, mock_post):
+        """Gemma answers in redaction types (OP_DATA / PII); the pipeline and
+        resolution speak detector labels. An unmapped label falls back to
+        Third-Party PII, which once turned every Gemma operational span into
+        a PII suggestion."""
+        from cases.models import Redaction
+        from cases.resolution import ENTITY_LABEL_TO_REDACTION_TYPE
+
+        mock_post.return_value.json.return_value = {
+            "message": {
+                "content": {
+                    "redactions": [
+                        {
+                            "text": "Op",
+                            "reason": "r",
+                            "redaction_type": "OP_DATA",
+                        },
+                        {"text": "Tp", "reason": "r", "redaction_type": "PII"},
+                    ]
+                }
+            }
+        }
+        with override_settings(
+            OLLAMA_ENABLED="true",
+            OLLAMA_HOST="http://ollama:11434",
+            OLLAMA_MODEL="gemma4:e4b",
+        ):
+            result = extract_with_gemma("Op and Tp.", "Jane Doe")
+
+        by_text = {span["text"]: span["label"] for span in result}
+        self.assertEqual(
+            ENTITY_LABEL_TO_REDACTION_TYPE.get(by_text["Op"]),
+            Redaction.RedactionType.OPERATIONAL_DATA,
+        )
+        self.assertEqual(
+            ENTITY_LABEL_TO_REDACTION_TYPE.get(by_text["Tp"]),
+            Redaction.RedactionType.THIRD_PARTY_PII,
+        )
 
     @patch("training.extractors.gemma_extractor.requests.post")
     def test_context_length_is_sent_to_ollama(self, mock_post):
@@ -473,7 +513,7 @@ class FindPhraseNormalisedIntegrationTests(NetworkBlockerMixin, TestCase):
         self.assertEqual(
             text[span["start_char"] : span["end_char"]], "PC Smith"
         )
-        self.assertEqual(span["label"], "OP_DATA")
+        self.assertEqual(span["label"], "OPERATIONAL")
         self.assertEqual(span["source"], "LLM")
 
     @patch("training.extractors.gemma_extractor.requests.post")
