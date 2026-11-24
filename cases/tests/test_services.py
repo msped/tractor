@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from freezegun import freeze_time
 
 from training.models import Model as SpacyModel
 from training.pipeline import ExtractionPipeline
@@ -308,6 +309,75 @@ class ServiceTests(NetworkBlockerMixin, TestCase):
         # This should run without raising an exception
         process_document_and_create_redactions(non_existent_id)
         self.assertFalse(Document.objects.filter(id=non_existent_id).exists())
+
+    def _process_taking(self, seconds, extraction_result):
+        """Process self.document with extraction taking `seconds`."""
+        with (
+            freeze_time("2026-11-24 10:00:00") as frozen,
+            patch("cases.services.SpanCatModelManager") as spancat,
+            patch("cases.services.GLiNERModelManager"),
+            patch("cases.services.extract_entities_from_text") as extract,
+        ):
+            spancat.get_instance.return_value.get_model_entry.return_value = (
+                None
+            )
+
+            def slow_extraction(*args, **kwargs):
+                frozen.tick(seconds)
+                return extraction_result
+
+            extract.side_effect = slow_extraction
+            process_document_and_create_redactions(self.document.id)
+        self.document.refresh_from_db()
+
+    def test_processing_records_when_it_started_and_finished(self):
+        self._process_taking(42, ("Some text.", [], [], None))
+
+        self.assertEqual(
+            self.document.status, Document.Status.READY_FOR_REVIEW
+        )
+        self.assertEqual(
+            self.document.processing_started_at.isoformat(),
+            "2026-11-24T10:00:00+00:00",
+        )
+        self.assertEqual(
+            (
+                self.document.processing_finished_at
+                - self.document.processing_started_at
+            ).total_seconds(),
+            42,
+        )
+
+    def test_failed_extraction_still_records_when_it_finished(self):
+        self._process_taking(7, (None, [], [], None))
+
+        self.assertEqual(self.document.status, Document.Status.ERROR)
+        self.assertEqual(
+            (
+                self.document.processing_finished_at
+                - self.document.processing_started_at
+            ).total_seconds(),
+            7,
+        )
+
+    def test_crashed_processing_task_records_when_it_finished(self):
+        from cases.tasks import (
+            process_document_and_create_redactions as task,
+        )
+
+        with (
+            patch(
+                "cases.services.process_document_and_create_redactions",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertRaises(RuntimeError),
+            self.assertLogs("cases.tasks", level="ERROR"),
+        ):
+            task(self.document.id)
+
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, Document.Status.ERROR)
+        self.assertIsNotNone(self.document.processing_finished_at)
 
     def test_find_and_flag_matching_text(self):
         """Test finding and creating new redactions for matching text."""

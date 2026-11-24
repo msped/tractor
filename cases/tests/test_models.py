@@ -11,6 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from freezegun import freeze_time
 
 from cases.models import (
@@ -226,6 +227,22 @@ class DocumentModelTests(NetworkBlockerMixin, TestCase):
         file = SimpleUploadedFile("default.txt", b"file_content")
         doc = Document.objects.create(case=self.case, original_file=file)
         self.assertEqual(doc.status, Document.Status.PROCESSING)
+
+    @patch("cases.models.async_task", return_value="task-id")
+    def test_start_processing_clears_previous_processing_times(self, _):
+        """A resubmitted document's times describe the new run, not the last."""
+        file = SimpleUploadedFile("again.pdf", b"file_content")
+        doc = Document.objects.create(case=self.case, original_file=file)
+        Document.objects.filter(pk=doc.pk).update(
+            processing_started_at=timezone.now(),
+            processing_finished_at=timezone.now(),
+        )
+
+        doc.start_processing()
+
+        doc.refresh_from_db()
+        self.assertIsNone(doc.processing_started_at)
+        self.assertIsNone(doc.processing_finished_at)
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
