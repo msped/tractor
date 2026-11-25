@@ -145,6 +145,16 @@ On a CPU-only or Apple Metal host Gemma can take several minutes per chunk. A ch
 
 `OLLAMA_NUM_CTX` has to hold the prompt, the chunk, the model's reasoning and its answer. Models that think before answering, such as `gemma4:e4b`, can use most of Ollama's usual 4096-token default on reasoning alone and stop without an answer. When that happens the worker logs `Gemma reply cut off at the … context limit` and that chunk contributes no suggestions. Raise `OLLAMA_NUM_CTX`, or lower `OLLAMA_CHUNK_SIZE` on a host short of memory, since a larger context uses more of it.
 
+### Gap-fill minimum (optional)
+
+Gemma's Operational Data suggestions cover only the text the other detectors left uncovered. A long passage another detector partly marked is cut into the pieces around those marks. Pieces shorter than this are dropped:
+
+```bash
+GEMMA_GAP_FILL_MIN_CHARS=20  # shortest gap-fill piece kept, in characters (default: 20)
+```
+
+Lower it to keep more short pieces, which adds more coverage but also more scraps for reviewers. Raise it to drop more of them. The default was chosen from an evaluation in which pieces under 20 characters were nearly all outside the highlighted text. A Gemma span that nothing overlaps is kept whatever its length.
+
 ---
 
 ## Native libraries (macOS)
@@ -276,21 +286,22 @@ The project uses split settings under `backend/settings/`:
 
 ### Backend (.env)
 
-| Variable                 | Purpose                                                                 |
-|--------------------------|-------------------------------------------------------------------------|
-| `SECRET_KEY`             | Django secret key for cryptographic signing                             |
-| `JWT_SIGNING_KEY`        | Key for signing JWT tokens                                              |
-| `DATABASE_URL`           | Full connection URL — takes priority over individual vars               |
-| `POSTGRES_DB`            | PostgreSQL database name (used when `DATABASE_URL` is not set)          |
-| `POSTGRES_USER`          | PostgreSQL username (used when `DATABASE_URL` is not set)               |
-| `POSTGRES_PASSWORD`      | PostgreSQL password (used when `DATABASE_URL` is not set)               |
-| `POSTGRES_HOST`          | PostgreSQL host (default: `localhost`)                                  |
-| `POSTGRES_PORT`          | PostgreSQL port (default: `5432`)                                       |
-| `OLLAMA_ENABLED`         | Enable the Gemma contextual AI stage (`True`/`False`, default: `False`) |
-| `OLLAMA_HOST`            | Ollama API base URL (default: `http://localhost:11434`)                 |
-| `OLLAMA_MODEL`           | Ollama model name to use (e.g. `gemma3:1b`)                             |
-| `OLLAMA_CHUNK_SIZE`      | Characters per document chunk sent to Ollama (default: `4000`)          |
-| `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (default: `200`)                   |
+| Variable                   | Purpose                                                                 |
+|----------------------------|-------------------------------------------------------------------------|
+| `SECRET_KEY`               | Django secret key for cryptographic signing                             |
+| `JWT_SIGNING_KEY`          | Key for signing JWT tokens                                              |
+| `DATABASE_URL`             | Full connection URL — takes priority over individual vars               |
+| `POSTGRES_DB`              | PostgreSQL database name (used when `DATABASE_URL` is not set)          |
+| `POSTGRES_USER`            | PostgreSQL username (used when `DATABASE_URL` is not set)               |
+| `POSTGRES_PASSWORD`        | PostgreSQL password (used when `DATABASE_URL` is not set)               |
+| `POSTGRES_HOST`            | PostgreSQL host (default: `localhost`)                                  |
+| `POSTGRES_PORT`            | PostgreSQL port (default: `5432`)                                       |
+| `OLLAMA_ENABLED`           | Enable the Gemma contextual AI stage (`True`/`False`, default: `False`) |
+| `OLLAMA_HOST`              | Ollama API base URL (default: `http://localhost:11434`)                 |
+| `OLLAMA_MODEL`             | Ollama model name to use (e.g. `gemma3:1b`)                             |
+| `OLLAMA_CHUNK_SIZE`        | Characters per document chunk sent to Ollama (default: `4000`)          |
+| `OLLAMA_CHUNK_OVERLAP`     | Overlap between chunks in characters (default: `200`)                   |
+| `GEMMA_GAP_FILL_MIN_CHARS` | Shortest Gemma gap-fill piece kept, in characters (default: `20`)       |
 
 ### Frontend (frontend/.env)
 
