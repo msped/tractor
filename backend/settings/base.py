@@ -244,6 +244,11 @@ OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", 16384))
 # which django-q stops after Q_CLUSTER["timeout"] (1800s), so keep
 # chunks-per-document x OLLAMA_TIMEOUT comfortably below that.
 OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", 120))
+# Gemma's Operational Data spans fill only the characters no other detector
+# covers (ADR-0005). A leftover piece shorter than this, after trimming
+# whitespace and separators, is dropped so reviewers don't get scraps.
+# Provisional: the default is chosen by replaying saved eval output (#195).
+GEMMA_GAP_FILL_MIN_CHARS = int(os.environ.get("GEMMA_GAP_FILL_MIN_CHARS", 12))
 
 _retention_schedule = {}
 if AUTO_CASE_DELETION_ENABLED:

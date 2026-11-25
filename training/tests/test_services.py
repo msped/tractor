@@ -3,7 +3,7 @@ import tempfile
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from docx import Document as DocxDocument
 from lxml import etree
 
@@ -1586,6 +1586,200 @@ class SpanRuleStepTests(NetworkBlockerMixin, TestCase):
         )
 
         self.assertEqual(pipeline.run(self.TEXT), [gliner])
+
+
+class GapFillStageTests(NetworkBlockerMixin, TestCase):
+    """
+    A gap-fill stage's Operational Data spans fill only the characters nothing
+    earlier covers (ADR-0005).  Stage 0 stands in for every higher-priority
+    detector, stage 1 for Gemma.
+    """
+
+    TEXT = (
+        "Log 12: PC 1234 attended, spoke to SMITH, Jane ** "
+        "and gave words of advice."
+    )
+
+    def _at(self, sub, label="THIRD_PARTY"):
+        start = self.TEXT.index(sub)
+        return _span(sub, start, start + len(sub), label=label)
+
+    def _gemma(self, sub, label="OPERATIONAL"):
+        span = self._at(sub, label=label)
+        span["source"] = "LLM"
+        return span
+
+    def _run(
+        self, earlier, gemma, *, min_chars=0, span_rules=(), gap_fill=True
+    ):
+        pipeline = ExtractionPipeline(
+            stages=[_stage(earlier), _stage(gemma)],
+            gap_fill_stage_indices=frozenset({1} if gap_fill else ()),
+            gap_fill_min_chars=min_chars,
+            span_rules=list(span_rules),
+        )
+        return pipeline.run(self.TEXT)
+
+    def _pieces(self, result):
+        """The LLM spans in *result*, in text order, as their text."""
+        pieces = sorted(
+            (s for s in result if s.get("source") == "LLM"),
+            key=lambda s: s["start_char"],
+        )
+        for s in pieces:
+            self.assertEqual(
+                self.TEXT[s["start_char"] : s["end_char"]], s["text"]
+            )
+            self.assertEqual(s["label"], "OPERATIONAL")
+            self.assertIsNone(s["entity_type"])
+        return [s["text"] for s in pieces]
+
+    def test_uncovered_span_is_kept_whole(self):
+        gemma = self._gemma("spoke to SMITH, Jane ** and gave")
+
+        self.assertEqual(self._run([], [gemma]), [gemma])
+
+    def test_uncovered_span_is_kept_whole_below_the_minimum(self):
+        # The minimum is for leftovers; a span nothing touches is not one.
+        gemma = self._gemma("PC 1234")
+
+        self.assertEqual(self._run([], [gemma], min_chars=50), [gemma])
+
+    def test_partly_covered_span_keeps_only_the_outside_parts(self):
+        spancat = self._at("PC 1234 attended", label="OPERATIONAL")
+        gemma = self._gemma("Log 12: PC 1234 attended, spoke to")
+
+        result = self._run([spancat], [gemma])
+
+        self.assertCountEqual(
+            result,
+            [spancat, self._gemma("Log 12"), self._gemma("spoke to")],
+        )
+
+    def test_fully_covered_span_is_dropped(self):
+        spancat = self._at("PC 1234 attended, spoke to", label="OPERATIONAL")
+
+        result = self._run([spancat], [self._gemma("1234 attended")])
+
+        self.assertEqual(result, [spancat])
+
+    def test_several_holes_give_several_pieces(self):
+        earlier = [self._at("PC 1234", label="OPERATIONAL"), self._at("SMITH")]
+        gemma = self._gemma("Log 12: PC 1234 attended, spoke to SMITH, Jane")
+
+        result = self._run(earlier, [gemma])
+
+        self.assertEqual(
+            self._pieces(result), ["Log 12", "attended, spoke to", "Jane"]
+        )
+
+    def test_pieces_are_trimmed_of_whitespace_and_separators(self):
+        earlier = [
+            self._at("Log 12:", label="OPERATIONAL"),
+            self._at("attended", label="OPERATIONAL"),
+        ]
+        gemma = self._gemma("Log 12: PC 1234 attended, spoke to")
+
+        result = self._run(earlier, [gemma])
+
+        self.assertEqual(self._pieces(result), ["PC 1234", "spoke to"])
+
+    def test_pieces_below_the_minimum_are_dropped(self):
+        spancat = self._at("PC 1234 attended", label="OPERATIONAL")
+        gemma = self._gemma("Log 12: PC 1234 attended, spoke to SMITH")
+
+        for min_chars, expected in (
+            (6, ["Log 12", "spoke to SMITH"]),  # exactly the minimum is kept
+            (7, ["spoke to SMITH"]),
+        ):
+            with self.subTest(min_chars=min_chars):
+                result = self._run([spancat], [gemma], min_chars=min_chars)
+                self.assertEqual(self._pieces(result), expected)
+
+    def test_pieces_without_a_letter_or_digit_are_dropped(self):
+        earlier = [self._at("SMITH, Jane"), self._at("and gave")]
+        gemma = self._gemma("SMITH, Jane ** and gave")
+
+        self.assertCountEqual(self._run(earlier, [gemma]), earlier)
+
+    def test_another_types_coverage_blocks(self):
+        name = self._at("SMITH, Jane", label="THIRD_PARTY")
+        gemma = self._gemma("spoke to SMITH, Jane ** and gave")
+
+        result = self._run([name], [gemma])
+
+        self.assertIn(name, result)
+        self.assertEqual(self._pieces(result), ["spoke to", "** and gave"])
+
+    def test_span_rule_spans_block(self):
+        rule_span = self._at("spoke to SMITH, Jane")
+        gemma = self._gemma("PC 1234 attended, spoke to SMITH, Jane")
+
+        result = self._run(
+            [], [gemma], span_rules=[_StubRule(added=[rule_span])]
+        )
+
+        self.assertIn(rule_span, result)
+        self.assertEqual(self._pieces(result), ["PC 1234 attended"])
+
+    def test_overlapping_gemma_spans_give_no_overlapping_pieces(self):
+        gemma = [
+            self._gemma("PC 1234 attended, spoke"),
+            self._gemma("attended, spoke to SMITH"),
+        ]
+
+        result = self._run([], gemma)
+
+        self.assertEqual(
+            self._pieces(result), ["PC 1234 attended, spoke", "to SMITH"]
+        )
+
+    def test_third_party_span_overlapping_anything_is_dropped_whole(self):
+        surname = self._at("SMITH")
+        overlapping = self._gemma("SMITH, Jane", label="THIRD_PARTY")
+        clear = self._gemma("words of advice", label="THIRD_PARTY")
+
+        result = self._run([surname], [overlapping, clear])
+
+        self.assertEqual(result, [surname, clear])
+
+    def test_stage_not_marked_gap_fill_drops_on_overlap(self):
+        spancat = self._at("PC 1234 attended", label="OPERATIONAL")
+        gemma = self._gemma("Log 12: PC 1234 attended, spoke to")
+
+        result = self._run([spancat], [gemma], gap_fill=False)
+
+        self.assertEqual(result, [spancat])
+
+    @patch("training.extractors.gemma_extractor.extract_with_gemma")
+    @patch("training.extractors.gliner_extractor.extract_with_gliner")
+    @patch("training.loader.SpanCatModelManager")
+    @patch("training.loader.GLiNERModelManager")
+    def test_default_pipeline_gap_fills_gemma_at_the_configured_minimum(
+        self, mock_gliner_mgr, mock_spancat_mgr, mock_gliner, mock_gemma
+    ):
+        mock_gliner_mgr.get_instance.return_value.get_model.return_value = (
+            MagicMock()
+        )
+        mock_spancat_mgr.get_instance.return_value.get_model.return_value = (
+            None
+        )
+        snapshot = MagicMock()
+        snapshot.extract_custom.return_value = []
+        snapshot.extract_third_party.return_value = []
+        snapshot.extract_operational.return_value = []
+        mock_gliner.return_value = [self._at("PC 1234 attended")]
+        mock_gemma.return_value = [
+            self._gemma("Log 12: PC 1234 attended, spoke to SMITH")
+        ]
+
+        with override_settings(GEMMA_GAP_FILL_MIN_CHARS=7):
+            pipeline = build_default_pipeline(
+                "Jane Doe", presidio_snapshot=snapshot
+            )
+        result = pipeline.run(self.TEXT)
+
+        self.assertEqual(self._pieces(result), ["spoke to SMITH"])
 
 
 # Synthetic occurrence report.  Every name, code and date is invented.

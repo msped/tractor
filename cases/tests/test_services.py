@@ -2912,6 +2912,87 @@ class RoleDependentFieldProcessingTests(NetworkBlockerMixin, TestCase):
                 )
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class GemmaGapFillProcessingTests(NetworkBlockerMixin, TestCase):
+    """
+    A Gemma operational span partly covered by a SpanCat span, through the
+    real processing entry point: only its uncovered part becomes a
+    suggestion (ADR-0005).
+    """
+
+    TEXT = "Log 12: PC 1234 attended and gave words of advice to the caller."
+    SPANCAT = "PC 1234 attended"
+    GEMMA = "PC 1234 attended and gave words of advice"
+    PIECE = "and gave words of advice"
+
+    def setUp(self):
+        self.case = Case.objects.create(
+            case_reference="GAP01", data_subject_name="Jane Smith"
+        )
+        self.document = Document.objects.create(
+            case=self.case,
+            original_file=SimpleUploadedFile("log.txt", b"content"),
+            status=Document.Status.PROCESSING,
+        )
+        self.spacy_model = SpacyModel.objects.create(
+            name="en_gap_fill_model", is_active=True
+        )
+
+    def tearDown(self):
+        shutil.rmtree(MEDIA_ROOT, ignore_errors=True)
+
+    def _span(self, sub, **extra):
+        start = self.TEXT.index(sub)
+        return {
+            "text": sub,
+            "label": "OPERATIONAL",
+            "start_char": start,
+            "end_char": start + len(sub),
+            "entity_type": None,
+            **extra,
+        }
+
+    def test_uncovered_part_becomes_an_operational_suggestion(self):
+        pipeline = ExtractionPipeline(
+            stages=[
+                lambda _text: [self._span(self.SPANCAT)],
+                lambda _text: [self._span(self.GEMMA, source="LLM")],
+            ],
+            gap_fill_stage_indices=frozenset({1}),
+            gap_fill_min_chars=12,
+        )
+
+        with (
+            patch("cases.services.extract_entities_from_text") as mock_extract,
+            patch("cases.services.SpanCatModelManager") as mock_spancat,
+            patch("cases.services.GLiNERModelManager") as mock_gliner,
+            patch("django_q.tasks.async_task"),
+        ):
+            mock_gliner.get_instance.return_value = MagicMock()
+            mock_spancat.get_instance.return_value = MagicMock(
+                get_model_entry=MagicMock(return_value=self.spacy_model)
+            )
+            mock_extract.return_value = (
+                self.TEXT,
+                pipeline.run(self.TEXT),
+                [],
+                None,
+            )
+            process_document_and_create_redactions(self.document.id)
+
+        rows = {r.text: r for r in self.document.redactions.all()}
+        self.assertEqual(set(rows), {self.SPANCAT, self.PIECE})
+        piece = rows[self.PIECE]
+        self.assertEqual(piece.start_char, self.TEXT.index(self.PIECE))
+        self.assertEqual(
+            piece.redaction_type, Redaction.RedactionType.OPERATIONAL_DATA
+        )
+        self.assertEqual(piece.source, Redaction.Source.LLM)
+        self.assertTrue(piece.is_suggestion)
+        self.assertFalse(piece.is_accepted)
+        self.assertEqual(rows[self.SPANCAT].source, Redaction.Source.NER)
+
+
 class ReclaimDataSubjectSpansTests(NetworkBlockerMixin, TestCase):
     """Carving the data subject back out of a span that buried them."""
 
