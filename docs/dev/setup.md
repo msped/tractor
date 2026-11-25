@@ -109,8 +109,10 @@ Tractor can use a locally-hosted LLM via [Ollama](https://ollama.com/) to perfor
 Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model:
 
 ```bash
-ollama pull gemma3:1b
+ollama pull gemma4:e4b
 ```
+
+`gemma4:e4b` is the standard model; see [Choosing a model](#choosing-a-model) before using another.
 
 Ollama must be running before starting the Django server. On macOS it starts automatically as a background service after installation. To verify it is running:
 
@@ -125,7 +127,7 @@ Set the following in your `.env`:
 ```bash
 OLLAMA_ENABLED=True
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=gemma3:1b
+OLLAMA_MODEL=gemma4:e4b
 ```
 
 If `OLLAMA_ENABLED` is not set or is `False`, the Gemma extraction stage is skipped entirely and document processing continues with the other three models.
@@ -154,6 +156,19 @@ GEMMA_GAP_FILL_MIN_CHARS=20  # shortest gap-fill piece kept, in characters (defa
 ```
 
 Lower it to keep more short pieces, which adds more coverage but also more scraps for reviewers. Raise it to drop more of them. The default was chosen from an evaluation in which pieces under 20 characters were nearly all outside the highlighted text. A Gemma span that nothing overlaps is kept whatever its length.
+
+### Choosing a model
+
+The standard model is `gemma4:e4b`, and it is the default for `OLLAMA_MODEL`. The default prompt, `OLLAMA_NUM_CTX`, `OLLAMA_TIMEOUT` and `GEMMA_GAP_FILL_MIN_CHARS` were all tuned against it, and it is what the docs assume.
+
+You can use any model Ollama serves by setting `OLLAMA_MODEL`, for example a smaller one such as `gemma3:1b` on a laptop or a CPU-only host. It will be quicker but less thorough. Expect to retune when you change model:
+
+- **The prompt** (Settings page, **Contextual AI Prompt**): models differ in how literally they follow it.
+- **`OLLAMA_NUM_CTX` and `OLLAMA_CHUNK_SIZE`**: a model that thinks before answering needs room for its reasoning.
+- **`OLLAMA_TIMEOUT`**: larger models and slower hosts need longer per chunk.
+- **`GEMMA_GAP_FILL_MIN_CHARS`**: a model that marks passages differently leaves different leftovers.
+
+The extractor asks Ollama for a JSON answer in a fixed schema, with each passage typed `OP_DATA` or `PII`. A model that can't keep to that schema returns nothing usable, and may need changes to `training/extractors/gemma_extractor.py`.
 
 ---
 
@@ -298,7 +313,7 @@ The project uses split settings under `backend/settings/`:
 | `POSTGRES_PORT`            | PostgreSQL port (default: `5432`)                                       |
 | `OLLAMA_ENABLED`           | Enable the Gemma contextual AI stage (`True`/`False`, default: `False`) |
 | `OLLAMA_HOST`              | Ollama API base URL (default: `http://localhost:11434`)                 |
-| `OLLAMA_MODEL`             | Ollama model name to use (e.g. `gemma3:1b`)                             |
+| `OLLAMA_MODEL`             | Ollama model name to use (default: `gemma4:e4b`)                        |
 | `OLLAMA_CHUNK_SIZE`        | Characters per document chunk sent to Ollama (default: `4000`)          |
 | `OLLAMA_CHUNK_OVERLAP`     | Overlap between chunks in characters (default: `200`)                   |
 | `GEMMA_GAP_FILL_MIN_CHARS` | Shortest Gemma gap-fill piece kept, in characters (default: `20`)       |

@@ -104,7 +104,7 @@ Once the stack is up (see [Database](#database) for the `up` command), pull the 
 docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma4:e4b
 ```
 
-The pulled model must match `OLLAMA_MODEL`, which defaults to `gemma4:e4b`. This application is not tied to Gemma, and you can use any model available through Ollama depending on your hardware. `gemma4:e4b` used about 5GB of VRAM at the default `OLLAMA_NUM_CTX` on an NVIDIA GPU. On a CPU-only host a smaller model such as `gemma3:1b` is far quicker, though less thorough.
+The pulled model must match `OLLAMA_MODEL`, which defaults to `gemma4:e4b`. That is the standard model: the default prompt and the Ollama and gap-fill settings were tuned against it. `gemma4:e4b` used about 5GB of VRAM at the default `OLLAMA_NUM_CTX` on an NVIDIA GPU. You can use any model available through Ollama to suit your hardware. On a CPU-only host, for example, a smaller model such as `gemma3:1b` is far quicker, though less thorough. Expect to retune the prompt and settings when you do, and a model that can't keep to the extractor's JSON schema may need code changes. See [Choosing a model](setup.md#choosing-a-model).
 
 The model is persisted in the `ollama_data` Docker volume, so it only needs to be downloaded once.
 

@@ -284,7 +284,7 @@ Custom recognizers are stored in the `CustomRecognizer`, `CustomPattern`, and `C
 
 ### Gemma (Contextual AI — LLM)
 
-[Gemma](https://ollama.com/library/gemma3) is a locally-hosted LLM served via [Ollama](https://ollama.com/). Unlike the other three models, Gemma does not use pattern-matching or trained NER — it reads the document text and reasons about what information would be disclosable given the context.
+[Gemma](https://ollama.com/library/gemma4) (`gemma4:e4b` by default; see [Choosing a model](setup.md#choosing-a-model)) is a locally-hosted LLM served via [Ollama](https://ollama.com/). Unlike the other three models, Gemma does not use pattern-matching or trained NER — it reads the document text and reasons about what information would be disclosable given the context.
 
 Gemma takes the lowest priority in deduplication. Spans it produces are labelled with `source=LLM` and displayed in the review sidebar with an **AI (Contextual)** badge.
 
