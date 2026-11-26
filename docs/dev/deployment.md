@@ -141,10 +141,6 @@ Then bring the stack up as normal:
 docker compose -f docker-compose-prod.yml up --build -d
 ```
 
-#### Apple Silicon
-
-Ollama auto-detects and uses the Metal GPU on Apple Silicon hosts — no extra configuration is needed.
-
 ### Task Queue (worker)
 
 !!! warning

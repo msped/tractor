@@ -19,7 +19,8 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     # For NVIDIA GPU passthrough, use the docker-compose.gpu.yml override.
-    # On Apple Silicon, Metal GPU is used automatically.
+    # On a Mac this container runs on CPU (Docker can't reach the GPU); for
+    # Metal, install Ollama natively instead (see docs/dev/setup.md).
 
 volumes:
   postgres_data:
