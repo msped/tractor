@@ -93,6 +93,13 @@ The production stack (`docker-compose-prod.yml`) runs the following services:
 | `ollama`   | Locally-hosted LLM inference server (contextual AI) — see below                    |
 | `db`       | PostgreSQL 15 database (optional — see below)                                       |
 
+### Firewall
+
+nginx publishes port 80 on every interface of the host (`80:80`). On Linux, Docker publishes ports by writing its own firewall rules, which take effect before host firewalls such as `ufw` or `firewalld` see the traffic. So port 80 is reachable from outside even when `ufw` says it is closed.
+
+- **To restrict who can reach it**, use a firewall outside the host, such as your cloud provider's network firewall or security group, rather than `ufw`.
+- **If only something on the host should reach nginx**, such as a tunnel or a reverse proxy running there, publish the port on loopback only. Change `"80:80"` to `"127.0.0.1:80:80"` in `docker-compose-prod.yml`. Nothing off the host can then connect to it directly.
+
 ### Ollama (Contextual AI)
 
 The `ollama` service runs the locally-hosted LLM used for contextual document analysis. The service always starts with the production stack, but the Gemma stage is **off by default**. Set `OLLAMA_ENABLED=True` in `.env` to use it. With it off, the other three NLP models continue to operate normally.
