@@ -12,7 +12,8 @@ services:
       - ./postgres_data:/var/lib/postgresql/data/
 
   ollama:
-    image: ollama/ollama
+    # Pinned to the version Gemma's settings were tested with; upgrade on purpose.
+    image: ollama/ollama:0.40.17
     container_name: tractor-ollama
     ports:
       - "11434:11434"
