@@ -104,6 +104,8 @@ npm run cy:test     # With coverage (80% threshold)
 
 Tractor can use a locally-hosted LLM via [Ollama](https://ollama.com/) to perform contextual analysis of documents. This is optional — the other three NLP models work without it.
 
+It needs a GPU: an NVIDIA card, or Apple Silicon with Ollama installed natively. Docker on macOS can't reach the Mac's GPU, so the `ollama` container runs on CPU there. On CPU alone Gemma takes minutes per document, which isn't worth it, so leave `OLLAMA_ENABLED` off without a GPU.
+
 ### Install and start Ollama
 
 Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model:
@@ -143,7 +145,7 @@ OLLAMA_NUM_CTX=16384      # context window per request, in tokens (default: 1638
 OLLAMA_TIMEOUT=120        # seconds to wait for one chunk's reply (default: 120)
 ```
 
-On a CPU-only or Apple Metal host Gemma can take several minutes per chunk. A chunk that runs past `OLLAMA_TIMEOUT` is skipped, and the worker logs `Gemma took longer than …`. Raise the setting if you see that line. All of a document's chunks run inside one background task, which django-q stops after 30 minutes, so keep chunks-per-document × `OLLAMA_TIMEOUT` well below that.
+On Apple Silicon or a smaller GPU, Gemma can take a few minutes per chunk. A chunk that runs past `OLLAMA_TIMEOUT` is skipped, and the worker logs `Gemma took longer than …`. Raise the setting if you see that line. All of a document's chunks run inside one background task, which django-q stops after 30 minutes, so keep chunks-per-document × `OLLAMA_TIMEOUT` well below that.
 
 `OLLAMA_NUM_CTX` has to hold the prompt, the chunk, the model's reasoning and its answer. Models that think before answering, such as `gemma4:e4b`, can use most of Ollama's usual 4096-token default on reasoning alone and stop without an answer. When that happens the worker logs `Gemma reply cut off at the … context limit` and that chunk contributes no suggestions. Raise `OLLAMA_NUM_CTX`, or lower `OLLAMA_CHUNK_SIZE` on a host short of memory, since a larger context uses more of it.
 
@@ -161,7 +163,7 @@ Lower it to keep more short pieces, which adds more coverage but also more scrap
 
 The standard model is `gemma4:e4b`, and it is the default for `OLLAMA_MODEL`. The default prompt, `OLLAMA_NUM_CTX`, `OLLAMA_TIMEOUT` and `GEMMA_GAP_FILL_MIN_CHARS` were all tuned against it, and it is what the docs assume.
 
-You can use any model Ollama serves by setting `OLLAMA_MODEL`, for example a smaller one such as `gemma3:1b` on a laptop or a CPU-only host. It will be quicker but less thorough. Expect to retune when you change model:
+You can use any model Ollama serves by setting `OLLAMA_MODEL`, for example a smaller one such as `gemma3:1b` on a GPU with less memory. It will be quicker but less thorough. Expect to retune when you change model:
 
 - **The prompt** (Settings page, **Contextual AI Prompt**): models differ in how literally they follow it.
 - **`OLLAMA_NUM_CTX` and `OLLAMA_CHUNK_SIZE`**: a model that thinks before answering needs room for its reasoning.
