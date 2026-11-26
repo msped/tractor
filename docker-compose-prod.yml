@@ -90,7 +90,8 @@ services:
     env_file: .env
 
   ollama:
-    image: ollama/ollama
+    # Pinned to the version Gemma's settings were tested with; upgrade on purpose.
+    image: ollama/ollama:0.40.17
     container_name: tractor-ollama
     restart: unless-stopped
     volumes:

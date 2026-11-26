@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Ollama image is pinned to `ollama/ollama:0.40.17`** in both compose files, instead of `latest`. A fresh deployment could otherwise pull a newer Ollama than the one Gemma's settings were tested with, and two hosts could run different versions. 0.40.17 is the version the stack was tested with on an NVIDIA GPU, with structured output and the context-length setting. Upgrading is now a deliberate change of the tag
+
 - **SpanCat training is now separable from Django.** The training itself — building the pipeline, aligning annotations, dividing over-long ones, the epoch loop — moved to `training/spancat.py`, which reads no database, settings or clock; collecting the corpus, claiming the training slot, honouring a Stop from the UI and registering the finished model stay in `training/tasks.py` and reach in through a `should_stop` and an `on_epoch` callback. This is what lets a sweep train exactly the way the application does instead of a copy of it that quietly drifts. Behaviour of a run started from the UI or the scheduler is unchanged
 
 ### Removed
