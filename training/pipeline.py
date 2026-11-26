@@ -2,7 +2,13 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
+from cases.span_merging import REMOVAL_GAP_CHARS
+
 logger = logging.getLogger(__name__)
+
+# The label a gap-fill stage cuts down to uncovered text; its other labels
+# keep drop-on-overlap (ADR-0005).
+GAP_FILL_LABEL = "OPERATIONAL"
 
 
 def _close_thread_connections(stage):
@@ -87,6 +93,72 @@ def _deduplicate_entities(
     return combined
 
 
+def _uncovered_runs(start, end, covering):
+    """The runs of [start, end) that no span in *covering* touches, in order."""
+    holes = sorted(
+        (max(start, span["start_char"]), min(end, span["end_char"]))
+        for span in covering
+        if ranges_overlap(start, end, span["start_char"], span["end_char"])
+    )
+    runs = []
+    pos = start
+    for hole_start, hole_end in holes:
+        if hole_start > pos:
+            runs.append((pos, hole_start))
+        pos = max(pos, hole_end)
+    if pos < end:
+        runs.append((pos, end))
+    return runs
+
+
+def _trim_separators(text, start, end):
+    """Narrow [start, end) past whitespace and separator punctuation."""
+    while start < end and text[start] in REMOVAL_GAP_CHARS:
+        start += 1
+    while end > start and text[end - 1] in REMOVAL_GAP_CHARS:
+        end -= 1
+    return start, end
+
+
+def _fill_gaps(primary_entities, secondary_entities, text, min_chars):
+    """Add a gap-fill stage's spans to *primary_entities* (ADR-0005).
+
+    An OPERATIONAL span nothing touches is added as it is.  One that overlaps
+    anything is cut into the runs no span covers, of any label; each run is
+    trimmed of separators (the characters the removal export treats as
+    nothing between redactions), and kept as its own span if it has a letter
+    or digit and at least *min_chars* characters.  Every other label is
+    dropped on any overlap, as in _deduplicate_entities.  Spans are taken in
+    order and what is kept covers later spans, so pieces never overlap.
+    """
+    combined = list(primary_entities)
+    for span in secondary_entities:
+        start, end = span["start_char"], span["end_char"]
+        if span.get("label") != GAP_FILL_LABEL:
+            if not _overlaps_any(span, combined):
+                combined.append(span)
+            continue
+
+        runs = _uncovered_runs(start, end, combined)
+        if runs == [(start, end)]:
+            combined.append(span)
+            continue
+        for run_start, run_end in runs:
+            piece_start, piece_end = _trim_separators(text, run_start, run_end)
+            piece = text[piece_start:piece_end]
+            if len(piece) < min_chars or not any(c.isalnum() for c in piece):
+                continue
+            combined.append(
+                {
+                    **span,
+                    "text": piece,
+                    "start_char": piece_start,
+                    "end_char": piece_end,
+                }
+            )
+    return combined
+
+
 def _non_fatal(stage):
     """Wrap a stage so exceptions log a warning and return [] instead of propagating."""
 
@@ -135,6 +207,9 @@ class ExtractionPipeline:
     stages[0] has highest priority; later stages are dropped on overlap.
     superset_stage_indices marks which stages may extend earlier predictions via
     the superset replacement rule (see _deduplicate_entities).
+    gap_fill_stage_indices marks which stages' OPERATIONAL spans instead fill
+    the text nothing earlier covers, dropping leftover pieces shorter than
+    gap_fill_min_chars (see _fill_gaps).
     Non-fatal stages should catch their own exceptions (or be wrapped with
     _non_fatal) rather than propagating them.
 
@@ -147,6 +222,8 @@ class ExtractionPipeline:
 
     stages: list  # callables: (text: str) -> list[dict]
     superset_stage_indices: frozenset = field(default_factory=frozenset)
+    gap_fill_stage_indices: frozenset = field(default_factory=frozenset)
+    gap_fill_min_chars: int = 0
     max_workers: int = 4
     span_rules: list = field(default_factory=list)
 
@@ -166,6 +243,12 @@ class ExtractionPipeline:
 
         combined = list(rule_spans)
         for i, results in enumerate(stage_results):
+            if i in self.gap_fill_stage_indices:
+                # Rule spans are already in combined, so they block here.
+                combined = _fill_gaps(
+                    combined, results, text, self.gap_fill_min_chars
+                )
+                continue
             if rule_spans:
                 results = [
                     s for s in results if not _overlaps_any(s, rule_spans)
@@ -185,8 +268,9 @@ def build_default_pipeline(
 
     Priority order: Custom Presidio > SpanCat > Presidio > GLiNER > Gemma.
     Custom recognizers run first so admin-configured rules always override learned
-    model predictions. SpanCat is omitted if no model is trained. Gemma is non-fatal.
-    The occurrence-report span rule (see span_rules) runs on every stage's output
+    model predictions. SpanCat is omitted if no model is trained. Gemma is non-fatal,
+    and its Operational Data fills only the text nothing else covers (gap-fill,
+    at least GEMMA_GAP_FILL_MIN_CHARS per piece). The occurrence-report span rule (see span_rules) runs on every stage's output
     before deduplication, for the given data subject.
     Raises ValueError if no GLiNER model is available.
 
@@ -197,6 +281,8 @@ def build_default_pipeline(
     / extract_operational methods) in tests.
     """
     # Lazy imports — keep Django models and heavy extractor deps away from module load time
+    from django.conf import settings
+
     from .extractors.gemma_extractor import extract_with_gemma
     from .extractors.gliner_extractor import extract_with_gliner
     from .extractors.presidio_provider import PresidioEngineProvider
@@ -245,6 +331,7 @@ def build_default_pipeline(
     def _gemma_stage(text):
         return extract_with_gemma(text, data_subject_name, data_subject_dob)
 
+    gemma_stage_index = len(stages)
     stages.append(_non_fatal(_gemma_stage))
 
     superset_stage_indices = (
@@ -255,6 +342,8 @@ def build_default_pipeline(
     return ExtractionPipeline(
         stages=stages,
         superset_stage_indices=superset_stage_indices,
+        gap_fill_stage_indices=frozenset({gemma_stage_index}),
+        gap_fill_min_chars=settings.GEMMA_GAP_FILL_MIN_CHARS,
         span_rules=[
             build_occurrence_report_rule(data_subject_name, data_subject_dob)
         ],

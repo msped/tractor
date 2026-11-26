@@ -9,7 +9,7 @@ When a document is uploaded, Tractor automatically identifies potentially sensit
 - A **trained model** (SpanCat) built from your organisation's accepted redactions. Once trained, this identifies both **Operational Data** and **Third-Party PII** tailored to your organisation's documents. Until training data has been collected and a model trained, this step is skipped.
 - **GLiNER** — a zero-shot model that recognises common **Third-Party PII** such as names, organisations, addresses, and dates of birth. This works immediately without any training.
 - **Presidio** — a pattern-based engine that detects structured **Third-Party PII** (phone numbers, email addresses, NHS numbers, postcodes, National Insurance numbers) and structured **Operational Data** (crime reference numbers, collar numbers).
-- **Contextual AI (Gemma)** — a locally-hosted large language model that reads the document and reasons about what information would be disclosable given the broader context. This catches disclosures that pattern-matching alone may miss. Suggestions from this model are labelled **AI (Contextual)** in the sidebar.
+- **Contextual AI (Gemma)** — a locally-hosted large language model that reads the document and reasons about what information would be disclosable given the broader context. This catches disclosures that pattern-matching alone may miss. Suggestions from this model are labelled **AI (Contextual)** in the sidebar. Its **Operational Data** suggestions only cover text the other models left unmarked. So a long free-text entry can appear as a trained-model suggestion for part of it, plus one or more **AI (Contextual)** suggestions for the rest. Very short leftover pieces are not suggested.
 
 Suggestions appear in the Redaction Sidebar for you to review.
 

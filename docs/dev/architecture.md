@@ -284,9 +284,11 @@ Custom recognizers are stored in the `CustomRecognizer`, `CustomPattern`, and `C
 
 ### Gemma (Contextual AI — LLM)
 
-[Gemma](https://ollama.com/library/gemma3) is a locally-hosted LLM served via [Ollama](https://ollama.com/). Unlike the other three models, Gemma does not use pattern-matching or trained NER — it reads the document text and reasons about what information would be disclosable given the context.
+[Gemma](https://ollama.com/library/gemma4) (`gemma4:e4b` by default; see [Choosing a model](setup.md#choosing-a-model)) is a locally-hosted LLM served via [Ollama](https://ollama.com/). Unlike the other three models, Gemma does not use pattern-matching or trained NER — it reads the document text and reasons about what information would be disclosable given the context.
 
 Gemma takes the lowest priority in deduplication. Spans it produces are labelled with `source=LLM` and displayed in the review sidebar with an **AI (Contextual)** badge.
+
+Its Operational Data fills the text the other detectors leave uncovered, instead of being dropped on any overlap: see step 5 of [Deduplication](#deduplication) and [ADR-0005](../adr/0005-gemma-fills-gaps.md).
 
 This stage is **optional**. Set `OLLAMA_ENABLED=False` to disable it. Document processing continues with the other three models if Ollama is unavailable.
 
@@ -316,11 +318,13 @@ After all four models run (five pipeline stages, since Presidio runs once for cu
 2. SpanCat results are added where they don't overlap custom Presidio spans — with one exception: if a SpanCat prediction **strictly contains** a custom Presidio span of the same label (e.g. SpanCat produces "OIC / HUGHES, R. #0723222" while Presidio only caught "HUGHES, R. #0723222"), SpanCat's wider span replaces the narrower Presidio one. This lets the trained model capture surrounding context without being clipped.
 3. Built-in Presidio results are added where they don't overlap either of the above
 4. GLiNER results are added where they don't overlap any of the above
-5. Gemma results are added where they don't overlap any of the above
+5. Gemma **fills the gaps** with its Operational Data (see [ADR-0005](../adr/0005-gemma-fills-gaps.md)). A Gemma Operational Data span that overlaps nothing is added whole. One that overlaps anything is cut into the runs of characters that no span covers. Spans from any detector, of any type, block, as do span-rule spans. Each run is trimmed of surrounding whitespace and separator punctuation (the characters the removal export treats as nothing between two redactions). It is then added as its own suggestion if it has a letter or digit and is at least `GEMMA_GAP_FILL_MIN_CHARS` long (default 20). Gemma spans are taken in order, and what is kept covers later ones, so its pieces never overlap. Gemma's Third-Party PII does not fill gaps: it is added only where it doesn't overlap anything.
 
-The superset extension rule is intentionally limited to the SpanCat stage. Lower-priority extractors (GLiNER, Gemma) cannot widen higher-priority matches.
+The superset extension rule is intentionally limited to the SpanCat stage. Lower-priority extractors (GLiNER, Gemma) cannot widen higher-priority matches, and Gemma's gap-filling never relabels or re-suggests text another detector marked.
 
-Span rules run before deduplication (see [Role-dependent Fields](#role-dependent-fields)). Spans a rule adds outrank every stage, and any detector span overlapping one is dropped.
+A gap-fill piece has `source=LLM`, label `OPERATIONAL` and its own offsets. From there it is an ordinary suggestion. A piece trimmed more than two characters from a neighbouring same-type span shows as a separate item in review. A piece a reviewer accepts is human-accepted Operational Data and feeds SpanCat training.
+
+Span rules run before deduplication (see [Role-dependent Fields](#role-dependent-fields)). Spans a rule adds outrank every stage. Any detector span overlapping one is dropped, except Gemma's Operational Data, which is cut around it as above.
 
 ### Role-dependent Fields
 

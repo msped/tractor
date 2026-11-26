@@ -1,0 +1,13 @@
+# The contextual AI stage fills gaps in Operational Data, and never overrides another detector
+
+The Gemma stage reads a document in context, so it is the only detector that can judge a free-text passage whose status depends on what it says. Deduplication gives it the lowest priority and used to drop any Gemma span that overlapped a span from another detector, in full. Gemma's most useful output always overlaps: a whole log entry or narrative paragraph, part of which the trained SpanCat model has already caught. In an evaluation on highlighted training documents, Gemma covered most of the operational text SpanCat missed, at high precision, but nearly all of it sat inside spans that also touched a SpanCat span, so the old rule threw it away before a reviewer saw it.
+
+Gemma keeps the lowest priority, but its Operational Data spans now fill the gaps. Each one is cut down to the characters no other span covers, and each remaining piece becomes its own suggestion with Gemma as its source. Raising Gemma's priority was rejected because a less precise detector would then override the trained model and the admin's own patterns. Letting Gemma widen an existing span, as SpanCat may widen a custom pattern match, was rejected because it would replace another detector's suggestion with a looser one, and could relabel or double up on text already suggested.
+
+Coverage means any span from any other detector, of any type, and any span a span rule added. Gemma never relabels or re-suggests text something else already marked, so a reviewer decides each character once, under one type. Pieces Gemma has already kept also count as coverage for its later spans, so its own overlapping spans never produce overlapping pieces.
+
+Gemma's Third-Party PII output keeps drop-on-overlap. It was far noisier than its operational output in the evaluation, and filling gaps with it would flood the review queue.
+
+A piece is trimmed of surrounding whitespace and separator punctuation, and dropped if it has no letter or digit or is shorter than a configurable minimum (`GEMMA_GAP_FILL_MIN_CHARS`). Without that, reviewers would be handed scraps such as the few characters between two existing spans. The default is chosen by replaying saved evaluation output offline, and the setting lets an administrator trade scraps against coverage for their own documents.
+
+A piece a reviewer accepts is ordinary human-accepted Operational Data and feeds SpanCat training. That is intended: the trained model should learn the passages it used to miss. Gemma's boundaries are less even than a human's, so per-label scores on the first retrain after this change are worth watching.

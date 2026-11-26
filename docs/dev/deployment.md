@@ -52,8 +52,9 @@ cp frontend/.env.example frontend/.env
 | `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (optional) | `200`                   |
 | `GUNICORN_WORKERS`       | Gunicorn worker processes for the backend (optional, read by Compose) | `3` |
 | `GUNICORN_TIMEOUT`       | Seconds before Gunicorn restarts a stuck worker (optional, read by Compose) | `120` |
-| `OLLAMA_TIMEOUT`         | Seconds to wait for Gemma's reply to one chunk (optional, default `120`). Raise on CPU-only hosts; a chunk that times out is skipped and the worker logs `Gemma took longer than` | `300` |
+| `OLLAMA_TIMEOUT`         | Seconds to wait for Gemma's reply to one chunk (optional, default `120`). Raise on slower GPUs; a chunk that times out is skipped and the worker logs `Gemma took longer than` | `300` |
 | `OLLAMA_NUM_CTX`         | Context window per Ollama request, in tokens (optional, default `16384`). Too small and a thinking model's reply is cut off; the worker logs `Gemma reply cut off` | `16384` |
+| `GEMMA_GAP_FILL_MIN_CHARS` | Shortest piece of Gemma Operational Data kept when it fills gaps other detectors left (optional, default `20`). Lower keeps more short pieces for reviewers, higher drops more | `20` |
 
 ### Frontend (`frontend/.env`)
 
@@ -97,13 +98,15 @@ The production stack (`docker-compose-prod.yml`) runs the following services:
 
 The `ollama` service runs the locally-hosted LLM used for contextual document analysis. The service always starts with the production stack, but the Gemma stage is **off by default**. Set `OLLAMA_ENABLED=True` in `.env` to use it. With it off, the other three NLP models continue to operate normally.
 
+The Gemma stage needs a GPU. On CPU alone it takes minutes per document, which outweighs the review time it saves, so leave `OLLAMA_ENABLED` off on a host without one.
+
 Once the stack is up (see [Database](#database) for the `up` command), pull the model inside the running container:
 
 ```bash
 docker compose -f docker-compose-prod.yml exec ollama ollama pull gemma4:e4b
 ```
 
-The pulled model must match `OLLAMA_MODEL`, which defaults to `gemma4:e4b`. This application is not tied to Gemma, and you can use any model available through Ollama depending on your hardware. `gemma4:e4b` used about 5GB of VRAM at the default `OLLAMA_NUM_CTX` on an NVIDIA GPU. On a CPU-only host a smaller model such as `gemma3:1b` is far quicker, though less thorough.
+The pulled model must match `OLLAMA_MODEL`, which defaults to `gemma4:e4b`. That is the standard model: the default prompt and the Ollama and gap-fill settings were tuned against it. `gemma4:e4b` used about 5GB of VRAM at the default `OLLAMA_NUM_CTX` on an NVIDIA GPU. You can use any model available through Ollama to suit your GPU, for example a smaller one on a card with less memory. Expect to retune the prompt and settings when you do, and a model that can't keep to the extractor's JSON schema may need code changes. See [Choosing a model](setup.md#choosing-a-model).
 
 The model is persisted in the `ollama_data` Docker volume, so it only needs to be downloaded once.
 
@@ -137,10 +140,6 @@ Then bring the stack up as normal:
 ```bash
 docker compose -f docker-compose-prod.yml up --build -d
 ```
-
-#### Apple Silicon
-
-Ollama auto-detects and uses the Metal GPU on Apple Silicon hosts — no extra configuration is needed.
 
 ### Task Queue (worker)
 

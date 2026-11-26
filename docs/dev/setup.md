@@ -104,13 +104,17 @@ npm run cy:test     # With coverage (80% threshold)
 
 Tractor can use a locally-hosted LLM via [Ollama](https://ollama.com/) to perform contextual analysis of documents. This is optional — the other three NLP models work without it.
 
+It needs a GPU: an NVIDIA card, or Apple Silicon with Ollama installed natively. Docker on macOS can't reach the Mac's GPU, so the `ollama` container runs on CPU there. On CPU alone Gemma takes minutes per document, which isn't worth it, so leave `OLLAMA_ENABLED` off without a GPU.
+
 ### Install and start Ollama
 
 Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model:
 
 ```bash
-ollama pull gemma3:1b
+ollama pull gemma4:e4b
 ```
+
+`gemma4:e4b` is the standard model; see [Choosing a model](#choosing-a-model) before using another.
 
 Ollama must be running before starting the Django server. On macOS it starts automatically as a background service after installation. To verify it is running:
 
@@ -125,7 +129,7 @@ Set the following in your `.env`:
 ```bash
 OLLAMA_ENABLED=True
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=gemma3:1b
+OLLAMA_MODEL=gemma4:e4b
 ```
 
 If `OLLAMA_ENABLED` is not set or is `False`, the Gemma extraction stage is skipped entirely and document processing continues with the other three models.
@@ -141,9 +145,32 @@ OLLAMA_NUM_CTX=16384      # context window per request, in tokens (default: 1638
 OLLAMA_TIMEOUT=120        # seconds to wait for one chunk's reply (default: 120)
 ```
 
-On a CPU-only or Apple Metal host Gemma can take several minutes per chunk. A chunk that runs past `OLLAMA_TIMEOUT` is skipped, and the worker logs `Gemma took longer than …`. Raise the setting if you see that line. All of a document's chunks run inside one background task, which django-q stops after 30 minutes, so keep chunks-per-document × `OLLAMA_TIMEOUT` well below that.
+On Apple Silicon or a smaller GPU, Gemma can take a few minutes per chunk. A chunk that runs past `OLLAMA_TIMEOUT` is skipped, and the worker logs `Gemma took longer than …`. Raise the setting if you see that line. All of a document's chunks run inside one background task, which django-q stops after 30 minutes, so keep chunks-per-document × `OLLAMA_TIMEOUT` well below that.
 
 `OLLAMA_NUM_CTX` has to hold the prompt, the chunk, the model's reasoning and its answer. Models that think before answering, such as `gemma4:e4b`, can use most of Ollama's usual 4096-token default on reasoning alone and stop without an answer. When that happens the worker logs `Gemma reply cut off at the … context limit` and that chunk contributes no suggestions. Raise `OLLAMA_NUM_CTX`, or lower `OLLAMA_CHUNK_SIZE` on a host short of memory, since a larger context uses more of it.
+
+### Gap-fill minimum (optional)
+
+Gemma's Operational Data suggestions cover only the text the other detectors left uncovered. A long passage another detector partly marked is cut into the pieces around those marks. Pieces shorter than this are dropped:
+
+```bash
+GEMMA_GAP_FILL_MIN_CHARS=20  # shortest gap-fill piece kept, in characters (default: 20)
+```
+
+Lower it to keep more short pieces, which adds more coverage but also more scraps for reviewers. Raise it to drop more of them. The default was chosen from an evaluation in which pieces under 20 characters were nearly all outside the highlighted text. A Gemma span that nothing overlaps is kept whatever its length.
+
+### Choosing a model
+
+The standard model is `gemma4:e4b`, and it is the default for `OLLAMA_MODEL`. The default prompt, `OLLAMA_NUM_CTX`, `OLLAMA_TIMEOUT` and `GEMMA_GAP_FILL_MIN_CHARS` were all tuned against it, and it is what the docs assume.
+
+You can use any model Ollama serves by setting `OLLAMA_MODEL`, for example a smaller one such as `gemma3:1b` on a GPU with less memory. It will be quicker but less thorough. Expect to retune when you change model:
+
+- **The prompt** (Settings page, **Contextual AI Prompt**): models differ in how literally they follow it.
+- **`OLLAMA_NUM_CTX` and `OLLAMA_CHUNK_SIZE`**: a model that thinks before answering needs room for its reasoning.
+- **`OLLAMA_TIMEOUT`**: larger models and slower hosts need longer per chunk.
+- **`GEMMA_GAP_FILL_MIN_CHARS`**: a model that marks passages differently leaves different leftovers.
+
+The extractor asks Ollama for a JSON answer in a fixed schema, with each passage typed `OP_DATA` or `PII`. A model that can't keep to that schema returns nothing usable, and may need changes to `training/extractors/gemma_extractor.py`.
 
 ---
 
@@ -276,21 +303,22 @@ The project uses split settings under `backend/settings/`:
 
 ### Backend (.env)
 
-| Variable                 | Purpose                                                                 |
-|--------------------------|-------------------------------------------------------------------------|
-| `SECRET_KEY`             | Django secret key for cryptographic signing                             |
-| `JWT_SIGNING_KEY`        | Key for signing JWT tokens                                              |
-| `DATABASE_URL`           | Full connection URL — takes priority over individual vars               |
-| `POSTGRES_DB`            | PostgreSQL database name (used when `DATABASE_URL` is not set)          |
-| `POSTGRES_USER`          | PostgreSQL username (used when `DATABASE_URL` is not set)               |
-| `POSTGRES_PASSWORD`      | PostgreSQL password (used when `DATABASE_URL` is not set)               |
-| `POSTGRES_HOST`          | PostgreSQL host (default: `localhost`)                                  |
-| `POSTGRES_PORT`          | PostgreSQL port (default: `5432`)                                       |
-| `OLLAMA_ENABLED`         | Enable the Gemma contextual AI stage (`True`/`False`, default: `False`) |
-| `OLLAMA_HOST`            | Ollama API base URL (default: `http://localhost:11434`)                 |
-| `OLLAMA_MODEL`           | Ollama model name to use (e.g. `gemma3:1b`)                             |
-| `OLLAMA_CHUNK_SIZE`      | Characters per document chunk sent to Ollama (default: `4000`)          |
-| `OLLAMA_CHUNK_OVERLAP`   | Overlap between chunks in characters (default: `200`)                   |
+| Variable                   | Purpose                                                                 |
+|----------------------------|-------------------------------------------------------------------------|
+| `SECRET_KEY`               | Django secret key for cryptographic signing                             |
+| `JWT_SIGNING_KEY`          | Key for signing JWT tokens                                              |
+| `DATABASE_URL`             | Full connection URL — takes priority over individual vars               |
+| `POSTGRES_DB`              | PostgreSQL database name (used when `DATABASE_URL` is not set)          |
+| `POSTGRES_USER`            | PostgreSQL username (used when `DATABASE_URL` is not set)               |
+| `POSTGRES_PASSWORD`        | PostgreSQL password (used when `DATABASE_URL` is not set)               |
+| `POSTGRES_HOST`            | PostgreSQL host (default: `localhost`)                                  |
+| `POSTGRES_PORT`            | PostgreSQL port (default: `5432`)                                       |
+| `OLLAMA_ENABLED`           | Enable the Gemma contextual AI stage (`True`/`False`, default: `False`) |
+| `OLLAMA_HOST`              | Ollama API base URL (default: `http://localhost:11434`)                 |
+| `OLLAMA_MODEL`             | Ollama model name to use (default: `gemma4:e4b`)                        |
+| `OLLAMA_CHUNK_SIZE`        | Characters per document chunk sent to Ollama (default: `4000`)          |
+| `OLLAMA_CHUNK_OVERLAP`     | Overlap between chunks in characters (default: `200`)                   |
+| `GEMMA_GAP_FILL_MIN_CHARS` | Shortest Gemma gap-fill piece kept, in characters (default: `20`)       |
 
 ### Frontend (frontend/.env)
 

@@ -97,7 +97,6 @@ services:
       - ollama_data:/root/.ollama
     # Uncomment the section below to enable NVIDIA GPU passthrough.
     # Requires NVIDIA drivers and nvidia-container-toolkit on the host.
-    # On Apple Silicon, Metal GPU is used automatically — no config needed.
     # deploy:
     #   resources:
     #     reservations:
